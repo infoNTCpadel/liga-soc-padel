@@ -173,7 +173,8 @@ router.get('/ranking/:category', (req, res) => {
 // ---- Playoffs ----
 function bracketView(category, stage) {
   const matches = db.prepare(
-    `SELECT * FROM matches WHERE stage = ? AND category = ? ORDER BY
+    `SELECT m.*, c.name AS court_name FROM matches m LEFT JOIN courts c ON c.id = m.court_id
+     WHERE stage = ? AND category = ? ORDER BY
      CASE bracket_round WHEN 'R32' THEN 0 WHEN 'R16' THEN 1 WHEN 'QF' THEN 2 WHEN 'SF' THEN 3 WHEN 'F' THEN 4 ELSE 9 END,
      bracket_slot`
   ).all(stage, category);
@@ -181,7 +182,16 @@ function bracketView(category, stage) {
   for (const m of matches) {
     let r = rounds.find(x => x.code === m.bracket_round);
     if (!r) { r = { code: m.bracket_round, name: L.BRACKET_NAME_BY_CODE[m.bracket_round] || m.bracket_round, matches: [] }; rounds.push(r); }
-    r.matches.push({ ...m, outcome: L.matchOutcome(m) });
+    r.matches.push({ ...m, outcome: L.matchOutcome(m), slot: L.formatSlot(m.scheduled_at, m.court_name) });
+  }
+  // Cabezas de serie en la primera ronda (orden clásico de sembrado).
+  if (rounds.length) {
+    const first = rounds[0].matches;
+    const order = L.seedOrder(first.length * 2);
+    first.forEach((m, i) => {
+      m.seed_a = m.pair_a_id ? order[i * 2] : null;
+      m.seed_b = m.pair_b_id ? order[i * 2 + 1] : null;
+    });
   }
   return rounds;
 }

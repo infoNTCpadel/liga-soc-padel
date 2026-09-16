@@ -53,15 +53,16 @@ router.get('/', (req, res) => {
 
   // Partidos de la pareja (fase de grupos)
   const matches = db.prepare(
-    `SELECT m.*, g.group_no, g.round_no
-     FROM matches m LEFT JOIN groups g ON g.id = m.group_id
+    `SELECT m.*, g.group_no, g.round_no, c.name AS court_name
+     FROM matches m LEFT JOIN groups g ON g.id = m.group_id LEFT JOIN courts c ON c.id = m.court_id
      WHERE m.stage = 'groups' AND (m.pair_a_id = ? OR m.pair_b_id = ?)
      ORDER BY g.round_no, g.group_no, m.id`
   ).all(pair.id, pair.id);
 
   // Partidos de playoff
   const poMatches = db.prepare(
-    `SELECT * FROM matches WHERE stage IN ('po1','po2') AND (pair_a_id = ? OR pair_b_id = ?)
+    `SELECT m.*, c.name AS court_name FROM matches m LEFT JOIN courts c ON c.id = m.court_id
+     WHERE stage IN ('po1','po2') AND (pair_a_id = ? OR pair_b_id = ?)
      ORDER BY CASE bracket_round WHEN 'R32' THEN 0 WHEN 'R16' THEN 1 WHEN 'QF' THEN 2 WHEN 'SF' THEN 3 WHEN 'F' THEN 4 ELSE 9 END`
   ).all(pair.id, pair.id);
 
@@ -99,6 +100,32 @@ function parseScore(v) {
   return Number.isInteger(n) && n >= 0 && n <= 30 ? n : NaN;
 }
 
+// Deduce quién ganó a partir del marcador en columnas "tú – rival".
+// Devuelve { winnerIsMe: true|false } o { error: 'mensaje' }.
+function deduceWinner(s1a, s1b, s2a, s2b, mode, s3a, s3b) {
+  const vals = [s1a, s1b, s2a, s2b].concat(mode !== 'none' ? [s3a, s3b] : []);
+  if (vals.some(v => v == null || Number.isNaN(v))) return { error: 'Revisa el marcador: faltan juegos o hay valores no válidos.' };
+  if (s1a === s1b || s2a === s2b) return { error: 'Un set no puede terminar en empate.' };
+  let setsA = 0, setsB = 0;
+  for (const [a, b] of [[s1a, s1b], [s2a, s2b]]) {
+    if (!L.isSetFinished(a, b)) return { error: 'Los dos primeros sets deben estar terminados (p. ej. 6-4, 7-5 o 7-6).' };
+    if (a > b) setsA++; else setsB++;
+  }
+  let deciderWinner = null; // 'a' | 'b'
+  if (mode !== 'none') {
+    if (s3a === s3b) return { error: 'El desempate no puede terminar en empate.' };
+    if (mode === 'stb' && !((s3a >= 10 || s3b >= 10) && Math.abs(s3a - s3b) >= 2))
+      return { error: 'El súper tie-break se juega a 10 puntos con diferencia de 2.' };
+    deciderWinner = s3a > s3b ? 'a' : 'b';
+  } else if (setsA === 1) {
+    return { error: 'Con empate a un set hay que disputar el súper tie-break (o el tercer set).' };
+  }
+  const totA = setsA + (deciderWinner === 'a' ? 1 : 0);
+  const totB = setsB + (deciderWinner === 'b' ? 1 : 0);
+  if (totA === totB || Math.max(totA, totB) < 2) return { error: 'El marcador no deja un ganador claro.' };
+  return { winnerIsMe: totA > totB };
+}
+
 router.post('/resultado/:id', (req, res) => {
   const pair = req.pair;
   const m = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.id);
@@ -125,27 +152,18 @@ router.post('/resultado/:id', (req, res) => {
   const s3aF = mode !== 'none' ? parseScore(b.s3a) : null;
   const s3bF = mode !== 'none' ? parseScore(b.s3b) : null;
 
-  const vals = [s1aF, s1bF, s2aF, s2bF].concat(mode !== 'none' ? [s3aF, s3bF] : []);
-  if (vals.some(v => v == null || Number.isNaN(v))) return fail('Revisa el marcador: faltan juegos o hay valores no válidos.');
-  if (s1aF === s1bF || s2aF === s2bF) return fail('Un set no puede terminar en empate.');
-
-  // Coherencia: quien sube el resultado debe ser el ganador (normativa).
-  // En columnas "tú – rival", los sets de quien sube son la columna a.
-  let setsMe = 0, setsRival = 0;
-  for (const [a, b2] of [[s1aF, s1bF], [s2aF, s2bF]]) {
-    if (L.isSetFinished(a, b2)) { if (a > b2) setsMe++; else setsRival++; }
-  }
-  let tbOk = true;
-  if (mode !== 'none') {
-    if (!(s3aF > s3bF)) tbOk = false;
-    if (mode === 'stb' && !((s3aF >= 10 || s3bF >= 10) && Math.abs(s3aF - s3bF) >= 2)) tbOk = false;
-  } else if (setsMe === setsRival) {
-    tbOk = false; // empate a sets sin desempate no es un resultado válido
-  }
-  if (!tbOk || setsRival > setsMe) return fail('El marcador no es coherente: quien sube el resultado debe ser la pareja ganadora.');
+  // Cualquiera de las dos parejas puede subir el resultado, gane o pierda:
+  // el ganador se deduce del marcador. En el formulario, "a" = quien sube
+  // ("tú") y "b" = el rival. La otra pareja lo valida en 24 h.
+  const dw = deduceWinner(s1aF, s1bF, s2aF, s2bF, mode, s3aF, s3bF);
+  if (dw.error) return fail(dw.error);
+  const winnerIsMe = dw.winnerIsMe;
 
   // Convertir "tú – rival" a columnas pair_a/pair_b para guardar en la BD.
   const meIsA = m.pair_a_id === pair.id;
+  const otherId = meIsA ? m.pair_b_id : m.pair_a_id;
+  const winnerId = winnerIsMe ? pair.id : otherId;
+  if (!winnerId) return fail('El partido aún no tiene rival asignado.');
   const s1a = meIsA ? s1aF : s1bF, s1b = meIsA ? s1bF : s1aF;
   const s2a = meIsA ? s2aF : s2bF, s2b = meIsA ? s2bF : s2aF;
   const s3a = meIsA ? s3aF : s3bF, s3b = meIsA ? s3bF : s3aF;
@@ -154,7 +172,7 @@ router.post('/resultado/:id', (req, res) => {
   db.prepare(`UPDATE matches SET s1a=?, s1b=?, s2a=?, s2b=?, s3a=?, s3b=?, stb_a=?, stb_b=?,
               winner_id=?, submitted_by=?, submitted_at=datetime('now'),
               validation='pending', validation_deadline=datetime('now','+1 day'), notes=? WHERE id=?`)
-    .run(s1a, s1b, s2a, s2b, q[0], q[1], q[2], q[3], pair.id, pair.id, (b.notes || '').trim(), m.id);
+    .run(s1a, s1b, s2a, s2b, q[0], q[1], q[2], q[3], winnerId, pair.id, (b.notes || '').trim(), m.id);
   const upd = db.prepare('SELECT * FROM matches WHERE id = ?').get(m.id);
   advanceWinner(upd);
   res.redirect('/pareja');
@@ -252,3 +270,4 @@ router.post('/datos', (req, res) => {
 
 module.exports = router;
 module.exports.advanceWinner = advanceWinner;
+module.exports.deduceWinner = deduceWinner;

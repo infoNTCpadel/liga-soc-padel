@@ -25,7 +25,7 @@
   </div>
   <div class="card">
     <h3>¿Cómo va la liga?</h3>
-    <p class="small mut">Como pareja ganadora, sube tú el resultado de cada partido. Tu rival tiene 24 h para validarlo (si no lo hace, se valida solo).</p>
+    <p class="small mut">Cualquiera de las dos parejas puede subir el resultado, haya ganado o perdido. La otra pareja tiene 24 h para validarlo (si no lo hace, se valida solo).</p>
     <p class="small">📞 En cada partido verás el teléfono del capitán rival para organizar el encuentro.</p>
     <p class="small">⚠️ Si tu rival no se presenta, marca <strong>W.O.</strong> al subir el resultado.</p>
   </div>
@@ -63,6 +63,7 @@
   <div class="match">
     <span class="teams">vs <%= pairName(rival) %>
       <% if (ri) { %><br><span class="small mut">📞 <%= ri.captain.name %>: <a href="tel:<%= ri.captain.phone %>"><%= ri.captain.phone %></a></span><% } %>
+      <% const sl = slotStr(m); if (sl) { %><br><span class="small mut">📍 <%= sl %></span><% } %>
     </span>
     <span class="score"><%= scoreStr(m) %>
       <% const vb = valBadge(m); %>
@@ -76,7 +77,7 @@
   <% if (!done) { %>
   <div class="card" id="f<%= m.id %>" style="display:none">
     <h4>Subir resultado vs <%= pairName(rival) %></h4>
-    <p class="small mut">Solo la <strong>pareja ganadora</strong> sube el resultado. Formato: 2 sets + súper tie-break a 10 (dif. 2).</p>
+    <p class="small mut">Cualquiera de las dos parejas puede subir el resultado, haya ganado o perdido. Formato: 2 sets + súper tie-break a 10 (dif. 2).</p>
     <form method="post" action="/pareja/resultado/<%= m.id %>">
       <div class="field"><label>Set 1 (tú – rival)</label><div class="scorein"><input type="number" name="s1a" min="0" max="7" required> <span>–</span> <input type="number" name="s1b" min="0" max="7" required></div></div>
       <div class="field"><label>Set 2 (tú – rival)</label><div class="scorein"><input type="number" name="s2a" min="0" max="7" required> <span>–</span> <input type="number" name="s2b" min="0" max="7" required></div></div>
@@ -103,7 +104,9 @@
   const done = m.winner_id || m.wo_winner_id || m.unplayed;
 %>
   <div class="match">
-    <span class="teams"><span class="badge cat"><%= m.stage === 'po1' ? '1ª' : '2ª' %> · <%= bracketName(m.bracket_round) %></span> vs <%= rival ? pairName(rival) : 'Por decidir' %></span>
+    <span class="teams"><span class="badge cat"><%= m.stage === 'po1' ? '1ª' : '2ª' %> · <%= bracketName(m.bracket_round) %></span> vs <%= rival ? pairName(rival) : 'Por decidir' %>
+      <% const slp = slotStr(m); if (slp) { %><br><span class="small mut">📍 <%= slp %></span><% } %>
+    </span>
     <span class="score"><%= scoreStr(m) %></span>
     <% if (!done && rival) { %><span class="acts"><button class="btn small" onclick="document.getElementById('p<%= m.id %>').style.display='block'">Subir resultado</button></span><% } %>
   </div>

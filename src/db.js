@@ -138,7 +138,24 @@ CREATE TABLE IF NOT EXISTS matches (
   validation TEXT NOT NULL DEFAULT 'none', -- none | pending | validated | disputed | auto
   validation_deadline TEXT,
   notes TEXT NOT NULL DEFAULT '',
+  court_id INTEGER REFERENCES courts(id) ON DELETE SET NULL,
+  scheduled_at TEXT,                  -- 'YYYY-MM-DDTHH:MM' (pista + día + hora)
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS courts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS playoff_seeding (
+  category TEXT NOT NULL,
+  stage TEXT NOT NULL,                -- po1 | po2
+  pair_id INTEGER NOT NULL REFERENCES pairs(id) ON DELETE CASCADE,
+  pos INTEGER NOT NULL,
+  PRIMARY KEY (category, stage, pair_id)
 );
 
 CREATE TABLE IF NOT EXISTS pair_changes (
@@ -185,6 +202,14 @@ function seasonDb(id) {
     sdb.exec('PRAGMA journal_mode = WAL;');
     sdb.exec('PRAGMA foreign_keys = ON;');
     sdb.exec(SCHEMA);
+    // Migraciones de columnas/tablas añadidas en versiones posteriores
+    for (const sql of [
+      'ALTER TABLE matches ADD COLUMN court_id INTEGER REFERENCES courts(id) ON DELETE SET NULL',
+      "ALTER TABLE matches ADD COLUMN scheduled_at TEXT",
+    ]) {
+      try { sdb.exec(sql); } catch (e) { /* la columna ya existe */ }
+    }
+    sdb.prepare("INSERT OR IGNORE INTO settings(key, value) VALUES('match_duration_min', '90')").run();
     openDbs.set(id, sdb);
   }
   return openDbs.get(id);

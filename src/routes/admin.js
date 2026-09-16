@@ -351,20 +351,24 @@ router.post('/grupos/reiniciar', (req, res) => {
 router.get('/partidos', (req, res) => {
   const category = L.validCategory(req.query.category);
   const stage = req.query.stage === 'po' ? 'po' : 'groups';
+  const courts = db.prepare('SELECT * FROM courts WHERE active = 1 ORDER BY name').all();
+  const common = { category, stage, courts, error: req.query.error || null, pairName: (id) => L.pairName(db, id) };
   let matches;
   if (stage === 'groups') {
     const round = Math.min(3, Math.max(1, parseInt(req.query.round) || 1));
     matches = db.prepare(
-      `SELECT m.*, g.group_no, g.round_no FROM matches m LEFT JOIN groups g ON g.id = m.group_id
+      `SELECT m.*, g.group_no, g.round_no, c.name AS court_name FROM matches m
+       LEFT JOIN groups g ON g.id = m.group_id LEFT JOIN courts c ON c.id = m.court_id
        WHERE m.stage = 'groups' AND m.category = ? AND m.round_no = ? ORDER BY g.group_no, m.id`
     ).all(category, round);
-    res.renderPage('admin/partidos', { category, stage, round, matches, pairName: (id) => L.pairName(db, id) });
+    res.renderPage('admin/partidos', { ...common, round, matches });
   } else {
     matches = db.prepare(
-      `SELECT m.* FROM matches m WHERE m.stage IN ('po1','po2') AND m.category = ?
+      `SELECT m.*, c.name AS court_name FROM matches m LEFT JOIN courts c ON c.id = m.court_id
+       WHERE m.stage IN ('po1','po2') AND m.category = ?
        ORDER BY m.stage, CASE m.bracket_round WHEN 'R32' THEN 0 WHEN 'R16' THEN 1 WHEN 'QF' THEN 2 WHEN 'SF' THEN 3 WHEN 'F' THEN 4 ELSE 9 END, m.bracket_slot`
     ).all(category);
-    res.renderPage('admin/partidos', { category, stage, round: null, matches, pairName: (id) => L.pairName(db, id) });
+    res.renderPage('admin/partidos', { ...common, round: null, matches });
   }
 });
 
@@ -466,11 +470,49 @@ router.post('/rondas/:n/reabrir', (req, res) => {
 });
 
 // ================= PLAYOFFS =================
+// Orden de sembrado: el guardado manualmente o, por defecto, el ranking.
+function playoffOrder(category, stage) {
+  const ranking = L.getRanking(db, category).map(r => r.pair_id);
+  const { po1, po2 } = L.splitPlayoffs(ranking);
+  const base = stage === 'po1' ? po1 : po2;
+  const saved = db.prepare('SELECT pair_id FROM playoff_seeding WHERE category = ? AND stage = ? ORDER BY pos')
+    .all(category, stage).map(r => r.pair_id);
+  if (!saved.length) return base;
+  const inBase = new Set(base);
+  const ordered = saved.filter(id => inBase.has(id));
+  for (const id of base) if (!ordered.includes(id)) ordered.push(id);
+  return ordered;
+}
+function savePlayoffOrder(category, stage, ids) {
+  const del = db.prepare('DELETE FROM playoff_seeding WHERE category = ? AND stage = ?');
+  const ins = db.prepare('INSERT INTO playoff_seeding(category, stage, pair_id, pos) VALUES(?, ?, ?, ?)');
+  db.exec('BEGIN');
+  try {
+    del.run(category, stage);
+    ids.forEach((id, i) => ins.run(category, stage, id, i));
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+}
+function playoffHasResults(category) {
+  return db.prepare(
+    `SELECT COUNT(*) c FROM matches WHERE stage IN ('po1','po2') AND category = ?
+     AND (winner_id IS NOT NULL OR wo_winner_id IS NOT NULL)`
+  ).get(category).c > 0;
+}
+
 router.get('/playoffs', (req, res) => {
   const data = L.CATEGORY_CODES.map(category => {
-    const ranking = L.getRanking(db, category);
-    const split = L.splitPlayoffs(ranking.map(r => r.pair_id));
-    return { category, ranking, split };
+    const o1 = playoffOrder(category, 'po1'), o2 = playoffOrder(category, 'po2');
+    return {
+      category,
+      po1: o1, po2: o2,
+      seeds1: L.nextPowerOfTwo(Math.max(o1.length, 2)) / 4,
+      seeds2: L.nextPowerOfTwo(Math.max(o2.length, 2)) / 4,
+      hasResults: playoffHasResults(category),
+    };
   });
   res.renderPage('admin/playoffs', {
     data, generated: getSetting('playoffs_generated', '0') === '1',
@@ -479,23 +521,33 @@ router.get('/playoffs', (req, res) => {
   });
 });
 
+// Mover una pareja en el orden de sembrado (antes de generar el cuadro)
+router.post('/playoffs/orden', (req, res) => {
+  const category = L.validCategory(req.body.category);
+  const stage = req.body.stage === 'po2' ? 'po2' : 'po1';
+  const pairId = parseInt(req.body.pair_id, 10);
+  const dir = req.body.dir === 'down' ? 1 : -1;
+  const ids = playoffOrder(category, stage);
+  const i = ids.indexOf(pairId);
+  const j = i + dir;
+  if (i >= 0 && j >= 0 && j < ids.length) {
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    savePlayoffOrder(category, stage, ids);
+  }
+  res.redirect('/admin/playoffs');
+});
+
 router.post('/playoffs/generar', (req, res) => {
   const category = L.validCategory(req.body.category);
   if (getSetting('round3_closed', '0') !== '1') return res.redirect('/admin/playoffs');
   // Regenerar solo si no hay resultados en los cuadros de esta categoría
-  const withRes = db.prepare(
-    `SELECT COUNT(*) c FROM matches WHERE stage IN ('po1','po2') AND category = ?
-     AND (winner_id IS NOT NULL OR wo_winner_id IS NOT NULL)`
-  ).get(category).c;
-  if (withRes) return res.redirect('/admin/playoffs');
+  if (playoffHasResults(category)) return res.redirect('/admin/playoffs');
   db.prepare(`DELETE FROM matches WHERE stage IN ('po1','po2') AND category = ?`).run(category);
 
-  const ranking = L.getRanking(db, category).map(r => r.pair_id);
-  const { po1, po2 } = L.splitPlayoffs(ranking);
   const ins = db.prepare(`INSERT INTO matches(category, stage, bracket_round, bracket_slot, pair_a_id, pair_b_id)
                           VALUES(?, ?, ?, ?, ?, ?)`);
   const processByes = [];
-  for (const [stage, ids] of [['po1', po1], ['po2', po2]]) {
+  for (const [stage, ids] of [['po1', playoffOrder(category, 'po1')], ['po2', playoffOrder(category, 'po2')]]) {
     if (ids.length < 2) continue;
     for (const round of L.buildBracket(ids)) {
       for (const mt of round.matches) {
@@ -576,6 +628,107 @@ router.post('/cambios/:id/rechazar', (req, res) => {
   db.prepare("UPDATE pair_changes SET status = 'rejected', decided_at = datetime('now') WHERE id = ? AND status = 'pending'")
     .run(req.params.id);
   res.redirect('/admin/cambios');
+});
+
+// ================= PISTAS =================
+function listCourts() {
+  return db.prepare('SELECT * FROM courts ORDER BY active DESC, name').all();
+}
+router.get('/pistas', (req, res) => {
+  res.renderPage('admin/pistas', {
+    courts: listCourts(),
+    duration: getSetting('match_duration_min', '90'),
+    error: req.query.error || null, ok: req.query.ok || null,
+  });
+});
+router.post('/pistas/crear', (req, res) => {
+  const name = (req.body.name || '').trim();
+  if (!name) return res.redirect('/admin/pistas?error=' + encodeURIComponent('Ponle un nombre a la pista.'));
+  db.prepare('INSERT INTO courts(name) VALUES(?)').run(name);
+  res.redirect('/admin/pistas?ok=' + encodeURIComponent('Pista creada.'));
+});
+router.post('/pistas/:id/toggle', (req, res) => {
+  db.prepare('UPDATE courts SET active = 1 - active WHERE id = ?').run(req.params.id);
+  res.redirect('/admin/pistas');
+});
+router.post('/pistas/:id/eliminar', (req, res) => {
+  db.prepare('DELETE FROM courts WHERE id = ?').run(req.params.id);
+  res.redirect('/admin/pistas');
+});
+router.post('/pistas/duracion', (req, res) => {
+  const d = Math.min(240, Math.max(30, parseInt(req.body.duration) || 90));
+  setSetting('match_duration_min', String(d));
+  res.redirect('/admin/pistas?ok=' + encodeURIComponent('Duración guardada.'));
+});
+
+// Asignar pista + día + hora a un partido (con control de solapes)
+router.post('/partidos/:id/horario', (req, res) => {
+  const m = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.id);
+  if (!m) return res.redirect('/admin');
+  const back = req.body.back || '/admin/partidos';
+  const err = (msg) => res.redirect(back + (back.includes('?') ? '&' : '?') + 'error=' + encodeURIComponent(msg));
+  const courtId = req.body.court_id ? parseInt(req.body.court_id, 10) : null;
+  const day = (req.body.day || '').trim(), time = (req.body.time || '').trim();
+  if (!courtId && !day && !time) {
+    db.prepare('UPDATE matches SET court_id = NULL, scheduled_at = NULL WHERE id = ?').run(m.id);
+    return res.redirect(back);
+  }
+  if (!courtId || !/^\d{4}-\d{2}-\d{2}$/.test(day) || !/^\d{2}:\d{2}$/.test(time))
+    return err('Para programar un partido hacen falta pista, día y hora.');
+  const court = db.prepare("SELECT * FROM courts WHERE id = ? AND active = 1").get(courtId);
+  if (!court) return err('La pista no existe o está desactivada.');
+  const start = `${day}T${time}`;
+  const dur = parseInt(getSetting('match_duration_min', '90'), 10) || 90;
+  // ¿Se solapa con otro partido de la misma pista?
+  const clash = db.prepare(
+    `SELECT m2.id FROM matches m2
+     WHERE m2.court_id = ? AND m2.id != ? AND m2.unplayed = 0 AND m2.scheduled_at IS NOT NULL
+       AND substr(m2.scheduled_at, 1, 10) = ?
+       AND datetime(m2.scheduled_at) < datetime(?, '+' || ? || ' minutes')
+       AND datetime(m2.scheduled_at, '+' || ? || ' minutes') > datetime(?)
+     LIMIT 1`
+  ).get(courtId, m.id, day, start, dur, dur, start);
+  if (clash) return err(`Esa pista ya está ocupada en ese tramo (partido #${clash.id}). Elige otra pista u otra hora.`);
+  db.prepare('UPDATE matches SET court_id = ?, scheduled_at = ? WHERE id = ?').run(courtId, start, m.id);
+  res.redirect(back);
+});
+
+// ================= CUADRANTE =================
+router.get('/cuadrante', (req, res) => {
+  const today = new Date();
+  const def = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(req.query.fecha || '') ? req.query.fecha : def;
+  const courts = db.prepare('SELECT * FROM courts WHERE active = 1 ORDER BY name').all();
+  const dur = parseInt(getSetting('match_duration_min', '90'), 10) || 90;
+  const matches = db.prepare(
+    `SELECT m.*, c.name AS court_name, g.group_no, g.round_no AS gr FROM matches m
+     LEFT JOIN courts c ON c.id = m.court_id LEFT JOIN groups g ON g.id = m.group_id
+     WHERE m.court_id IS NOT NULL AND m.scheduled_at IS NOT NULL AND substr(m.scheduled_at, 1, 10) = ? AND m.unplayed = 0
+     ORDER BY m.court_id, m.scheduled_at`
+  ).all(day);
+  // Rejilla: franjas de 30 min de 08:00 a 23:00
+  const slots = [];
+  for (let h = 8; h < 23; h++) { slots.push(`${String(h).padStart(2, '0')}:00`); slots.push(`${String(h).padStart(2, '0')}:30`); }
+  const grid = courts.map(c => {
+    const ms = matches.filter(x => x.court_id === c.id);
+    const cells = new Array(slots.length).fill(null);
+    const skip = new Array(slots.length).fill(false);
+    for (const mt of ms) {
+      const t = mt.scheduled_at.slice(11, 16);
+      let i0 = slots.indexOf(t);
+      if (i0 < 0) { // redondea al slot anterior
+        i0 = slots.findIndex(s => s > t) - 1;
+        if (i0 < 0) i0 = 0;
+      }
+      const span = Math.max(1, Math.ceil(dur / 30));
+      if (cells[i0]) mt.clash = true; else { cells[i0] = { m: mt, span }; for (let k = 1; k < span && i0 + k < slots.length; k++) skip[i0 + k] = true; }
+    }
+    return { court: c, cells, skip };
+  });
+  const unscheduled = db.prepare(
+    `SELECT COUNT(*) c FROM matches WHERE (court_id IS NULL OR scheduled_at IS NULL) AND unplayed = 0 AND winner_id IS NULL AND wo_winner_id IS NULL`
+  ).get().c;
+  res.renderPage('admin/cuadrante', { day, courts, slots, grid, unscheduled, pairName: (id) => L.pairName(db, id) });
 });
 
 // ================= AJUSTES =================

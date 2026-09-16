@@ -39,6 +39,7 @@ app.use((req, res, next) => {
   res.locals.query = req.query;
   // Helpers globales para las vistas
   res.locals.pairName = (id) => (id ? L.pairName(db, id) : '—');
+  res.locals.slotStr = (m) => (m ? L.formatSlot(m.scheduled_at, m.court_name) : '');
   res.locals.scoreStr = (m) => {
     if (!m) return '';
     if (m.unplayed) return 'No jugado';

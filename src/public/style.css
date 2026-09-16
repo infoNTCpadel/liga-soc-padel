@@ -114,15 +114,28 @@ input[type=checkbox] { width: 1.15rem; height: 1.15rem; accent-color: var(--lime
 .phase .plabel { font-weight: 700; }
 
 /* Cuadros de playoff */
-.bracket { display: flex; gap: 18px; overflow-x: auto; padding: 10px 2px 18px; }
-.bround { min-width: 240px; flex: 1; }
-.bround h4 { text-align: center; color: var(--lime); margin: 0 0 10px; font-size: .85rem; text-transform: uppercase; letter-spacing: .05em; }
-.bmatch { background: var(--card); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 12px; overflow: hidden; }
-.bmatch .p { padding: 8px 12px; display: flex; justify-content: space-between; gap: 8px; font-size: .9rem; }
+/* Cuadro de playoffs */
+.bracket { display: flex; gap: 34px; overflow-x: auto; padding: 12px 4px 22px; }
+.bround { min-width: 252px; flex: 0 0 auto; display: flex; flex-direction: column; }
+.bround h4 { align-self: center; background: var(--bg2); border: 1px solid var(--line); color: var(--lime);
+  border-radius: 20px; padding: 6px 18px; margin: 0 0 16px; font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; }
+.bmatches { display: flex; flex-direction: column; justify-content: space-around; gap: 18px; flex: 1; position: relative; }
+.bround:not(:last-child) .bmatches::after { content: ''; position: absolute; top: 30px; bottom: 30px; right: -19px; width: 2px; background: var(--line); border-radius: 2px; }
+.bmatch { background: var(--card); border: 1px solid var(--line); border-radius: 12px; position: relative; }
+.bmatch.final { border-color: var(--lime); box-shadow: 0 0 18px rgba(190, 242, 100, .12); }
+.bround:not(:last-child) .bmatch::after { content: ''; position: absolute; top: 50%; right: -17px; width: 17px; height: 2px; background: var(--line); }
+.bmatch .p { padding: 9px 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: .9rem; }
+.bmatch .p:first-child { border-radius: 12px 12px 0 0; }
+.bmatch .p:last-child { border-radius: 0 0 12px 12px; }
 .bmatch .p + .p { border-top: 1px solid var(--line); }
-.bmatch .p.win { background: #1c2612; font-weight: 700; color: var(--lime); }
-.bmatch .p .sc { color: var(--mut); font-size: .8rem; white-space: nowrap; }
-.bmatch .p.tbd { color: var(--mut); font-style: italic; }
+.bmatch .p.win { background: #1c2612; font-weight: 700; color: var(--lime); box-shadow: inset 3px 0 0 var(--lime); }
+.bmatch .p .sc { color: var(--mut); font-size: .8rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bmatch .p.win .sc { color: var(--lime); font-weight: 700; }
+.bmatch .p.tbd { color: var(--mut); font-style: italic; font-size: .82rem; }
+.bmatch .p.slot { font-size: .78rem; }
+.seed { display: inline-block; min-width: 20px; text-align: center; font-size: .72rem; font-weight: 700;
+  background: var(--bg2); border: 1px solid var(--line); color: var(--mut); border-radius: 6px; padding: 1px 5px; margin-right: 8px; }
+.p.win .seed { color: var(--lime); border-color: var(--lime); }
 
 /* Partidos */
 .match { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin: 8px 0;

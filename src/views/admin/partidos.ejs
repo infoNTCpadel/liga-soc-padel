@@ -1,5 +1,7 @@
 <h1>Partidos</h1>
 
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+
 <div class="tabs">
   <% for (const c of CATEGORIES) { %><a href="/admin/partidos?stage=groups&category=<%= c.code %>" class="<%= stage==='groups'&&category===c.code?'on':'' %>">Grupos <%= c.code %></a><% } %>
   <% for (const c of CATEGORIES) { %><a href="/admin/partidos?stage=po&category=<%= c.code %>" class="<%= stage==='po'&&category===c.code?'on':'' %>">Playoffs <%= c.code %></a><% } %>
@@ -23,6 +25,27 @@
     <% if (vb === 'auto') { %><span class="badge auto">validado automáticamente (24h)</span><% } %>
     <% if (vb === 'validado') { %><span class="badge validado">validado</span><% } %>
   </p>
+  <p class="small">📍 <strong><%= slotStr(m) || 'Sin programar' %></strong></p>
+  <details>
+    <summary class="small" style="cursor:pointer; color: var(--lime)">Pista y horario</summary>
+    <form method="post" action="/admin/partidos/<%= m.id %>/horario" style="margin-top:10px">
+      <div class="row2">
+        <div class="field"><label>Pista</label>
+          <select name="court_id">
+            <option value="">—</option>
+            <% for (const c of courts) { %><option value="<%= c.id %>" <%= m.court_id === c.id ? 'selected' : '' %>><%= c.name %></option><% } %>
+          </select>
+        </div>
+        <div class="field"><label>Día</label><input type="date" name="day" value="<%= m.scheduled_at ? m.scheduled_at.slice(0, 10) : '' %>"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Hora</label><input type="time" name="time" value="<%= m.scheduled_at ? m.scheduled_at.slice(11, 16) : '' %>"></div>
+        <div class="field"><label>&nbsp;</label><button class="btn small" type="submit">Guardar horario</button></div>
+      </div>
+      <input type="hidden" name="back" value="<%= '/admin/partidos?stage=' + stage + '&category=' + category + (round ? '&round=' + round : '') %>">
+      <p class="small mut">Deja todo vacío y guarda para quitar la programación. El sistema avisa si la pista ya está ocupada en ese tramo.</p>
+    </form>
+  </details>
   <details>
     <summary class="small" style="cursor:pointer; color: var(--lime)">Introducir / corregir resultado</summary>
     <form method="post" action="/admin/partidos/<%= m.id %>/resultado" style="margin-top:10px">

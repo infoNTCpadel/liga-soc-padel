@@ -6,25 +6,29 @@
   <% for (const r of rounds) { %>
     <div class="bround">
       <h4><%= r.name %></h4>
+      <div class="bmatches">
       <% for (const m of r.matches) { %>
-        <div class="bmatch">
-          <% for (const pid of [m.pair_a_id, m.pair_b_id]) { %>
+        <% const isBye = (!m.pair_a_id || !m.pair_b_id) && m.winner_id; %>
+        <div class="bmatch<%= r.code === 'F' ? ' final' : '' %>">
+          <% for (const [pid, seed] of [[m.pair_a_id, m.seed_a], [m.pair_b_id, m.seed_b]]) { %>
             <% if (!pid) { %>
-              <div class="p tbd"><span>A definir</span><span class="sc"></span></div>
+              <div class="p tbd"><span>A definir</span></div>
             <% } else {
               const o = m.outcome;
-              const win = o && o.winnerId === pid;
+              const win = !!(o && o.winnerId === pid);
             %>
               <div class="p <%= win ? 'win' : '' %>">
-                <span><%= pairName(pid) %></span>
-                <span class="sc"><%= scoreStr(m) %></span>
+                <span><% if (seed) { %><span class="seed"><%= seed %></span><% } %><%= pairName(pid) %><% if (win && r.code === 'F') { %> 🏆<% } %></span>
+                <span class="sc"><% if (win) { %><%= isBye ? 'Bye' : scoreStr(m) %><% } %></span>
               </div>
             <% } %>
           <% } %>
+          <% if (m.slot) { %><div class="p tbd slot"><span>📍 <%= m.slot %></span></div><% } %>
           <% if (m.validation === 'pending') { %><div class="p tbd"><span>⏳ pendiente de validación</span></div><% } %>
           <% if (m.validation === 'disputed') { %><div class="p tbd"><span>⚠ resultado disputado</span></div><% } %>
         </div>
       <% } %>
+      </div>
     </div>
   <% } %>
 </div>

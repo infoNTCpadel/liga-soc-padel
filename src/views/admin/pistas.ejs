@@ -1,0 +1,44 @@
+<h1>Pistas</h1>
+
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+<% if (ok) { %><div class="alert ok"><%= ok %></div><% } %>
+
+<div class="card">
+  <h3>Añadir pista</h3>
+  <form method="post" action="/admin/pistas/crear" class="row2">
+    <div class="field"><label>Nombre</label><input type="text" name="name" placeholder="Pista 1" required></div>
+    <div class="field"><label>&nbsp;</label><button class="btn small" type="submit">Añadir</button></div>
+  </form>
+</div>
+
+<div class="card">
+  <h3>Pistas del club</h3>
+  <% if (!courts.length) { %><p class="mut">Aún no hay pistas. Añade las que tengas disponibles.</p><% } %>
+  <table class="tbl">
+    <tr><th>Pista</th><th>Estado</th><th></th></tr>
+    <% for (const c of courts) { %>
+    <tr>
+      <td><strong><%= c.name %></strong></td>
+      <td><%= c.active ? 'Activa' : 'Desactivada' %></td>
+      <td class="acts">
+        <form method="post" action="/admin/pistas/<%= c.id %>/toggle" style="display:inline">
+          <button class="btn small ghost" type="submit"><%= c.active ? 'Desactivar' : 'Activar' %></button>
+        </form>
+        <form method="post" action="/admin/pistas/<%= c.id %>/eliminar" style="display:inline"
+              onsubmit="return confirm('¿Eliminar <%= c.name.replace(/'/g, "\\'") %>? Los partidos programados en ella quedarán sin pista.')">
+          <button class="btn small danger" type="submit">Eliminar</button>
+        </form>
+      </td>
+    </tr>
+    <% } %>
+  </table>
+</div>
+
+<div class="card">
+  <h3>Duración de los partidos</h3>
+  <p class="small mut">Se usa para el control de solapes en el cuadrante: dos partidos no pueden compartir pista si sus tramos se cruzan.</p>
+  <form method="post" action="/admin/pistas/duracion" class="row2">
+    <div class="field"><label>Minutos por partido</label><input type="number" name="duration" min="30" max="240" step="15" value="<%= duration %>" required></div>
+    <div class="field"><label>&nbsp;</label><button class="btn small" type="submit">Guardar</button></div>
+  </form>
+</div>

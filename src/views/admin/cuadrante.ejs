@@ -1,0 +1,40 @@
+<h1>Cuadrante de pistas</h1>
+
+<form method="get" action="/admin/cuadrante" class="row2" style="max-width:420px">
+  <div class="field"><label>Día</label><input type="date" name="fecha" value="<%= day %>" onchange="this.form.submit()"></div>
+  <div class="field"><label>&nbsp;</label><a class="btn small ghost" href="/admin/cuadrante">Hoy</a></div>
+</form>
+
+<p class="small mut"><%= unscheduled %> partidos pendientes sin pista/horario asignado.</p>
+
+<div class="tblwrap"><table class="tbl quad">
+  <tr><th>Hora</th><% for (const c of courts) { %><th><%= c.name %></th><% } %></tr>
+  <% slots.forEach((t, i) => { %>
+  <tr>
+    <td class="qtime"><%= t %></td>
+    <% for (const g of grid) { %>
+      <% if (g.skip[i]) { continue; } %>
+      <% const cell = g.cells[i]; %>
+      <% if (cell) { %>
+        <td rowspan="<%= cell.span %>" class="qmatch<%= cell.m.clash ? ' clash' : '' %>">
+          <strong><%= pairName(cell.m.pair_a_id) %></strong><br>
+          <span class="mut">vs</span> <strong><%= pairName(cell.m.pair_b_id) %></strong><br>
+          <span class="small mut"><%= cell.m.bracket_round ? (cell.m.stage === 'po1' ? 'Playoff 1ª' : 'Playoff 2ª') + ' · ' + cell.m.bracket_round : 'R' + (cell.m.gr || cell.m.round_no) + (cell.m.group_no ? ' · Grupo ' + cell.m.group_no : '') %></span>
+          <% if (cell.m.clash) { %><br><span class="badge disputado">¡Solape!</span><% } %>
+        </td>
+      <% } else { %>
+        <td class="qfree"></td>
+      <% } %>
+    <% } %>
+  </tr>
+  <% }) %>
+</table></div>
+
+<% if (!courts.length) { %><p class="mut">Primero crea las pistas en <a href="/admin/pistas">Pistas</a>.</p><% } %>
+
+<style>
+.tbl.quad td.qtime { color: var(--mut); font-size: .78rem; width: 60px; }
+.tbl.quad td.qfree { background: rgba(255,255,255,.015); }
+.tbl.quad td.qmatch { background: #16210f; border: 1px solid var(--lime); border-radius: 8px; font-size: .82rem; vertical-align: top; }
+.tbl.quad td.qmatch.clash { background: #3d1a1a; border-color: var(--red); }
+</style>

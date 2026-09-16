@@ -36,7 +36,9 @@
   <h4 style="margin-top:16px">Partidos</h4>
   <% for (const m of g.matches) { %>
     <div class="match">
-      <span class="teams"><%= pairName(m.pair_a_id) %> <span class="mut">vs</span> <%= pairName(m.pair_b_id) %></span>
+      <span class="teams"><%= pairName(m.pair_a_id) %> <span class="mut">vs</span> <%= pairName(m.pair_b_id) %>
+        <% const slg = slotStr(m); if (slg) { %><br><span class="small mut">📍 <%= slg %></span><% } %>
+      </span>
       <span class="score"><%= scoreStr(m) %>
         <% const vb = valBadge(m); if (vb === 'pending') { %><span class="badge pending">pendiente validación</span><% } %>
         <% if (vb === 'disputado') { %><span class="badge disputado">disputado</span><% } %>

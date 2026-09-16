@@ -3,23 +3,52 @@
 <% if (!round3closed) { %>
   <div class="alert info">Para generar los cuadros primero hay que cerrar la Ronda 3.</div>
 <% } else if (!generated) { %>
-  <div class="alert info">Ronda 3 cerrada. Genera los cuadros por categoría: el ranking se divide por la mitad (1ª y 2ª categoría).</div>
+  <div class="alert info">Ronda 3 cerrada. Revisa el orden de cabezas de serie por categoría (puedes mover parejas con ↑ ↓) y genera los cuadros. El ranking se divide por la mitad (1ª y 2ª categoría).</div>
 <% } %>
 
 <% for (const d of data) { %>
 <div class="card">
   <h3>Categoría <%= catName(d.category).toLowerCase() %></h3>
-  <% if (!d.ranking.length) { %>
-    <p class="mut">Sin ranking todavía.</p>
-  <% } else { %>
-    <p class="small"><strong>Playoff 1ª:</strong> <%= d.split.po1.map(id => pairName(id)).join(' · ') || '—' %></p>
-    <p class="small"><strong>Playoff 2ª:</strong> <%= d.split.po2.map(id => pairName(id)).join(' · ') || '—' %></p>
-    <% if (round3closed && !generated) { %>
-      <form method="post" action="/admin/playoffs/generar">
-        <input type="hidden" name="category" value="<%= d.category %>">
-        <button class="btn small" type="submit">Generar cuadros</button>
-      </form>
+  <% const editable = round3closed && !d.hasResults; %>
+  <% for (const s of [{ key: 'po1', label: 'Playoff de 1ª', ids: d.po1, seeds: d.seeds1 }, { key: 'po2', label: 'Playoff de 2ª', ids: d.po2, seeds: d.seeds2 }]) { %>
+    <h4><%= s.label %> <span class="mut small">· <%= s.seeds %> cabezas de serie</span></h4>
+    <% if (!s.ids.length) { %>
+      <p class="mut small">Sin parejas.</p>
+    <% } else { %>
+      <ol class="seedlist">
+      <% s.ids.forEach((id, i) => { %>
+        <li>
+          <span class="seed"><%= i + 1 %></span>
+          <span class="<%= i < s.seeds ? 'seedhead' : '' %>"><%= pairName(id) %></span>
+          <% if (i < s.seeds) { %><span class="badge validado">cabeza de serie</span><% } %>
+          <% if (editable) { %>
+            <span class="seedmove">
+              <form method="post" action="/admin/playoffs/orden" style="display:inline">
+                <input type="hidden" name="category" value="<%= d.category %>">
+                <input type="hidden" name="stage" value="<%= s.key %>">
+                <input type="hidden" name="pair_id" value="<%= id %>">
+                <input type="hidden" name="dir" value="up">
+                <button class="btn small ghost" type="submit" <%= i === 0 ? 'disabled' : '' %> title="Subir">↑</button>
+              </form>
+              <form method="post" action="/admin/playoffs/orden" style="display:inline">
+                <input type="hidden" name="category" value="<%= d.category %>">
+                <input type="hidden" name="stage" value="<%= s.key %>">
+                <input type="hidden" name="pair_id" value="<%= id %>">
+                <input type="hidden" name="dir" value="down">
+                <button class="btn small ghost" type="submit" <%= i === s.ids.length - 1 ? 'disabled' : '' %> title="Bajar">↓</button>
+              </form>
+            </span>
+          <% } %>
+        </li>
+      <% }) %>
+      </ol>
     <% } %>
+  <% } %>
+  <% if (editable && (d.po1.length >= 2 || d.po2.length >= 2)) { %>
+    <form method="post" action="/admin/playoffs/generar" onsubmit="return confirm('¿Generar los cuadros de esta categoría con este orden?')">
+      <input type="hidden" name="category" value="<%= d.category %>">
+      <button class="btn small" type="submit"><%= generated ? 'Regenerar cuadros' : 'Generar cuadros' %></button>
+    </form>
   <% } %>
 </div>
 <% } %>
@@ -28,3 +57,11 @@
   <p class="mut">Los cuadros ya están generados. Los resultados se introducen desde <a href="/admin/partidos?stage=po">Partidos</a> o los suben las propias parejas. Los ganadores avanzan automáticamente de ronda.</p>
   <p><a class="btn small ghost" href="/playoffs/M">Ver cuadros públicos</a></p>
 <% } %>
+
+<style>
+.seedlist { list-style: none; padding: 0; margin: 8px 0 16px; }
+.seedlist li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: .92rem; }
+.seedlist .seedhead { font-weight: 700; color: var(--lime); }
+.seedlist .seedmove { margin-left: auto; display: flex; gap: 4px; }
+.seedlist .seedmove .btn { padding: 4px 9px; }
+</style>

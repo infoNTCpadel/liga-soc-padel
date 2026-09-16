@@ -388,7 +388,10 @@ function getGroupMembers(db, groupId) {
 }
 
 function getGroupMatches(db, groupId) {
-  return db.prepare('SELECT * FROM matches WHERE group_id = ? ORDER BY id').all(groupId);
+  return db.prepare(
+    `SELECT m.*, c.name AS court_name FROM matches m LEFT JOIN courts c ON c.id = m.court_id
+     WHERE m.group_id = ? ORDER BY m.id`
+  ).all(groupId);
 }
 
 function pairName(db, pairId) {
@@ -430,10 +433,23 @@ function bracketOf(level) {
   return PLAYTOMIC_BRACKETS.find(b => level >= b.min && level <= b.max) || PLAYTOMIC_BRACKETS[3];
 }
 
+// "Pista 2 · 12/10/2026 10:30" a partir de scheduled_at ('YYYY-MM-DDTHH:MM') y court_name.
+function formatSlot(scheduledAt, courtName) {
+  if (!scheduledAt && !courtName) return '';
+  let s = '';
+  if (scheduledAt) {
+    const parts = String(scheduledAt).split('T');
+    const d = (parts[0] || '').split('-');
+    if (d.length === 3) s = `${d[2]}/${d[1]}/${d[0]} ${(parts[1] || '').slice(0, 5)}`.trim();
+  }
+  if (courtName) s = s ? `${courtName} · ${s}` : courtName;
+  return s;
+}
+
 module.exports = {
   roundPoints, matchOutcome, countsForStandings, isSetFinished,
   computeStandings, movementDelta, targetGroup,
-  chunkIntoGroups, roundRobin,
+  chunkIntoGroups, roundRobin, nextPowerOfTwo, seedOrder, formatSlot,
   buildBracket, splitPlayoffs, BRACKET_NEXT, BRACKET_NAMES, BRACKET_NAME_BY_CODE,
   autoValidateExpired,
   getGroups, getGroupMembers, getGroupMatches, pairName, getRanking,
