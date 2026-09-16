@@ -130,6 +130,7 @@ router.get('/liga/:category/:round', (req, res) => {
   const category = L.validCategory(req.params.category);
   const round = Math.min(3, Math.max(1, parseInt(req.params.round) || 1));
   const groups = L.getGroups(db, category, round);
+  const showMov = round < 3 && groups.length > 1;
   const data = groups.map(g => {
     const members = L.getGroupMembers(db, g.id);
     const matches = L.getGroupMatches(db, g.id);
@@ -137,13 +138,22 @@ router.get('/liga/:category/:round', (req, res) => {
     const byId = Object.fromEntries(members.map(m => [m.pair_id, m]));
     return {
       ...g,
-      standings: standings.map(s => ({ ...s, info: byId[s.pairId] })),
+      standings: standings.map(s => {
+        const target = showMov ? L.targetGroup(g.group_no, groups.length, s.position, members.length) : null;
+        return {
+          ...s,
+          info: byId[s.pairId],
+          movementTarget: target,
+          // +1 sube (hacia el Grupo 1), -1 baja, 0 permanece
+          movementDir: target == null ? 0 : Math.sign(g.group_no - target),
+        };
+      }),
       matches: matches.map(m => ({ ...m, outcome: L.matchOutcome(m), counts: L.countsForStandings(m) })),
       members,
     };
   });
   const closed = getSetting(`round${round}_closed`, '0') === '1';
-  res.renderPage('public/liga', { category, round, groups: data, closed, pairName: (id) => L.pairName(db, id) });
+  res.renderPage('public/liga', { category, round, groups: data, closed, showMov, pairName: (id) => L.pairName(db, id) });
 });
 
 // ---- Ranking ----

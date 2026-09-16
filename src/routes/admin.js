@@ -323,6 +323,30 @@ router.post('/grupos/:gid/mover', (req, res) => {
   res.redirect(back);
 });
 
+// Eliminar los grupos de una ronda/categoría para volver a generarlos (sin resultados)
+router.post('/grupos/reiniciar', (req, res) => {
+  const category = L.validCategory(req.body.category);
+  const round = Math.min(3, Math.max(1, parseInt(req.body.round) || 1));
+  const back = `/admin/grupos?category=${category}&round=${round}`;
+  if (getSetting(`round${round}_closed`, '0') === '1') {
+    return res.redirect(back + '&error=' + encodeURIComponent('La ronda está cerrada: no se pueden eliminar sus grupos.'));
+  }
+  const gids = L.getGroups(db, category, round).map(g => g.id);
+  if (gids.length) {
+    const ph = gids.map(() => '?').join(',');
+    const played = db.prepare(
+      `SELECT COUNT(*) c FROM matches WHERE group_id IN (${ph}) AND (winner_id IS NOT NULL OR wo_winner_id IS NOT NULL OR unplayed = 1)`
+    ).get(...gids).c;
+    if (played) {
+      return res.redirect(back + '&error=' + encodeURIComponent('Ya hay partidos con resultado: no se pueden eliminar los grupos.'));
+    }
+    db.prepare(`DELETE FROM matches WHERE group_id IN (${ph})`).run(...gids);
+    db.prepare(`DELETE FROM group_members WHERE group_id IN (${ph})`).run(...gids);
+    db.prepare(`DELETE FROM groups WHERE id IN (${ph})`).run(...gids);
+  }
+  res.redirect(back);
+});
+
 // ================= PARTIDOS =================
 router.get('/partidos', (req, res) => {
   const category = L.validCategory(req.query.category);
@@ -393,7 +417,7 @@ router.get('/rondas/:n/cerrar', (req, res) => {
         category, group: g,
         standings: standings.map(s => {
           const delta = L.movementDelta(g.group_no, total, s.position, members.length);
-          return { ...s, delta, target: Math.min(total, Math.max(1, g.group_no + delta)), points: L.roundPoints(g.group_no, s.position) };
+          return { ...s, delta, target: Math.min(total, Math.max(1, g.group_no - delta)), points: L.roundPoints(g.group_no, s.position) };
         }),
         missing,
       });
@@ -421,7 +445,7 @@ router.post('/rondas/:n/cerrar', (req, res) => {
                                 VALUES(?, ?, ?, ?, ?, ?, ?, ?)`);
         for (const s of standings) {
           const delta = L.movementDelta(g.group_no, total, s.position, members.length);
-          const target = Math.min(total, Math.max(1, g.group_no + delta));
+          const target = Math.min(total, Math.max(1, g.group_no - delta));
           ins.run(s.pairId, category, n, g.group_no, s.position, L.roundPoints(g.group_no, s.position), delta, target);
         }
       }

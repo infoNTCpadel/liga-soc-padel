@@ -16,7 +16,7 @@
 <div class="card">
   <h3>Grupo <%= g.group_no %></h3>
   <div class="tblwrap"><table class="tbl">
-    <tr><th>#</th><th>Pareja</th><th class="num">PJ</th><th class="num">PG</th><th class="num">PP</th><th class="num">Pts</th><th class="num">Sets</th><th class="num">Juegos</th><th></th></tr>
+    <tr><th>#</th><th>Pareja</th><th class="num">PJ</th><th class="num">PG</th><th class="num">PP</th><th class="num">Pts</th><th class="num">Sets</th><th class="num">Juegos</th><% if (showMov) { %><th>Mov.</th><% } %><th></th></tr>
     <% for (const s of g.standings) { %>
       <tr>
         <td class="<%= s.position<=2?'pos1':'' %>"><strong><%= s.position %>º</strong></td>
@@ -25,6 +25,9 @@
         <td class="num"><strong><%= s.pts %></strong></td>
         <td class="num"><%= s.setsW %>–<%= s.setsL %></td>
         <td class="num"><%= s.gamesW %>–<%= s.gamesL %></td>
+        <% if (showMov) { %>
+          <td><% if (s.movementDir > 0) { %><span class="badge mov-up">▲ Sube al G<%= s.movementTarget %></span><% } else if (s.movementDir < 0) { %><span class="badge mov-down">▼ Baja al G<%= s.movementTarget %></span><% } else { %><span class="badge mov-same">= Permanece</span><% } %></td>
+        <% } %>
         <td class="small mut"><%= s.tieNote || '' %></td>
       </tr>
     <% } %>
@@ -44,3 +47,6 @@
 <% } %>
 
 <p class="mut small">Puntos por partido: victoria 3 · derrota 1 · no jugado 0. Solo cuentan los sets terminados; los juegos cuentan siempre.</p>
+<% if (showMov) { %>
+<p class="mut small">Movimientos <%= closed ? 'aplicados al cerrar la ronda' : 'previstos si la ronda terminara hoy' %> según la normativa: 1º sube 2 grupos, 2º sube 1, 3º baja 1, 4º baja 2 (con excepciones en el primer, segundo, penúltimo y último grupo).</p>
+<% } %>

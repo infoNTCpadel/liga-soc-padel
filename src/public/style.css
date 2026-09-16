@@ -99,6 +99,9 @@ input[type=checkbox] { width: 1.15rem; height: 1.15rem; accent-color: var(--lime
 .badge.validado, .badge.auto { background: #1d3a1d; color: #8fe388; }
 .badge.disputado { background: #3d1a1a; color: var(--red); }
 .badge.cat { background: var(--card2); color: var(--lime); border: 1px solid var(--line); }
+.badge.mov-up { background: #1d3a1d; color: #8fe388; }
+.badge.mov-down { background: #3d1a1a; color: #ff9d9d; }
+.badge.mov-same { background: var(--card2); color: #9aa3ad; border: 1px solid var(--line); }
 
 /* Fases / calendario */
 .timeline { display: grid; gap: 10px; margin: 14px 0; }

@@ -247,7 +247,8 @@ function movementDelta(groupNo, totalGroups, position, groupSize) {
 }
 
 function targetGroup(groupNo, totalGroups, position, groupSize) {
-  const t = groupNo + movementDelta(groupNo, totalGroups, position, groupSize);
+  // Subir = ir hacia el Grupo 1 (número menor); bajar = número mayor.
+  const t = groupNo - movementDelta(groupNo, totalGroups, position, groupSize);
   return Math.min(totalGroups, Math.max(1, t));
 }
 

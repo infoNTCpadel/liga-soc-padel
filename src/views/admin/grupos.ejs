@@ -29,6 +29,13 @@
     <% } %>
   <% } else { %>
     <p class="small mut">Puedes mover parejas entre grupos mientras no tengan resultados. Genera el calendario cuando los grupos estén definitivos.</p>
+    <% if (!closed) { %>
+      <form method="post" action="/admin/grupos/reiniciar" onsubmit="return confirm('Se eliminarán los grupos y sus calendarios de esta ronda y categoría (solo posible si no hay resultados). ¿Seguro?')" style="margin-top:10px">
+        <input type="hidden" name="category" value="<%= category %>">
+        <input type="hidden" name="round" value="<%= round %>">
+        <button class="btn small danger" type="submit">Eliminar grupos y volver a generar</button>
+      </form>
+    <% } %>
   <% } %>
 </div>
 

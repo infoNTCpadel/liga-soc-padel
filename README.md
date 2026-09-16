@@ -134,6 +134,12 @@ si quieres, elimina la de prueba.
 
 ### 3. Ronda 1 (5 oct – 1 nov)
 - **/admin/grupos**: genera los grupos por nivel y el calendario (todos contra todos).
+  Puedes mover parejas entre grupos (desplegable → **Mover**) mientras no tengan
+  resultados, y **eliminar los grupos para volver a generarlos** (botón
+  «Eliminar grupos y volver a generar», solo si no hay resultados): útil si se
+  apunta alguna pareja de última hora.
+- En la vista pública **/liga**, la clasificación muestra los **movimientos
+  previstos** (quién sube, baja o permanece) según la posición actual.
 - Las parejas suben sus resultados desde **/pareja**; el rival tiene 24 h para
   validarlos (si no, se validan solos). Puedes corregir resultados en
   **/admin/partidos** y marcar W.O. o partidos no jugados.
