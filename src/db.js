@@ -1,17 +1,40 @@
 // Base de datos SQLite (node:sqlite, sin dependencias nativas).
-// Toda la persistencia de la liga vive aquí.
+//
+// Arquitectura de temporadas:
+// - `meta.db`: lista de temporadas (una activa) + ajustes globales
+//   (p. ej. la contraseña de la organización).
+// - `season-<id>.db`: todos los datos de cada temporada (parejas, grupos,
+//   partidos, ajustes propios como precios o fechas...).
+// El objeto `db` exportado es un proxy que siempre apunta a la BD de la
+// temporada activa, así que el resto del código no cambia.
+
 const { DatabaseSync } = require('node:sqlite');
 const path = require('path');
 const fs = require('fs');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
-const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, 'liga.db');
 
-const db = new DatabaseSync(DB_PATH);
-db.exec('PRAGMA journal_mode = WAL;');
-db.exec('PRAGMA foreign_keys = ON;');
+// ---------------------------------------------------------------- meta.db
+const meta = new DatabaseSync(path.join(DATA_DIR, 'meta.db'));
+meta.exec(`CREATE TABLE IF NOT EXISTS seasons(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  active INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`);
+meta.exec('CREATE TABLE IF NOT EXISTS meta_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL)');
 
+function metaGet(key, fallback = null) {
+  const r = meta.prepare('SELECT value FROM meta_settings WHERE key = ?').get(key);
+  return r ? r.value : fallback;
+}
+function metaSet(key, value) {
+  meta.prepare('INSERT INTO meta_settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+    .run(key, String(value));
+}
+
+// ------------------------------------------------- esquema de temporada
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
@@ -34,7 +57,7 @@ CREATE TABLE IF NOT EXISTS players (
   email TEXT NOT NULL DEFAULT '',
   phone TEXT NOT NULL DEFAULT '',
   level REAL NOT NULL DEFAULT 2.5,
-  gender TEXT NOT NULL DEFAULT 'M',       -- M | F
+  gender TEXT NOT NULL DEFAULT 'M',
   shirt INTEGER NOT NULL DEFAULT 0,       -- 1 = quiere camiseta
   shirt_size TEXT NOT NULL DEFAULT '',
   paid INTEGER NOT NULL DEFAULT 0,        -- 1 = ha pagado en el club
@@ -44,7 +67,7 @@ CREATE TABLE IF NOT EXISTS players (
 CREATE TABLE IF NOT EXISTS pairs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   code TEXT NOT NULL UNIQUE,              -- código de acceso de la pareja
-  category TEXT NOT NULL,                 -- M | F (categoría de juego)
+  category TEXT NOT NULL,                 -- M | F | X (categoría de juego)
   player1_id INTEGER NOT NULL REFERENCES players(id),
   player2_id INTEGER NOT NULL REFERENCES players(id),
   captain_id INTEGER NOT NULL REFERENCES players(id),
@@ -65,7 +88,7 @@ CREATE TABLE IF NOT EXISTS registration_answers (
 
 CREATE TABLE IF NOT EXISTS groups (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  category TEXT NOT NULL,                 -- M | F
+  category TEXT NOT NULL,                 -- M | F | X
   round_no INTEGER NOT NULL,              -- 1, 2, 3
   group_no INTEGER NOT NULL,              -- 1..N
   UNIQUE(category, round_no, group_no)
@@ -94,7 +117,7 @@ CREATE TABLE IF NOT EXISTS round_results (
 
 CREATE TABLE IF NOT EXISTS matches (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  category TEXT NOT NULL,                 -- M | F
+  category TEXT NOT NULL,                 -- M | F | X
   stage TEXT NOT NULL DEFAULT 'groups',   -- groups | po1 | po2
   round_no INTEGER,                       -- 1..3 cuando stage='groups'
   group_id INTEGER REFERENCES groups(id) ON DELETE SET NULL,
@@ -137,19 +160,7 @@ CREATE INDEX IF NOT EXISTS idx_members_group ON group_members(group_id);
 CREATE INDEX IF NOT EXISTS idx_results_pair ON round_results(pair_id);
 `;
 
-db.exec(SCHEMA);
-
-// ---- settings helpers ----
-function getSetting(key, fallback = null) {
-  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
-  return row ? row.value : fallback;
-}
-function setSetting(key, value) {
-  db.prepare('INSERT INTO settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
-    .run(key, String(value));
-}
-
-// Valores por defecto de la temporada (normativa 2026/27)
+// Valores por defecto de cada temporada
 const DEFAULTS = {
   club_name: 'Master Padel League',
   season_name: 'Temporada 2026/27',
@@ -162,8 +173,130 @@ const DEFAULTS = {
   playoffs_generated: '0',
   inscription_price: '19.95', shirt_price: '14.95',
 };
-for (const [k, v] of Object.entries(DEFAULTS)) {
-  if (getSetting(k) === null) setSetting(k, v);
+
+function seasonPath(id) {
+  return path.join(DATA_DIR, `season-${id}.db`);
 }
 
-module.exports = { db, getSetting, setSetting };
+const openDbs = new Map();
+function seasonDb(id) {
+  if (!openDbs.has(id)) {
+    const sdb = new DatabaseSync(seasonPath(id));
+    sdb.exec('PRAGMA journal_mode = WAL;');
+    sdb.exec('PRAGMA foreign_keys = ON;');
+    sdb.exec(SCHEMA);
+    openDbs.set(id, sdb);
+  }
+  return openDbs.get(id);
+}
+
+function seedSeason(id, name) {
+  const sdb = seasonDb(id);
+  for (const [k, v] of Object.entries(DEFAULTS)) {
+    const val = k === 'season_name' ? name : v;
+    if (!sdb.prepare('SELECT 1 FROM settings WHERE key = ?').get(k)) {
+      sdb.prepare('INSERT INTO settings(key, value) VALUES(?, ?)').run(k, val);
+    }
+  }
+}
+
+// ---- gestión de temporadas (meta.db) ----
+function listSeasons() {
+  return meta.prepare('SELECT * FROM seasons ORDER BY id').all();
+}
+function getActiveSeasonId() {
+  const r = meta.prepare('SELECT id FROM seasons WHERE active = 1').get();
+  if (r) return r.id;
+  const f = meta.prepare('SELECT id FROM seasons ORDER BY id LIMIT 1').get();
+  if (f) { activateSeason(f.id); return f.id; }
+  const id = createSeason('Temporada 2026/27');
+  activateSeason(id);
+  return id;
+}
+function getActiveSeason() {
+  return meta.prepare('SELECT * FROM seasons WHERE id = ?').get(getActiveSeasonId());
+}
+function createSeason(name) {
+  const r = meta.prepare('INSERT INTO seasons(name, active) VALUES(?, 0)').run(name);
+  const id = Number(r.lastInsertRowid);
+  seedSeason(id, name);
+  return id;
+}
+function activateSeason(id) {
+  if (!meta.prepare('SELECT 1 FROM seasons WHERE id = ?').get(id)) return false;
+  meta.exec('UPDATE seasons SET active = 0');
+  meta.prepare('UPDATE seasons SET active = 1 WHERE id = ?').run(id);
+  return true;
+}
+function renameSeason(id, name) {
+  meta.prepare('UPDATE seasons SET name = ? WHERE id = ?').run(name, id);
+}
+function deleteSeason(id) {
+  if (id === getActiveSeasonId()) return false;
+  if (!meta.prepare('SELECT 1 FROM seasons WHERE id = ?').get(id)) return false;
+  if (openDbs.has(id)) { openDbs.get(id).close(); openDbs.delete(id); }
+  for (const ext of ['', '-wal', '-shm', '-journal']) {
+    const f = seasonPath(id) + ext;
+    if (fs.existsSync(f)) fs.unlinkSync(f);
+  }
+  meta.prepare('DELETE FROM seasons WHERE id = ?').run(id);
+  return true;
+}
+
+// ---- migración desde la versión de una sola BD (liga.db) ----
+(function migrateLegacy() {
+  if (meta.prepare('SELECT COUNT(*) c FROM seasons').get().c > 0) return;
+  const legacy = path.join(DATA_DIR, 'liga.db');
+  if (fs.existsSync(legacy)) {
+    const ldb = new DatabaseSync(legacy);
+    ldb.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    const sname = ldb.prepare("SELECT value FROM settings WHERE key = 'season_name'").get();
+    const hash = ldb.prepare("SELECT value FROM settings WHERE key = 'admin_password_hash'").get();
+    ldb.close();
+    const name = sname ? sname.value : 'Temporada 2026/27';
+    const r = meta.prepare('INSERT INTO seasons(name, active) VALUES(?, 1)').run(name);
+    const id = Number(r.lastInsertRowid);
+    fs.renameSync(legacy, seasonPath(id));
+    for (const ext of ['-wal', '-shm', '-journal']) {
+      const f = legacy + ext;
+      if (fs.existsSync(f)) fs.unlinkSync(f);
+    }
+    if (hash) metaSet('admin_password_hash', hash.value);
+    const migrated = seasonDb(id);
+    migrated.prepare("DELETE FROM settings WHERE key = 'admin_password_hash'").run();
+  } else {
+    const id = createSeason('Temporada 2026/27');
+    activateSeason(id);
+  }
+})();
+
+// ---- proxy: `db` siempre apunta a la temporada activa ----
+const db = new Proxy({}, {
+  get(_t, prop) {
+    const sdb = seasonDb(getActiveSeasonId());
+    const v = sdb[prop];
+    return typeof v === 'function' ? v.bind(sdb) : v;
+  },
+});
+
+// ---- settings de la temporada activa ----
+function getSetting(key, fallback = null) {
+  const row = seasonDb(getActiveSeasonId()).prepare('SELECT value FROM settings WHERE key = ?').get(key);
+  return row ? row.value : fallback;
+}
+function setSetting(key, value) {
+  seasonDb(getActiveSeasonId())
+    .prepare('INSERT INTO settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+    .run(key, String(value));
+}
+
+// ---- contraseña de la organización (global, en meta.db) ----
+function getAdminHash() { return metaGet('admin_password_hash'); }
+function setAdminHash(h) { metaSet('admin_password_hash', h); }
+
+module.exports = {
+  db, getSetting, setSetting, getAdminHash, setAdminHash,
+  listSeasons, getActiveSeason, getActiveSeasonId,
+  createSeason, activateSeason, renameSeason, deleteSeason,
+  seasonDb,
+};

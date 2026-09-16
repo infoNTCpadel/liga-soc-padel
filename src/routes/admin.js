@@ -3,13 +3,14 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const router = express.Router();
-const { db, getSetting, setSetting } = require('../db');
+const { db, getSetting, setSetting, getAdminHash, setAdminHash,
+  listSeasons, getActiveSeason, activateSeason, createSeason, renameSeason, deleteSeason } = require('../db');
 const L = require('../lib/league');
 const { advanceWinner } = require('./pair');
 
 function requireAdmin(req, res, next) {
   res.locals.section = 'admin';
-  if (!getSetting('admin_password_hash')) {
+  if (!getAdminHash()) {
     if (req.path === '/setup') return next();
     return res.redirect('/admin/setup');
   }
@@ -23,23 +24,23 @@ router.use(requireAdmin);
 
 // ---- Setup inicial / login ----
 router.get('/setup', (req, res) => {
-  if (getSetting('admin_password_hash')) return res.redirect('/admin/login');
+  if (getAdminHash()) return res.redirect('/admin/login');
   res.renderPage('admin/setup', { error: null });
 });
 router.post('/setup', (req, res) => {
-  if (getSetting('admin_password_hash')) return res.redirect('/admin/login');
+  if (getAdminHash()) return res.redirect('/admin/login');
   const pw = (req.body.password || '').trim();
   if (pw.length < 6) return res.renderPage('admin/setup', { error: 'La contraseña debe tener al menos 6 caracteres.' });
-  setSetting('admin_password_hash', bcrypt.hashSync(pw, 10));
+  setAdminHash(bcrypt.hashSync(pw, 10));
   req.session.admin = true;
   res.redirect('/admin');
 });
 router.get('/login', (req, res) => {
-  if (!getSetting('admin_password_hash')) return res.redirect('/admin/setup');
+  if (!getAdminHash()) return res.redirect('/admin/setup');
   res.renderPage('admin/login', { error: null });
 });
 router.post('/login', (req, res) => {
-  const hash = getSetting('admin_password_hash');
+  const hash = getAdminHash();
   if (hash && bcrypt.compareSync(req.body.password || '', hash)) {
     req.session.admin = true;
     return res.redirect('/admin');
@@ -492,6 +493,30 @@ router.post('/playoffs/generar', (req, res) => {
   res.redirect('/admin/playoffs');
 });
 
+
+// ================= TEMPORADAS =================
+router.get('/temporadas', (req, res) => {
+  res.renderPage('admin/temporadas', { seasons: listSeasons(), active: getActiveSeason() });
+});
+router.post('/temporadas/crear', (req, res) => {
+  const name = (req.body.name || '').trim();
+  if (name) createSeason(name);
+  res.redirect('/admin/temporadas');
+});
+router.post('/temporadas/:id/activar', (req, res) => {
+  activateSeason(Number(req.params.id));
+  res.redirect('/admin/temporadas');
+});
+router.post('/temporadas/:id/renombrar', (req, res) => {
+  const name = (req.body.name || '').trim();
+  if (name) renameSeason(Number(req.params.id), name);
+  res.redirect('/admin/temporadas');
+});
+router.post('/temporadas/:id/eliminar', (req, res) => {
+  deleteSeason(Number(req.params.id));
+  res.redirect('/admin/temporadas');
+});
+
 // ================= CAMBIOS DE PAREJA =================
 router.get('/cambios', (req, res) => {
   const rows = db.prepare(
@@ -551,7 +576,7 @@ router.post('/ajustes', (req, res) => {
 router.post('/ajustes/password', (req, res) => {
   const pw = (req.body.password || '').trim();
   if (pw.length < 6) return res.redirect('/admin/ajustes?msg=' + encodeURIComponent('La contraseña debe tener al menos 6 caracteres.'));
-  setSetting('admin_password_hash', bcrypt.hashSync(pw, 10));
+  setAdminHash(bcrypt.hashSync(pw, 10));
   res.redirect('/admin/ajustes?msg=' + encodeURIComponent('Contraseña actualizada.'));
 });
 

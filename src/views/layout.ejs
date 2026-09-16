@@ -39,6 +39,7 @@
 <% if (section === 'admin') { %>
 <div class="adminbar"><div class="wrap adminbar-in">
   <span class="admin-tag">ORGANIZACIÓN</span>
+  <span class="season-tag" title="Temporada activa: solo esta temporada es visible para los jugadores">📅 <%= activeSeason ? activeSeason.name : '' %></span>
   <nav class="anav">
     <a href="/admin">Panel</a>
     <a href="/admin/inscripciones">Inscripciones</a>
@@ -49,6 +50,7 @@
     <a href="/admin/playoffs">Playoffs</a>
     <a href="/admin/cambios">Cambios</a>
     <a href="/admin/ajustes">Ajustes</a>
+    <a href="/admin/temporadas">Temporadas</a>
   </nav>
 </div></div>
 <% } %>

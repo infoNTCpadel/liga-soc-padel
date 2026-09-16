@@ -32,26 +32,89 @@ docker compose up -d --build
 
 Los datos persisten en `./data` (volumen). Para parar: `docker compose down`.
 
-## Dónde desplegarla (opciones)
+## Despliegue en tu VPS (Hostinger)
 
-### Opción A — Railway (recomendado, lo más sencillo)
-1. Sube este proyecto a un repositorio de GitHub.
-2. En [railway.app](https://railway.app) crea un proyecto → *Deploy from GitHub Repo*.
-3. Añade un **Volume** montado en `/app/data` (para que no se pierdan los datos).
-4. Variables de entorno: `SESSION_SECRET` (cadena larga aleatoria).
-5. Railway te da una URL pública HTTPS automáticamente.
+1. Clona el repositorio y entra en la carpeta:
+   ```bash
+   git clone https://github.com/infoNTCpadel/liga-soc-padel.git
+   cd liga-soc-padel
+   ```
+2. Crea el fichero `.env` a partir del ejemplo y pon un `SESSION_SECRET` largo y aleatorio:
+   ```bash
+   cp .env.example .env
+   # edita .env y cambia SESSION_SECRET por una cadena aleatoria
+   ```
+3. Arranca con Docker:
+   ```bash
+   docker compose up -d --build
+   ```
+4. La app responde en `http://TU_IP:3000`.
 
-### Opción B — Render
-1. Sube el proyecto a GitHub.
-2. En [render.com](https://render.com) crea un *Web Service* desde el repo (Docker).
-3. Añade un **Disk** montado en `/app/data`.
-4. Variable de entorno: `SESSION_SECRET`.
+Para actualizar a una versión nueva (los datos están en `./data` y no se tocan):
+```bash
+git pull
+docker compose up -d --build
+```
 
-### Opción C — VPS propio (p. ej. Hetzner, DigitalOcean)
-1. Instala Docker en el servidor.
-2. Copia el proyecto y ejecuta `docker compose up -d --build`.
-3. (Recomendado) Pon delante Caddy o Nginx como proxy inverso con tu dominio
-   para tener HTTPS.
+## Dominio propio y HTTPS
+
+### Opción definitiva: tu propio dominio
+1. Consigue el dominio (p. ej. en Hostinger → Dominios) o usa uno que ya tengas.
+2. En la zona DNS del dominio crea un registro **A**:
+   - `@` → la IP de tu VPS
+   - `www` → la IP de tu VPS (opcional)
+3. Espera a que propague (normalmente minutos). Compruébalo con `ping tudominio.com`.
+4. En el VPS, instala Caddy (proxy inverso con HTTPS automático y gratuito vía Let's Encrypt):
+   ```bash
+   apt install -y debian-keyring debian-archive-keyring apt-transport-https
+   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
+   apt update && apt install -y caddy
+   ```
+5. Edita `/etc/caddy/Caddyfile` con tu dominio:
+   ```
+   tudominio.com {
+       reverse_proxy 127.0.0.1:3000
+   }
+   ```
+6. Recarga Caddy: `systemctl reload caddy`. Desde ese momento `https://tudominio.com`
+   sirve la app con certificado válido, renovado solo.
+7. (Recomendado) Haz que Docker solo escuche en local. En `docker-compose.yml` cambia
+   `ports: ["3000:3000"]` por `ports: ["127.0.0.1:3000:3000"]` y reconstruye.
+
+### Opción provisional gratuita: subdominio DuckDNS
+Si aún no tienes dominio, puedes usar uno gratis en 5 minutos:
+1. Entra en [duckdns.org](https://www.duckdns.org), regístrate y crea un subdominio
+   (p. ej. `tuliga.duckdns.org`) apuntando a la IP de tu VPS.
+2. Sigue los pasos 4–6 anteriores usando `tuliga.duckdns.org` como dominio en el Caddyfile.
+   Caddy también emite certificado HTTPS válido para subdominios DuckDNS.
+
+---
+
+## Temporadas
+
+La app gestiona **varias temporadas** (p. ej. «Liga Social de Invierno», «Apertura»…).
+Cada temporada tiene sus propios datos aislados: parejas, grupos, partidos,
+ajustes (precios, fechas, nombre del club) y preguntas del formulario.
+
+- **Los jugadores solo ven y acceden a la temporada activa.** Su código de pareja
+  solo funciona mientras esa temporada esté activa.
+- La organización cambia de temporada en **/admin → Temporadas**: crear, activar,
+  renombrar y eliminar (no se puede eliminar la activa).
+- La barra del panel muestra siempre el nombre de la temporada activa.
+- Crear una temporada no activa la anterior: empieza vacía y lista para configurar.
+
+### Temporada de prueba con datos inventados
+Para probar sin tocar los datos reales, el proyecto incluye un generador:
+```bash
+docker compose exec liga node src/seed-test-season.js "Temporada de Prueba" 100 40 36
+```
+Crea la temporada (inactiva) con 100 parejas masculinas, 40 femeninas y 36 mixtas
+inventadas (nombres, teléfonos, emails, niveles y pagos aleatorios). Los números
+son opcionales: `node src/seed-test-season.js "Nombre" [nM] [nF] [nX]`.
+Después actívala desde **/admin → Temporadas** para trastear con grupos,
+resultados y playoffs. Cuando termines, vuelve a activar la temporada real y,
+si quieres, elimina la de prueba.
 
 ---
 
@@ -100,7 +163,10 @@ playoffs. La organización lo aprueba en **/admin/cambios**.
 
 ## Notas técnicas
 
-- SQLite con WAL; un único fichero en `DATA_DIR` (por defecto `./data`).
+- SQLite con WAL; una base de datos por temporada (`data/season-<id>.db`) más
+  `data/meta.db` con la lista de temporadas y la contraseña de la organización.
 - Sesiones en memoria: pensado para una sola instancia (suficiente para un club).
 - Sin dependencias nativas: la imagen Docker compila en segundos.
-- Copia de seguridad: basta con copiar `data/liga.db`.
+- Copia de seguridad: basta con copiar la carpeta `data/` entera.
+- Al actualizar desde la versión de una sola temporada, `data/liga.db` se migra
+  automáticamente a la primera temporada (temporada 1, activa) sin perder datos.

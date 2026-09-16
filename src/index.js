@@ -3,7 +3,7 @@ const express = require('express');
 const session = require('express-session');
 const path = require('path');
 const ejs = require('ejs');
-const { db, getSetting } = require('./db');
+const { db, getSetting, getActiveSeason } = require('./db');
 const { autoValidateExpired } = require('./lib/league');
 const L = require('./lib/league');
 
@@ -32,6 +32,7 @@ app.use((req, res, next) => {
 app.use((req, res, next) => {
   res.locals.clubName = getSetting('club_name', 'Master Padel League');
   res.locals.seasonName = getSetting('season_name', 'Temporada 2026/27');
+  res.locals.activeSeason = getActiveSeason();
   res.locals.isAdmin = !!req.session.admin;
   res.locals.pairId = req.session.pairId || null;
   res.locals.section = 'public';

@@ -1,0 +1,34 @@
+<h1>Temporadas</h1>
+<p class="mut">Cada temporada tiene sus propios datos: parejas, grupos, partidos, ajustes y preguntas. Los jugadores solo ven y acceden a la <strong>temporada activa</strong>. Cambia de temporada activa cuando quieras revisar o trabajar en otra.</p>
+
+<div class="card">
+  <h3>Crear temporada</h3>
+  <form method="post" action="/admin/temporadas/crear">
+    <div class="field"><label>Nombre</label><input type="text" name="name" required maxlength="80" placeholder="p. ej. Liga Social de Invierno"></div>
+    <button class="btn small" type="submit">Crear temporada</button>
+  </form>
+  <p class="small mut">La nueva temporada empieza vacía y no se activa automáticamente.</p>
+</div>
+
+<div class="card"><div class="tblwrap"><table class="tbl">
+  <tr><th>Temporada</th><th>Creada</th><th>Estado</th><th></th></tr>
+  <% for (const t of seasons) { %>
+    <tr>
+      <td><strong><%= t.name %></strong></td>
+      <td><%= t.created_at %></td>
+      <td><% if (t.id === active.id) { %><span class="badge ok">activa</span><% } else { %><span class="badge">inactiva</span><% } %></td>
+      <td>
+        <% if (t.id !== active.id) { %>
+          <form method="post" action="/admin/temporadas/<%= t.id %>/activar" style="display:inline"><button class="btn small" type="submit">Activar</button></form>
+          <form method="post" action="/admin/temporadas/<%= t.id %>/eliminar" style="display:inline" onsubmit="return confirm('¿Eliminar la temporada «<%= t.name.replace(/'/g, "\\'") %>» y todos sus datos? Esta acción no se puede deshacer.')"><button class="btn small danger" type="submit">Eliminar</button></form>
+        <% } else { %>
+          <span class="small mut">Es la temporada visible para los jugadores</span>
+        <% } %>
+        <form method="post" action="/admin/temporadas/<%= t.id %>/renombrar" style="display:inline;margin-left:8px">
+          <input type="text" name="name" value="<%= t.name %>" required maxlength="80" style="width:180px">
+          <button class="btn small ghost" type="submit">Renombrar</button>
+        </form>
+      </td>
+    </tr>
+  <% } %>
+</table></div></div>
