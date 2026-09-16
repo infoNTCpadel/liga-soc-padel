@@ -5,6 +5,23 @@
 'use strict';
 
 // ---------------------------------------------------------------------------
+// Categorías de juego del club.
+// ---------------------------------------------------------------------------
+const CATEGORIES = [
+  { code: 'M', name: 'Masculina' },
+  { code: 'F', name: 'Femenina' },
+  { code: 'X', name: 'Mixta' },
+];
+const CATEGORY_CODES = CATEGORIES.map(c => c.code);
+function catName(code) {
+  const c = CATEGORIES.find(c => c.code === code);
+  return c ? c.name : code;
+}
+function validCategory(v) {
+  return CATEGORY_CODES.includes(v) ? v : 'M';
+}
+
+// ---------------------------------------------------------------------------
 // Puntos de ranking por ronda según grupo y posición.
 // Tabla oficial: 1º=210-10n, 2º=149-7n, 3º=101-5n, 4º=60-3n (n = nº de grupo).
 // La tabla oficial llega al Grupo 15; más allá se extrapola con la fórmula.
@@ -416,4 +433,5 @@ module.exports = {
   autoValidateExpired,
   getGroups, getGroupMembers, getGroupMatches, pairName, getRanking,
   PLAYTOMIC_BRACKETS, bracketOf,
+  CATEGORIES, CATEGORY_CODES, catName, validCategory,
 };

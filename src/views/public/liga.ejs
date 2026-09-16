@@ -1,8 +1,7 @@
 <h1>Fase de grupos</h1>
 
 <div class="tabs">
-  <a href="/liga/M/<%= round %>" class="<%= category==='M'?'on':'' %>">Masculina</a>
-  <a href="/liga/F/<%= round %>" class="<%= category==='F'?'on':'' %>">Femenina</a>
+  <% for (const c of CATEGORIES) { %><a href="/liga/<%= c.code %>/<%= round %>" class="<%= category===c.code?'on':'' %>"><%= c.name %></a><% } %>
   <span style="flex:1"></span>
   <% for (const r of [1,2,3]) { %><a href="/liga/<%= category %>/<%= r %>" class="<%= round===r?'on':'' %>">Ronda <%= r %></a><% } %>
 </div>

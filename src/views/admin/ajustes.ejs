@@ -19,10 +19,6 @@
         <div class="field"><label>Fechas</label><div class="scorein"><input type="date" name="phase_<%= k %>_ini" value="<%= s['phase_'+k+'_ini'] %>"><span>–</span><input type="date" name="phase_<%= k %>_fin" value="<%= s['phase_'+k+'_fin'] %>"></div></div>
       </div>
     <% } %>
-    <div class="row2">
-      <div class="field"><label>Master Final (título)</label><input type="text" name="phase_mf_label" value="<%= s.phase_mf_label %>"></div>
-      <div class="field"><label>Master Final (fechas)</label><input type="text" name="phase_mf_dates" value="<%= s.phase_mf_dates %>"></div>
-    </div>
     <button class="btn" type="submit">Guardar ajustes</button>
   </form>
 </div>

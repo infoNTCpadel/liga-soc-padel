@@ -158,7 +158,6 @@ const DEFAULTS = {
   phase_r2_ini: '2026-11-02',  phase_r2_fin: '2026-11-29',  phase_r2_label: 'Ronda 2 · Fase de Grupos',
   phase_r3_ini: '2026-11-30',  phase_r3_fin: '2026-12-27',  phase_r3_label: 'Ronda 3 · Fase de Grupos',
   phase_po_ini: '2026-12-28',  phase_po_fin: '2027-01-31',  phase_po_label: 'Playoffs del Club',
-  phase_mf_label: 'Master Final', phase_mf_dates: '22 – 23 de mayo',
   round1_closed: '0', round2_closed: '0', round3_closed: '0',
   playoffs_generated: '0',
   inscription_price: '19.95', shirt_price: '14.95',

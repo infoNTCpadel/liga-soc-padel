@@ -202,5 +202,44 @@ router.post('/cambio', (req, res) => {
   res.redirect('/pareja');
 });
 
+// ---- Mis datos: la pareja puede corregir sus datos de contacto ----
+router.get('/datos', (req, res) => {
+  const pair = req.pair;
+  const players = db.prepare('SELECT * FROM players WHERE id IN (?, ?)').all(pair.player1_id, pair.player2_id)
+    .sort((a, b) => (a.id === pair.player1_id ? -1 : 1));
+  res.renderPage('pair/datos', { pair, players, error: null, ok: req.query.ok === '1' });
+});
+
+router.post('/datos', (req, res) => {
+  const pair = req.pair;
+  const b = req.body;
+  const players = db.prepare('SELECT * FROM players WHERE id IN (?, ?)').all(pair.player1_id, pair.player2_id);
+  const err = (msg) => res.renderPage('pair/datos', {
+    pair,
+    players: players.sort((a, x) => (a.id === pair.player1_id ? -1 : 1)),
+    error: msg, ok: false,
+  });
+  const upd = [];
+  for (const pl of players) {
+    const n = pl.id === pair.player1_id ? 1 : 2;
+    const name = (b[`p${n}_name`] || '').trim();
+    const phone = (b[`p${n}_phone`] || '').trim();
+    const email = (b[`p${n}_email`] || '').trim();
+    const level = parseFloat(b[`p${n}_level`]);
+    const shirt = b[`p${n}_shirt`] ? 1 : 0;
+    const shirtSize = (b[`p${n}_shirt_size`] || '').trim();
+    if (!name) return err('El nombre de cada jugador es obligatorio.');
+    if (!phone) return err('El teléfono de cada jugador es obligatorio (lo usan los rivales para organizar los partidos).');
+    if (!(level >= 0 && level <= 6)) return err('El nivel debe estar entre 0 y 6.');
+    if (shirt && !shirtSize) return err(`Falta la talla de camiseta de ${name}.`);
+    upd.push({ id: pl.id, name, phone, email, level, shirt, shirtSize });
+  }
+  const u = db.prepare('UPDATE players SET name = ?, phone = ?, email = ?, level = ?, shirt = ?, shirt_size = ? WHERE id = ?');
+  for (const p of upd) u.run(p.name, p.phone, p.email, p.level, p.shirt, p.shirtSize, p.id);
+  const avg = Math.round(((upd[0].level + upd[1].level) / 2) * 100) / 100;
+  db.prepare('UPDATE pairs SET level_avg = ? WHERE id = ?').run(avg, pair.id);
+  res.redirect('/pareja/datos?ok=1');
+});
+
 module.exports = router;
 module.exports.advanceWinner = advanceWinner;

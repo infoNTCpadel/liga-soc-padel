@@ -1,6 +1,6 @@
 <div class="center" style="padding: 30px 0">
   <h1>¡Inscripción recibida!</h1>
-  <p>Vuestra pareja <strong><%= p1.name %> / <%= p2.name %></strong> (categoría <%= category === 'F' ? 'femenina' : 'masculina' %>, nivel medio <%= levelAvg %>) está <strong>pendiente de revisión</strong> por la organización.</p>
+  <p>Vuestra pareja <strong><%= p1.name %> / <%= p2.name %></strong> (categoría <%= catName(category).toLowerCase() %>, nivel medio <%= levelAvg %>) está <strong>pendiente de revisión</strong> por la organización.</p>
   <p class="mut">Guardad bien vuestro código de acceso: lo necesitaréis para subir resultados y ver vuestros partidos.</p>
   <p><span class="code"><%= code %></span></p>
   <p class="mut small">Recordad pasar por el club para formalizar el pago (<%= price %> € por jugador<%= (p1.shirt || p2.shirt) ? ' + camisetas' : '' %>).</p>

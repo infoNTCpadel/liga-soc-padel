@@ -16,10 +16,10 @@
 <% for (const r of rounds) { %>
 <div class="card">
   <h3>Ronda <%= r.n %> <%= r.closed ? '<span class="badge ok">cerrada</span>' : '<span class="badge warn">abierta</span>' %></h3>
-  <% for (const cat of ['M','F']) { const i = r.info[cat]; %>
-    <p class="small"><span class="badge cat"><%= cat === 'F' ? 'Femenina' : 'Masculina' %></span>
+  <% for (const c of CATEGORIES) { const i = r.info[c.code]; %>
+    <p class="small"><span class="badge cat"><%= c.name %></span>
       <%= i.groups %> grupos · <%= i.done %>/<%= i.total %> partidos con resultado
-      <a href="/admin/grupos?category=<%= cat %>&round=<%= r.n %>">Gestionar grupos</a></p>
+      <a href="/admin/grupos?category=<%= c.code %>&round=<%= r.n %>">Gestionar grupos</a></p>
   <% } %>
   <p>
     <% if (!r.closed) { %><a class="btn small" href="/admin/rondas/<%= r.n %>/cerrar">Cerrar ronda <%= r.n %></a><% } %>
@@ -30,5 +30,5 @@
 
 <div class="card">
   <h3>Playoffs <%= playoffsGenerated ? '<span class="badge ok">generados</span>' : '' %></h3>
-  <p><a class="btn small" href="/admin/playoffs">Gestionar playoffs</a> <a class="btn small ghost" href="/admin/master-final">Master Final</a></p>
+  <p><a class="btn small" href="/admin/playoffs">Gestionar playoffs</a></p>
 </div>

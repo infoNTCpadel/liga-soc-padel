@@ -2,8 +2,7 @@
 <p class="mut">El ranking se divide por la mitad: los mejores juegan el playoff de 1ª categoría y el resto el de 2ª. Eliminatorias a partido único.</p>
 
 <div class="tabs">
-  <a href="/playoffs/M" class="<%= category==='M'?'on':'' %>">Masculina</a>
-  <a href="/playoffs/F" class="<%= category==='F'?'on':'' %>">Femenina</a>
+  <% for (const c of CATEGORIES) { %><a href="/playoffs/<%= c.code %>" class="<%= category===c.code?'on':'' %>"><%= c.name %></a><% } %>
 </div>
 
 <% if (!generated) { %>

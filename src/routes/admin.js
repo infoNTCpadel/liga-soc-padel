@@ -62,7 +62,7 @@ router.get('/', (req, res) => {
   };
   const rounds = [1, 2, 3].map(n => {
     const info = {};
-    for (const cat of ['M', 'F']) {
+    for (const cat of L.CATEGORY_CODES) {
       const groups = L.getGroups(db, cat, n);
       const total = db.prepare('SELECT COUNT(*) c FROM matches WHERE stage = \'groups\' AND round_no = ? AND category = ?').get(n, cat).c;
       const done = db.prepare(
@@ -198,7 +198,7 @@ router.post('/parejas/nueva', (req, res) => {
   const avg = Math.round(((p1.level + p2.level) / 2) * 100) / 100;
   db.prepare(`INSERT INTO pairs(code, category, player1_id, player2_id, captain_id, level_avg, status)
               VALUES(?, ?, ?, ?, ?, ?, 'active')`)
-    .run(code, b.category === 'F' ? 'F' : 'M', Number(r1.lastInsertRowid), Number(r2.lastInsertRowid),
+    .run(code, L.validCategory(b.category), Number(r1.lastInsertRowid), Number(r2.lastInsertRowid),
       Number(r1.lastInsertRowid), avg);
   res.redirect('/admin/parejas');
 });
@@ -218,7 +218,7 @@ router.post('/parejas/:id/retirar', (req, res) => {
 
 // ================= GRUPOS Y RONDAS =================
 router.get('/grupos', (req, res) => {
-  const category = req.query.category === 'F' ? 'F' : 'M';
+  const category = L.validCategory(req.query.category);
   const round = Math.min(3, Math.max(1, parseInt(req.query.round) || 1));
   const groups = L.getGroups(db, category, round).map(g => {
     const members = L.getGroupMembers(db, g.id);
@@ -236,7 +236,7 @@ router.get('/grupos', (req, res) => {
 
 // Generar grupos de la Ronda 1 por nivel
 router.post('/grupos/generar-r1', (req, res) => {
-  const category = req.body.category === 'F' ? 'F' : 'M';
+  const category = L.validCategory(req.body.category);
   if (L.getGroups(db, category, 1).length) return res.redirect(`/admin/grupos?category=${category}&round=1&error=${encodeURIComponent('Ya existen grupos para esta ronda y categoría.')}`);
   const pairs = db.prepare(
     "SELECT id, level_avg FROM pairs WHERE category = ? AND status = 'active' ORDER BY level_avg DESC, id ASC"
@@ -254,7 +254,7 @@ router.post('/grupos/generar-r1', (req, res) => {
 
 // Generar grupos de la ronda N (2 o 3) a partir de los movimientos de la anterior
 router.post('/grupos/generar-siguiente', (req, res) => {
-  const category = req.body.category === 'F' ? 'F' : 'M';
+  const category = L.validCategory(req.body.category);
   const round = parseInt(req.body.round, 10);
   if (![2, 3].includes(round)) return res.redirect('/admin/grupos');
   if (getSetting(`round${round - 1}_closed`, '0') !== '1') {
@@ -324,7 +324,7 @@ router.post('/grupos/:gid/mover', (req, res) => {
 
 // ================= PARTIDOS =================
 router.get('/partidos', (req, res) => {
-  const category = req.query.category === 'F' ? 'F' : 'M';
+  const category = L.validCategory(req.query.category);
   const stage = req.query.stage === 'po' ? 'po' : 'groups';
   let matches;
   if (stage === 'groups') {
@@ -380,7 +380,7 @@ router.get('/rondas/:n/cerrar', (req, res) => {
   const n = parseInt(req.params.n, 10);
   if (![1, 2, 3].includes(n)) return res.redirect('/admin');
   const preview = [];
-  for (const category of ['M', 'F']) {
+  for (const category of L.CATEGORY_CODES) {
     const groups = L.getGroups(db, category, n);
     const total = groups.length;
     for (const g of groups) {
@@ -407,7 +407,7 @@ router.post('/rondas/:n/cerrar', (req, res) => {
   if (getSetting(`round${n}_closed`, '0') === '1') return res.redirect('/admin');
   db.exec('BEGIN');
   try {
-    for (const category of ['M', 'F']) {
+    for (const category of L.CATEGORY_CODES) {
       const groups = L.getGroups(db, category, n);
       const total = groups.length;
       for (const g of groups) {
@@ -442,7 +442,7 @@ router.post('/rondas/:n/reabrir', (req, res) => {
 
 // ================= PLAYOFFS =================
 router.get('/playoffs', (req, res) => {
-  const data = ['M', 'F'].map(category => {
+  const data = L.CATEGORY_CODES.map(category => {
     const ranking = L.getRanking(db, category);
     const split = L.splitPlayoffs(ranking.map(r => r.pair_id));
     return { category, ranking, split };
@@ -455,7 +455,7 @@ router.get('/playoffs', (req, res) => {
 });
 
 router.post('/playoffs/generar', (req, res) => {
-  const category = req.body.category === 'F' ? 'F' : 'M';
+  const category = L.validCategory(req.body.category);
   if (getSetting('round3_closed', '0') !== '1') return res.redirect('/admin/playoffs');
   // Regenerar solo si no hay resultados en los cuadros de esta categoría
   const withRes = db.prepare(
@@ -490,19 +490,6 @@ router.post('/playoffs/generar', (req, res) => {
   }
   setSetting('playoffs_generated', '1');
   res.redirect('/admin/playoffs');
-});
-
-// ================= MASTER FINAL =================
-router.get('/master-final', (req, res) => {
-  const qualifiers = [];
-  for (const category of ['M', 'F']) {
-    for (const stage of ['po1', 'po2']) {
-      const fin = db.prepare("SELECT * FROM matches WHERE stage = ? AND category = ? AND bracket_round = 'F'").get(stage, category);
-      const o = fin ? L.matchOutcome(fin) : null;
-      qualifiers.push({ category, stage, pairId: o ? o.winnerId : null, name: o ? L.pairName(db, o.winnerId) : null });
-    }
-  }
-  res.renderPage('admin/master-final', { qualifiers });
 });
 
 // ================= CAMBIOS DE PAREJA =================
@@ -547,7 +534,7 @@ router.get('/ajustes', (req, res) => {
   const keys = ['club_name', 'season_name', 'phase_insc_label', 'phase_insc_ini', 'phase_insc_fin',
     'phase_r1_label', 'phase_r1_ini', 'phase_r1_fin', 'phase_r2_label', 'phase_r2_ini', 'phase_r2_fin',
     'phase_r3_label', 'phase_r3_ini', 'phase_r3_fin', 'phase_po_label', 'phase_po_ini', 'phase_po_fin',
-    'phase_mf_label', 'phase_mf_dates', 'inscription_price', 'shirt_price'];
+    'inscription_price', 'shirt_price'];
   const s = Object.fromEntries(keys.map(k => [k, getSetting(k, '')]));
   res.renderPage('admin/ajustes', { s, msg: req.query.msg || null });
 });

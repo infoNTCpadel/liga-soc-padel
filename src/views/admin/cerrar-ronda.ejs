@@ -7,7 +7,7 @@
 
 <% for (const pv of preview) { %>
 <div class="card">
-  <h3><%= pv.category === 'F' ? 'Femenina' : 'Masculina' %> · Grupo <%= pv.group.group_no %></h3>
+  <h3><%= catName(pv.category) %> · Grupo <%= pv.group.group_no %></h3>
   <% if (pv.missing) { %><div class="alert error"><%= pv.missing %> partido(s) sin resultado: contarán como no jugados.</div><% } %>
   <div class="tblwrap"><table class="tbl">
     <tr><th>#</th><th>Pareja</th><th class="num">Pts</th><th>Movimiento</th><th class="num">Puntos ranking</th></tr>

@@ -1,10 +1,8 @@
 <h1>Partidos</h1>
 
 <div class="tabs">
-  <a href="/admin/partidos?stage=groups&category=M" class="<%= stage==='groups'&&category==='M'?'on':'' %>">Grupos M</a>
-  <a href="/admin/partidos?stage=groups&category=F" class="<%= stage==='groups'&&category==='F'?'on':'' %>">Grupos F</a>
-  <a href="/admin/partidos?stage=po&category=M" class="<%= stage==='po'&&category==='M'?'on':'' %>">Playoffs M</a>
-  <a href="/admin/partidos?stage=po&category=F" class="<%= stage==='po'&&category==='F'?'on':'' %>">Playoffs F</a>
+  <% for (const c of CATEGORIES) { %><a href="/admin/partidos?stage=groups&category=<%= c.code %>" class="<%= stage==='groups'&&category===c.code?'on':'' %>">Grupos <%= c.code %></a><% } %>
+  <% for (const c of CATEGORIES) { %><a href="/admin/partidos?stage=po&category=<%= c.code %>" class="<%= stage==='po'&&category===c.code?'on':'' %>">Playoffs <%= c.code %></a><% } %>
   <% if (stage === 'groups') { %><span style="flex:1"></span>
     <% for (const r of [1,2,3]) { %><a href="/admin/partidos?stage=groups&category=<%= category %>&round=<%= r %>" class="<%= round===r?'on':'' %>">R<%= r %></a><% } %>
   <% } %>

@@ -3,7 +3,7 @@
 Aplicación web completa para gestionar la liga de pádel por parejas de tu club
 según la normativa oficial: inscripciones, pagos, grupos, resultados con
 validación de 24 h, clasificaciones con desempates, ascensos/descensos,
-ranking por puntos, playoffs y Master Final.
+ranking por puntos y playoffs.
 
 **Stack:** Node.js 24 + Express + SQLite (integrado en Node, sin dependencias
 nativas) + EJS. Todo corre en un único contenedor; los datos viven en un
@@ -88,10 +88,8 @@ Los datos persisten en `./data` (volumen). Para parar: `docker compose down`.
 - **/admin/playoffs**: genera los cuadros. El ranking se divide por la mitad:
   playoff de 1ª y de 2ª categoría, con cabezas de serie y byes si hace falta.
 - Los ganadores avanzan solos de ronda. Los resultados los suben las parejas
-  o la organización.
-
-### 6. Master Final
-- Los ganadores de cada playoff aparecen clasificados en **/master-final**.
+  o la organización. Los campeones de cada playoff son los campeones de la
+  temporada en su categoría.
 
 ### Cambios de pareja
 Las parejas lo solicitan desde su panel; la app solo permite un cambio, exige

@@ -1,0 +1,31 @@
+<h1>Mis datos</h1>
+<p class="mut">Puedes corregir vuestros datos de contacto cuando quieras. Es importante que el <strong>teléfono</strong> y el <strong>email</strong> estén al día para que los rivales puedan localizaros.</p>
+
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+<% if (ok) { %><div class="alert ok">Datos actualizados correctamente.</div><% } %>
+
+<form method="post" action="/pareja/datos">
+  <% players.forEach((pl, i) => { const n = i + 1; %>
+  <div class="card">
+    <h3>Jugador <%= n %> <%= pl.id === pair.captain_id ? '<span class="badge info">capitán</span>' : '' %></h3>
+    <div class="row2">
+      <div class="field"><label>Nombre y apellidos *</label><input type="text" name="p<%= n %>_name" required value="<%= pl.name %>"></div>
+      <div class="field"><label>Teléfono *</label><input type="tel" name="p<%= n %>_phone" required value="<%= pl.phone %>"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Email</label><input type="email" name="p<%= n %>_email" value="<%= pl.email %>"></div>
+      <div class="field"><label>Nivel Playtomic (0 – 6) *</label><input type="number" name="p<%= n %>_level" step="0.1" min="0" max="6" required value="<%= pl.level %>"></div>
+    </div>
+    <div class="field">
+      <label><input type="checkbox" name="p<%= n %>_shirt" value="1" <%= pl.shirt ? 'checked' : '' %>> Quiero la camiseta oficial</label>
+    </div>
+    <div class="field"><label>Talla de camiseta <span class="hint">(si la quieres)</span></label>
+      <select name="p<%= n %>_shirt_size">
+        <option value="">—</option>
+        <% for (const t of ['XS','S','M','L','XL','XXL']) { %><option <%= pl.shirt_size === t ? 'selected' : '' %>><%= t %></option><% } %>
+      </select>
+    </div>
+  </div>
+  <% }); %>
+  <p><button class="btn" type="submit">Guardar cambios</button> <a class="btn ghost" href="/pareja">Volver</a></p>
+</form>

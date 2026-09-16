@@ -1,5 +1,5 @@
 <h1>Inscripción de parejas</h1>
-<p class="mut">Rellena los datos de los dos jugadores. Al enviar recibirás un <strong>código de acceso</strong> para gestionar vuestros partidos. El pago (19,95&nbsp;€ por jugador) se realiza en el club.</p>
+<p class="mut">Rellena los datos de los dos jugadores. Al enviar recibirás un <strong>código de acceso</strong> para gestionar vuestros partidos. El pago (<%= priceInscription %>&nbsp;€ por jugador) se realiza en el club.</p>
 
 <% if (error) { %><div class="alert error"><%= error %></div><% } %>
 
@@ -7,8 +7,9 @@
   <div class="card">
     <h3>Categoría</h3>
     <div class="field">
-      <label><input type="radio" name="category" value="M" <%= form.category !== 'F' ? 'checked' : '' %>> Masculina</label>
-      <label><input type="radio" name="category" value="F" <%= form.category === 'F' ? 'checked' : '' %>> Femenina</label>
+      <% for (const c of CATEGORIES) { %>
+      <label><input type="radio" name="category" value="<%= c.code %>" <%= (form.category || 'M') === c.code ? 'checked' : '' %>> <%= c.name %></label>
+      <% } %>
     </div>
   </div>
 
@@ -24,7 +25,7 @@
       <div class="field"><label>Nivel Playtomic (0 – 6) *</label><input type="number" name="p<%= n %>_level" step="0.1" min="0" max="6" required value="<%= form['p'+n+'_level'] || '' %>"></div>
     </div>
     <div class="field">
-      <label><input type="checkbox" name="p<%= n %>_shirt" value="1" <%= form['p'+n+'_shirt'] ? 'checked' : '' %>> Quiero la camiseta oficial (+14,95&nbsp;€)</label>
+      <label><input type="checkbox" name="p<%= n %>_shirt" value="1" <%= form['p'+n+'_shirt'] ? 'checked' : '' %>> Quiero la camiseta oficial (+<%= priceShirt %>&nbsp;€)</label>
     </div>
     <div class="field"><label>Talla de camiseta <span class="hint">(si la quieres)</span></label>
       <select name="p<%= n %>_shirt_size">

@@ -4,7 +4,7 @@
 <div class="grid c2">
   <div class="card">
     <h3>Pareja</h3>
-    <p><span class="badge cat"><%= p.category === 'F' ? 'Femenina' : 'Masculina' %></span>
+    <p><span class="badge cat"><%= catName(p.category) %></span>
     <span class="badge <%= p.status==='active'?'ok':p.status==='pending'?'warn':'bad' %>"><%= p.status %></span></p>
     <p class="small">Nivel medio: <strong><%= p.level_avg %></strong> · Inscrita el <%= p.created_at.slice(0,10) %></p>
     <% for (const pl of players) { %>

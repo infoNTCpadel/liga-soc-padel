@@ -12,7 +12,6 @@ function phases() {
     { key: 'r2', label: g('phase_r2_label'), ini: g('phase_r2_ini'), fin: g('phase_r2_fin') },
     { key: 'r3', label: g('phase_r3_label'), ini: g('phase_r3_ini'), fin: g('phase_r3_fin') },
     { key: 'po', label: g('phase_po_label'), ini: g('phase_po_ini'), fin: g('phase_po_fin') },
-    { key: 'mf', label: g('phase_mf_label'), ini: '', fin: '', dates: g('phase_mf_dates') },
   ];
   const today = new Date().toISOString().slice(0, 10);
   for (const p of list) {
@@ -48,8 +47,11 @@ function activeQuestions() {
     .map(q => ({ ...q, options: JSON.parse(q.options || '[]') }));
 }
 
+function eur(v) { return Number(v || 0).toFixed(2).replace('.', ','); }
 router.get('/inscripcion', (req, res) => {
-  res.renderPage('public/inscripcion', { questions: activeQuestions(), error: null, form: {} });
+  res.renderPage('public/inscripcion', { questions: activeQuestions(), error: null, form: {},
+    priceInscription: eur(getSetting('inscription_price', '19.95')),
+    priceShirt: eur(getSetting('shirt_price', '14.95')) });
 });
 
 function genCode() {
@@ -63,9 +65,11 @@ function genCode() {
 
 router.post('/inscripcion', (req, res) => {
   const b = req.body;
-  const error = (msg) => res.renderPage('public/inscripcion', { questions: activeQuestions(), error: msg, form: b });
+  const error = (msg) => res.renderPage('public/inscripcion', { questions: activeQuestions(), error: msg, form: b,
+    priceInscription: eur(getSetting('inscription_price', '19.95')),
+    priceShirt: eur(getSetting('shirt_price', '14.95')) });
 
-  const category = b.category === 'F' ? 'F' : 'M';
+  const category = L.validCategory(b.category);
   const mk = (n) => ({
     name: (b[`p${n}_name`] || '').trim(),
     email: (b[`p${n}_email`] || '').trim(),
@@ -123,7 +127,7 @@ router.get('/liga', (req, res) => {
 });
 
 router.get('/liga/:category/:round', (req, res) => {
-  const category = req.params.category === 'F' ? 'F' : 'M';
+  const category = L.validCategory(req.params.category);
   const round = Math.min(3, Math.max(1, parseInt(req.params.round) || 1));
   const groups = L.getGroups(db, category, round);
   const data = groups.map(g => {
@@ -145,7 +149,7 @@ router.get('/liga/:category/:round', (req, res) => {
 // ---- Ranking ----
 router.get('/ranking', (req, res) => res.redirect('/ranking/M'));
 router.get('/ranking/:category', (req, res) => {
-  const category = req.params.category === 'F' ? 'F' : 'M';
+  const category = L.validCategory(req.params.category);
   const ranking = L.getRanking(db, category);
   const detail = ranking.map(r => {
     const rows = db.prepare(
@@ -174,7 +178,7 @@ function bracketView(category, stage) {
 
 router.get('/playoffs', (req, res) => res.redirect('/playoffs/M'));
 router.get('/playoffs/:category', (req, res) => {
-  const category = req.params.category === 'F' ? 'F' : 'M';
+  const category = L.validCategory(req.params.category);
   const generated = getSetting('playoffs_generated', '0') === '1';
   res.renderPage('public/playoffs', {
     category, generated,
@@ -182,23 +186,6 @@ router.get('/playoffs/:category', (req, res) => {
     po2: bracketView(category, 'po2'),
     pairName: (id) => L.pairName(db, id),
   });
-});
-
-// ---- Master Final ----
-router.get('/master-final', (req, res) => {
-  const qualifiers = [];
-  for (const category of ['M', 'F']) {
-    for (const stage of ['po1', 'po2']) {
-      const fin = db.prepare(
-        "SELECT * FROM matches WHERE stage = ? AND category = ? AND bracket_round = 'F'"
-      ).get(stage, category);
-      if (fin) {
-        const o = L.matchOutcome(fin);
-        if (o) qualifiers.push({ category, stage, pairId: o.winnerId, name: L.pairName(db, o.winnerId) });
-      }
-    }
-  }
-  res.renderPage('public/master-final', { qualifiers, dates: getSetting('phase_mf_dates', '') });
 });
 
 // ---- Acceso de parejas ----

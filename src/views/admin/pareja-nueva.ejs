@@ -3,8 +3,7 @@
 <div class="card" style="max-width: 640px">
 <form method="post" action="/admin/parejas/nueva">
   <div class="field"><label>Categoría</label>
-    <label><input type="radio" name="category" value="M" checked> Masculina</label>
-    <label><input type="radio" name="category" value="F"> Femenina</label>
+    <% for (const c of CATEGORIES) { %><label><input type="radio" name="category" value="<%= c.code %>" <%= c.code==='M'?'checked':'' %>> <%= c.name %></label><% } %>
   </div>
   <% for (const n of [1,2]) { %>
   <h3>Jugador <%= n %></h3>

@@ -5,7 +5,7 @@
 <div class="grid c2">
   <div class="card">
     <h3><%= pairName(pair.id) %></h3>
-    <p><span class="badge cat"><%= pair.category === 'F' ? 'Femenina' : 'Masculina' %></span>
+    <p><span class="badge cat"><%= catName(pair.category) %></span>
     <span class="badge info">Nivel medio <%= pair.level_avg %></span></p>
     <p class="small"><strong>Capitán:</strong> <%= captain.name %> (<%= captain.phone %>)</p>
     <p class="small"><strong>Código:</strong> <span class="code" style="font-size:1rem"><%= pair.code %></span></p>
@@ -18,7 +18,7 @@
       <% const sh = players.filter(p => p.shirt); %>
       <%= sh.length ? sh.map(p => p.name + ' (' + (p.shirt_size || '?') + ')').join(', ') : 'ninguna' %>
     </p>
-    <% if (canChange) { %><p><a class="btn small ghost" href="/pareja/cambio">Solicitar cambio de pareja</a></p><% } %>
+    <% if (canChange) { %><p><a class="btn small ghost" href="/pareja/cambio">Solicitar cambio de pareja</a> <a class="btn small ghost" href="/pareja/datos">Editar mis datos</a></p><% } else { %><p><a class="btn small ghost" href="/pareja/datos">Editar mis datos</a></p><% } %>
     <% if (changeReq) { %>
       <p class="small"><span class="badge <%= changeReq.status === 'pending' ? 'warn' : changeReq.status === 'approved' ? 'ok' : 'bad' %>">Cambio de pareja: <%= changeReq.status === 'pending' ? 'pendiente de revisión' : changeReq.status %></span></p>
     <% } %>

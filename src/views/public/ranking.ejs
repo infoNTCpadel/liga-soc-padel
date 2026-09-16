@@ -2,8 +2,7 @@
 <p class="mut">Suma de los puntos obtenidos en cada ronda según el grupo y la posición final.</p>
 
 <div class="tabs">
-  <a href="/ranking/M" class="<%= category==='M'?'on':'' %>">Masculina</a>
-  <a href="/ranking/F" class="<%= category==='F'?'on':'' %>">Femenina</a>
+  <% for (const c of CATEGORIES) { %><a href="/ranking/<%= c.code %>" class="<%= category===c.code?'on':'' %>"><%= c.name %></a><% } %>
 </div>
 
 <% if (!ranking.length) { %>

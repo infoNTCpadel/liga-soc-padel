@@ -8,7 +8,7 @@
 
 <% for (const d of data) { %>
 <div class="card">
-  <h3>Categoría <%= d.category === 'F' ? 'femenina' : 'masculina' %></h3>
+  <h3>Categoría <%= catName(d.category).toLowerCase() %></h3>
   <% if (!d.ranking.length) { %>
     <p class="mut">Sin ranking todavía.</p>
   <% } else { %>

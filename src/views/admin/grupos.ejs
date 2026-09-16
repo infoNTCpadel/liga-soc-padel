@@ -3,8 +3,7 @@
 <% if (error) { %><div class="alert error"><%= error %></div><% } %>
 
 <div class="tabs">
-  <a href="/admin/grupos?category=M&round=<%= round %>" class="<%= category==='M'?'on':'' %>">Masculina</a>
-  <a href="/admin/grupos?category=F&round=<%= round %>" class="<%= category==='F'?'on':'' %>">Femenina</a>
+  <% for (const c of CATEGORIES) { %><a href="/admin/grupos?category=<%= c.code %>&round=<%= round %>" class="<%= category===c.code?'on':'' %>"><%= c.name %></a><% } %>
   <span style="flex:1"></span>
   <% for (const r of [1,2,3]) { %><a href="/admin/grupos?category=<%= category %>&round=<%= r %>" class="<%= round===r?'on':'' %>">Ronda <%= r %></a><% } %>
 </div>
