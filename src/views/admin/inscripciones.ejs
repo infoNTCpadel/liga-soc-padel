@@ -1,0 +1,39 @@
+<h1>Inscripciones</h1>
+<p><a class="btn small ghost" href="/admin/inscripciones.csv">Descargar CSV</a></p>
+
+<form method="get" action="/admin/inscripciones" class="card">
+  <div class="row2">
+    <div class="field"><label>Estado</label>
+      <select name="status">
+        <option value="">Todos</option>
+        <% for (const s of [['pending','Pendiente'],['active','Activa'],['rejected','Rechazada'],['withdrawn','Retirada']]) { %>
+          <option value="<%= s[0] %>" <%= status===s[0]?'selected':'' %>><%= s[1] %></option>
+        <% } %>
+      </select>
+    </div>
+    <div class="field"><label>Pagos</label>
+      <select name="paid">
+        <option value="">Todos</option>
+        <option value="1" <%= paid==='1'?'selected':'' %>>Todo pagado</option>
+        <option value="0" <%= paid==='0'?'selected':'' %>>Con pagos pendientes</option>
+      </select>
+    </div>
+  </div>
+  <div class="field"><label>Buscar</label><input type="text" name="q" value="<%= q %>" placeholder="Nombre o código"></div>
+  <button class="btn small" type="submit">Filtrar</button>
+</form>
+
+<div class="card"><div class="tblwrap"><table class="tbl">
+  <tr><th>Código</th><th>Pareja</th><th>Cat</th><th>Nivel</th><th>Pagos</th><th>Estado</th><th></th></tr>
+  <% for (const r of rows) { %>
+    <tr>
+      <td><strong><%= r.code %></strong></td>
+      <td><%= r.n1 %> / <%= r.n2 %><br><span class="small mut"><%= r.t1 %> · <%= r.t2 %></span></td>
+      <td><%= r.category %></td>
+      <td class="num"><%= r.level_avg %></td>
+      <td><span class="badge <%= r.paid1?'ok':'warn' %>">J1 <%= r.paid1?'✓':'✗' %></span> <span class="badge <%= r.paid2?'ok':'warn' %>">J2 <%= r.paid2?'✓':'✗' %></span></td>
+      <td><span class="badge <%= r.status==='active'?'ok':r.status==='pending'?'warn':'bad' %>"><%= r.status %></span></td>
+      <td><a href="/admin/inscripciones/<%= r.id %>">Ver</a></td>
+    </tr>
+  <% } %>
+</table></div></div>

@@ -1,0 +1,126 @@
+<h1>Mi pareja</h1>
+
+<% if (typeof error !== 'undefined' && error) { %><div class="alert error"><%= error %></div><% } %>
+
+<div class="grid c2">
+  <div class="card">
+    <h3><%= pairName(pair.id) %></h3>
+    <p><span class="badge cat"><%= pair.category === 'F' ? 'Femenina' : 'Masculina' %></span>
+    <span class="badge info">Nivel medio <%= pair.level_avg %></span></p>
+    <p class="small"><strong>Capitán:</strong> <%= captain.name %> (<%= captain.phone %>)</p>
+    <p class="small"><strong>Código:</strong> <span class="code" style="font-size:1rem"><%= pair.code %></span></p>
+    <p class="small"><strong>Pagos:</strong>
+      <% for (const pl of players) { %>
+        <span class="badge <%= pl.paid ? 'ok' : 'warn' %>"><%= pl.name %>: <%= pl.paid ? 'pagado' : 'pendiente' %></span>
+      <% } %>
+    </p>
+    <p class="small"><strong>Camisetas:</strong>
+      <% const sh = players.filter(p => p.shirt); %>
+      <%= sh.length ? sh.map(p => p.name + ' (' + (p.shirt_size || '?') + ')').join(', ') : 'ninguna' %>
+    </p>
+    <% if (canChange) { %><p><a class="btn small ghost" href="/pareja/cambio">Solicitar cambio de pareja</a></p><% } %>
+    <% if (changeReq) { %>
+      <p class="small"><span class="badge <%= changeReq.status === 'pending' ? 'warn' : changeReq.status === 'approved' ? 'ok' : 'bad' %>">Cambio de pareja: <%= changeReq.status === 'pending' ? 'pendiente de revisión' : changeReq.status %></span></p>
+    <% } %>
+  </div>
+  <div class="card">
+    <h3>¿Cómo va la liga?</h3>
+    <p class="small mut">Como pareja ganadora, sube tú el resultado de cada partido. Tu rival tiene 24 h para validarlo (si no lo hace, se valida solo).</p>
+    <p class="small">📞 En cada partido verás el teléfono del capitán rival para organizar el encuentro.</p>
+    <p class="small">⚠️ Si tu rival no se presenta, marca <strong>W.O.</strong> al subir el resultado.</p>
+  </div>
+</div>
+
+<% if (toValidate.length) { %>
+<div class="card">
+  <h3>Resultados pendientes de tu validación</h3>
+  <% for (const m of toValidate) { const rival = m.pair_a_id === pair.id ? m.pair_b_id : m.pair_a_id; %>
+    <div class="match">
+      <span class="teams">vs <%= pairName(rival) %></span>
+      <span class="score"><%= scoreStr(m) %></span>
+      <span class="acts">
+        <form method="post" action="/pareja/validar/<%= m.id %>" style="display:inline"><button class="btn small" type="submit">Validar</button></form>
+        <form method="post" action="/pareja/disputar/<%= m.id %>" style="display:inline"><button class="btn small danger" type="submit">Disputar</button></form>
+      </span>
+    </div>
+  <% } %>
+</div>
+<% } %>
+
+<h2>Mis partidos</h2>
+<% if (!matches.length && !poMatches.length) { %>
+  <div class="card"><p class="mut">Aún no tienes partidos asignados.</p></div>
+<% } %>
+
+<% let lastKey = ''; %>
+<% for (const m of matches) {
+  const key = `R${m.round_no} · Grupo ${m.group_no}`;
+  if (key !== lastKey) { lastKey = key; %><h3><%= key %></h3><% }
+  const rival = m.pair_a_id === pair.id ? m.pair_b_id : m.pair_a_id;
+  const ri = rivalInfo[rival];
+  const done = m.winner_id || m.wo_winner_id || m.unplayed;
+%>
+  <div class="match">
+    <span class="teams">vs <%= pairName(rival) %>
+      <% if (ri) { %><br><span class="small mut">📞 <%= ri.captain.name %>: <a href="tel:<%= ri.captain.phone %>"><%= ri.captain.phone %></a></span><% } %>
+    </span>
+    <span class="score"><%= scoreStr(m) %>
+      <% const vb = valBadge(m); %>
+      <% if (vb === 'pending') { %><span class="badge pending">pendiente de validación</span><% } %>
+      <% if (vb === 'disputado') { %><span class="badge disputado">disputado</span><% } %>
+    </span>
+    <% if (!done) { %>
+    <span class="acts"><button class="btn small" onclick="document.getElementById('f<%= m.id %>').style.display='block'">Subir resultado</button></span>
+    <% } %>
+  </div>
+  <% if (!done) { %>
+  <div class="card" id="f<%= m.id %>" style="display:none">
+    <h4>Subir resultado vs <%= pairName(rival) %></h4>
+    <p class="small mut">Solo la <strong>pareja ganadora</strong> sube el resultado. Formato: 2 sets + súper tie-break a 10 (dif. 2).</p>
+    <form method="post" action="/pareja/resultado/<%= m.id %>">
+      <div class="field"><label>Set 1 (tú – rival)</label><div class="scorein"><input type="number" name="s1a" min="0" max="7" required> <span>–</span> <input type="number" name="s1b" min="0" max="7" required></div></div>
+      <div class="field"><label>Set 2 (tú – rival)</label><div class="scorein"><input type="number" name="s2a" min="0" max="7" required> <span>–</span> <input type="number" name="s2b" min="0" max="7" required></div></div>
+      <div class="field"><label>Desempate</label>
+        <select name="set3mode">
+          <option value="none">No hubo (2 sets)</option>
+          <option value="stb">Súper tie-break a 10</option>
+          <option value="set">Tercer set pactado (cuenta como STB)</option>
+        </select>
+      </div>
+      <div class="field"><label>Súper tie-break / 3er set (tú – rival)</label><div class="scorein"><input type="number" name="s3a" min="0" max="30"> <span>–</span> <input type="number" name="s3b" min="0" max="30"></div></div>
+      <div class="field"><label><input type="checkbox" name="wo" value="1"> Rival no presentado (W.O. a nuestro favor)</label></div>
+      <div class="field"><label>Notas (opcional)</label><input type="text" name="notes"></div>
+      <button class="btn" type="submit">Enviar resultado</button>
+    </form>
+  </div>
+  <% } %>
+<% } %>
+
+<% if (poMatches.length) { %>
+<h2>Playoffs</h2>
+<% for (const m of poMatches) {
+  const rival = m.pair_a_id === pair.id ? m.pair_b_id : m.pair_a_id;
+  const done = m.winner_id || m.wo_winner_id || m.unplayed;
+%>
+  <div class="match">
+    <span class="teams"><span class="badge cat"><%= m.stage === 'po1' ? '1ª' : '2ª' %> · <%= bracketName(m.bracket_round) %></span> vs <%= rival ? pairName(rival) : 'Por decidir' %></span>
+    <span class="score"><%= scoreStr(m) %></span>
+    <% if (!done && rival) { %><span class="acts"><button class="btn small" onclick="document.getElementById('p<%= m.id %>').style.display='block'">Subir resultado</button></span><% } %>
+  </div>
+  <% if (!done && rival) { %>
+  <div class="card" id="p<%= m.id %>" style="display:none">
+    <h4>Subir resultado (playoff)</h4>
+    <form method="post" action="/pareja/resultado/<%= m.id %>">
+      <div class="field"><label>Set 1 (tú – rival)</label><div class="scorein"><input type="number" name="s1a" min="0" max="7" required> <span>–</span> <input type="number" name="s1b" min="0" max="7" required></div></div>
+      <div class="field"><label>Set 2 (tú – rival)</label><div class="scorein"><input type="number" name="s2a" min="0" max="7" required> <span>–</span> <input type="number" name="s2b" min="0" max="7" required></div></div>
+      <div class="field"><label>Desempate</label>
+        <select name="set3mode"><option value="none">No hubo</option><option value="stb">Súper tie-break a 10</option><option value="set">Tercer set pactado</option></select>
+      </div>
+      <div class="field"><label>Súper tie-break / 3er set (tú – rival)</label><div class="scorein"><input type="number" name="s3a" min="0" max="30"> <span>–</span> <input type="number" name="s3b" min="0" max="30"></div></div>
+      <div class="field"><label><input type="checkbox" name="wo" value="1"> Rival no presentado (W.O.)</label></div>
+      <button class="btn" type="submit">Enviar resultado</button>
+    </form>
+  </div>
+  <% } %>
+<% } %>
+<% } %>

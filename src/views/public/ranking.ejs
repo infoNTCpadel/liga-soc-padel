@@ -1,0 +1,25 @@
+<h1>Ranking</h1>
+<p class="mut">Suma de los puntos obtenidos en cada ronda según el grupo y la posición final.</p>
+
+<div class="tabs">
+  <a href="/ranking/M" class="<%= category==='M'?'on':'' %>">Masculina</a>
+  <a href="/ranking/F" class="<%= category==='F'?'on':'' %>">Femenina</a>
+</div>
+
+<% if (!ranking.length) { %>
+  <div class="card"><p class="mut">Aún no hay puntos: el ranking se genera al cerrar cada ronda.</p></div>
+<% } else { %>
+<div class="card"><div class="tblwrap"><table class="tbl">
+  <tr><th>#</th><th>Pareja</th><th class="num">Total</th><th>R1</th><th>R2</th><th>R3</th></tr>
+  <% ranking.forEach((r, i) => { %>
+    <tr>
+      <td class="<%= i<2?'pos1':'' %>"><strong><%= i+1 %>º</strong></td>
+      <td><%= r.name1 %> / <%= r.name2 %></td>
+      <td class="num"><strong><%= r.total %></strong></td>
+      <% for (const n of [1,2,3]) { const rr = r.rows.find(x => x.round_no === n); %>
+        <td class="small mut"><%= rr ? `${rr.round_points} (G${rr.group_no} · ${rr.position}º)` : '—' %></td>
+      <% } %>
+    </tr>
+  <% }) %>
+</table></div></div>
+<% } %>

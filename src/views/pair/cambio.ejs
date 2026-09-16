@@ -1,0 +1,21 @@
+<h1>Cambio de pareja</h1>
+<p class="mut">Solo se permite <strong>un cambio por pareja</strong> en toda la liga, y el nuevo jugador debe ser <strong>del mismo nivel</strong>. La organización debe aprobarlo antes de que juegue ningún partido.</p>
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+<div class="card" style="max-width: 560px">
+  <form method="post" action="/pareja/cambio">
+    <div class="field"><label>¿Quién deja la pareja?</label>
+      <select name="old_player_id">
+        <% for (const pl of players) { %><option value="<%= pl.id %>"><%= pl.name %></option><% } %>
+      </select>
+    </div>
+    <div class="field"><label>Nombre del nuevo jugador *</label><input type="text" name="new_name" required></div>
+    <div class="row2">
+      <div class="field"><label>Teléfono *</label><input type="tel" name="new_phone" required></div>
+      <div class="field"><label>Email</label><input type="email" name="new_email"></div>
+    </div>
+    <div class="field"><label>Nivel Playtomic (0 – 6) *</label><input type="number" name="new_level" step="0.1" min="0" max="6" required>
+      <span class="hint">Tramos: <% for (const b of brackets) { %><%= b.name %> (<%= b.min %>–<%= b.max %>) · <% } %></span>
+    </div>
+    <button class="btn" type="submit">Solicitar cambio</button>
+  </form>
+</div>

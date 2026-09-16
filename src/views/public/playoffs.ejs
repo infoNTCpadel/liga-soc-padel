@@ -1,0 +1,16 @@
+<h1>Playoffs</h1>
+<p class="mut">El ranking se divide por la mitad: los mejores juegan el playoff de 1ª categoría y el resto el de 2ª. Eliminatorias a partido único.</p>
+
+<div class="tabs">
+  <a href="/playoffs/M" class="<%= category==='M'?'on':'' %>">Masculina</a>
+  <a href="/playoffs/F" class="<%= category==='F'?'on':'' %>">Femenina</a>
+</div>
+
+<% if (!generated) { %>
+  <div class="card"><p class="mut">Los cuadros se publicarán al finalizar la fase de grupos.</p></div>
+<% } else { %>
+  <h2>Playoff de 1ª categoría</h2>
+  <%- include('../partials/bracket', { rounds: po1 }) %>
+  <h2>Playoff de 2ª categoría</h2>
+  <%- include('../partials/bracket', { rounds: po2 }) %>
+<% } %>

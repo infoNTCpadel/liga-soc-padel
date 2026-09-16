@@ -1,0 +1,31 @@
+<h1>Cerrar Ronda <%= n %></h1>
+<p class="mut">Al cerrar: los partidos sin resultado contarán como <strong>no jugados</strong>, se calculan las clasificaciones con los desempates de la normativa, los <strong>ascensos/descensos</strong> y los <strong>puntos de ranking</strong> de cada pareja.</p>
+
+<% if (closed) { %>
+  <div class="alert info">Esta ronda ya está cerrada. Puedes <form method="post" action="/admin/rondas/<%= n %>/reabrir" style="display:inline"><button class="btn small ghost" type="submit">reabrirla</button></form> si necesitas corregir algo.</div>
+<% } %>
+
+<% for (const pv of preview) { %>
+<div class="card">
+  <h3><%= pv.category === 'F' ? 'Femenina' : 'Masculina' %> · Grupo <%= pv.group.group_no %></h3>
+  <% if (pv.missing) { %><div class="alert error"><%= pv.missing %> partido(s) sin resultado: contarán como no jugados.</div><% } %>
+  <div class="tblwrap"><table class="tbl">
+    <tr><th>#</th><th>Pareja</th><th class="num">Pts</th><th>Movimiento</th><th class="num">Puntos ranking</th></tr>
+    <% for (const s of pv.standings) { %>
+      <tr>
+        <td><strong><%= s.position %>º</strong></td>
+        <td><%= pairName(s.pairId) %></td>
+        <td class="num"><%= s.pts %></td>
+        <td><span class="badge <%= s.delta > 0 ? 'ok' : s.delta < 0 ? 'bad' : 'info' %>"><%= moveStr(s.delta) %></span></td>
+        <td class="num"><strong><%= s.points %></strong></td>
+      </tr>
+    <% } %>
+  </table></div>
+</div>
+<% } %>
+
+<% if (!closed) { %>
+<form method="post" action="/admin/rondas/<%= n %>/cerrar" onsubmit="return confirm('¿Cerrar la ronda? Los partidos sin resultado contarán como no jugados.')">
+  <button class="btn" type="submit">Cerrar la ronda <%= n %></button>
+</form>
+<% } %>

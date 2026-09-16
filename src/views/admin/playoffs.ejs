@@ -1,0 +1,30 @@
+<h1>Playoffs</h1>
+
+<% if (!round3closed) { %>
+  <div class="alert info">Para generar los cuadros primero hay que cerrar la Ronda 3.</div>
+<% } else if (!generated) { %>
+  <div class="alert info">Ronda 3 cerrada. Genera los cuadros por categoría: el ranking se divide por la mitad (1ª y 2ª categoría).</div>
+<% } %>
+
+<% for (const d of data) { %>
+<div class="card">
+  <h3>Categoría <%= d.category === 'F' ? 'femenina' : 'masculina' %></h3>
+  <% if (!d.ranking.length) { %>
+    <p class="mut">Sin ranking todavía.</p>
+  <% } else { %>
+    <p class="small"><strong>Playoff 1ª:</strong> <%= d.split.po1.map(id => pairName(id)).join(' · ') || '—' %></p>
+    <p class="small"><strong>Playoff 2ª:</strong> <%= d.split.po2.map(id => pairName(id)).join(' · ') || '—' %></p>
+    <% if (round3closed && !generated) { %>
+      <form method="post" action="/admin/playoffs/generar">
+        <input type="hidden" name="category" value="<%= d.category %>">
+        <button class="btn small" type="submit">Generar cuadros</button>
+      </form>
+    <% } %>
+  <% } %>
+</div>
+<% } %>
+
+<% if (generated) { %>
+  <p class="mut">Los cuadros ya están generados. Los resultados se introducen desde <a href="/admin/partidos?stage=po">Partidos</a> o los suben las propias parejas. Los ganadores avanzan automáticamente de ronda.</p>
+  <p><a class="btn small ghost" href="/playoffs/M">Ver cuadros públicos</a></p>
+<% } %>

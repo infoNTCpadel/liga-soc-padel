@@ -1,0 +1,13 @@
+<h1>Master Final</h1>
+<p class="mut">La gran final: los ganadores de los playoffs de cada club compiten entre sí. <%= dates ? 'Se juega el ' + dates + '.' : '' %></p>
+
+<div class="grid c2">
+  <% for (const q of qualifiers) { %>
+    <div class="card center">
+      <span class="badge cat"><%= q.category === 'F' ? 'Femenina' : 'Masculina' %> · <%= q.stage === 'po1' ? '1ª categoría' : '2ª categoría' %></span>
+      <h3><%= q.name || 'Por decidir' %></h3>
+      <% if (q.name) { %><span class="badge ok">Clasificada</span><% } %>
+    </div>
+  <% } %>
+</div>
+<% if (!qualifiers.some(q => q.name)) { %><p class="mut">Aún no hay clasificados: se decidirán en los playoffs.</p><% } %>

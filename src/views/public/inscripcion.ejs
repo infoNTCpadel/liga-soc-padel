@@ -1,0 +1,71 @@
+<h1>Inscripción de parejas</h1>
+<p class="mut">Rellena los datos de los dos jugadores. Al enviar recibirás un <strong>código de acceso</strong> para gestionar vuestros partidos. El pago (19,95&nbsp;€ por jugador) se realiza en el club.</p>
+
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+
+<form method="post" action="/inscripcion">
+  <div class="card">
+    <h3>Categoría</h3>
+    <div class="field">
+      <label><input type="radio" name="category" value="M" <%= form.category !== 'F' ? 'checked' : '' %>> Masculina</label>
+      <label><input type="radio" name="category" value="F" <%= form.category === 'F' ? 'checked' : '' %>> Femenina</label>
+    </div>
+  </div>
+
+  <% for (const n of [1, 2]) { %>
+  <div class="card">
+    <h3>Jugador <%= n %> <%= n === 1 ? '(capitán por defecto)' : '' %></h3>
+    <div class="row2">
+      <div class="field"><label>Nombre y apellidos *</label><input type="text" name="p<%= n %>_name" required value="<%= form['p'+n+'_name'] || '' %>"></div>
+      <div class="field"><label>Teléfono * <span class="hint">para organizar los partidos con los rivales</span></label><input type="tel" name="p<%= n %>_phone" required value="<%= form['p'+n+'_phone'] || '' %>"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Email</label><input type="email" name="p<%= n %>_email" value="<%= form['p'+n+'_email'] || '' %>"></div>
+      <div class="field"><label>Nivel Playtomic (0 – 6) *</label><input type="number" name="p<%= n %>_level" step="0.1" min="0" max="6" required value="<%= form['p'+n+'_level'] || '' %>"></div>
+    </div>
+    <div class="field">
+      <label><input type="checkbox" name="p<%= n %>_shirt" value="1" <%= form['p'+n+'_shirt'] ? 'checked' : '' %>> Quiero la camiseta oficial (+14,95&nbsp;€)</label>
+    </div>
+    <div class="field"><label>Talla de camiseta <span class="hint">(si la quieres)</span></label>
+      <select name="p<%= n %>_shirt_size">
+        <option value="">—</option>
+        <% for (const t of ['XS','S','M','L','XL','XXL']) { %><option <%= (form['p'+n+'_shirt_size']||'')===t?'selected':'' %>><%= t %></option><% } %>
+      </select>
+    </div>
+  </div>
+  <% } %>
+
+  <div class="card">
+    <h3>Capitán de la pareja</h3>
+    <p class="mut small">El capitán organiza los partidos con los rivales y reserva la pista.</p>
+    <div class="field">
+      <label><input type="radio" name="captain" value="1" checked> Jugador 1</label>
+      <label><input type="radio" name="captain" value="2"> Jugador 2</label>
+    </div>
+  </div>
+
+  <% if (questions.length) { %>
+  <div class="card">
+    <h3>Preguntas adicionales</h3>
+    <% for (const q of questions) { %>
+      <div class="field">
+        <label><%= q.label %> <%= q.required ? '*' : '' %></label>
+        <% if (q.type === 'select') { %>
+          <select name="q_<%= q.id %>" <%= q.required ? 'required' : '' %>>
+            <option value="">—</option>
+            <% for (const o of q.options) { %><option <%= (form['q_'+q.id]||'')===o?'selected':'' %>><%= o %></option><% } %>
+          </select>
+        <% } else if (q.type === 'yesno') { %>
+          <label><input type="radio" name="q_<%= q.id %>" value="Sí"> Sí</label>
+          <label><input type="radio" name="q_<%= q.id %>" value="No"> No</label>
+        <% } else { %>
+          <input type="text" name="q_<%= q.id %>" value="<%= form['q_'+q.id] || '' %>" <%= q.required ? 'required' : '' %>>
+        <% } %>
+      </div>
+    <% } %>
+  </div>
+  <% } %>
+
+  <p><button class="btn" type="submit">Enviar inscripción</button></p>
+  <p class="mut small">Al inscribiros aceptáis la normativa de la liga. La organización revisará vuestra inscripción antes de activarla.</p>
+</form>

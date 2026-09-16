@@ -1,0 +1,40 @@
+<h1>Inscripción <%= p.code %></h1>
+<p><a href="/admin/inscripciones">← Volver</a></p>
+
+<div class="grid c2">
+  <div class="card">
+    <h3>Pareja</h3>
+    <p><span class="badge cat"><%= p.category === 'F' ? 'Femenina' : 'Masculina' %></span>
+    <span class="badge <%= p.status==='active'?'ok':p.status==='pending'?'warn':'bad' %>"><%= p.status %></span></p>
+    <p class="small">Nivel medio: <strong><%= p.level_avg %></strong> · Inscrita el <%= p.created_at.slice(0,10) %></p>
+    <% for (const pl of players) { %>
+      <hr>
+      <p><strong><%= pl.name %></strong> <%= p.captain_id === pl.id ? '<span class="badge info">capitán</span>' : '' %></p>
+      <p class="small mut"><%= pl.phone %> · <%= pl.email || 'sin email' %> · Nivel <%= pl.level %></p>
+      <p class="small">Camiseta: <%= pl.shirt ? 'sí (' + (pl.shirt_size || '?') + ')' : 'no' %></p>
+      <form method="post" action="/admin/inscripciones/<%= p.id %>/pago">
+        <input type="hidden" name="player_id" value="<%= pl.id %>">
+        <input type="hidden" name="paid" value="<%= pl.paid ? '0' : '1' %>">
+        <button class="btn small <%= pl.paid ? 'ghost' : '' %>" type="submit"><%= pl.paid ? '✓ Pagado (desmarcar)' : 'Marcar como pagado' %></button>
+      </form>
+    <% } %>
+  </div>
+  <div class="card">
+    <h3>Estado</h3>
+    <form method="post" action="/admin/inscripciones/<%= p.id %>/estado">
+      <div class="field"><label>Cambiar estado</label>
+        <select name="status">
+          <% for (const s of [['pending','Pendiente'],['active','Activa'],['rejected','Rechazada']]) { %>
+            <option value="<%= s[0] %>" <%= p.status===s[0]?'selected':'' %>><%= s[1] %></option>
+          <% } %>
+        </select>
+      </div>
+      <button class="btn small" type="submit">Guardar</button>
+    </form>
+    <p class="small mut">Al activar la pareja, su código de acceso queda operativo.</p>
+    <% if (answers.length) { %>
+      <h3>Respuestas adicionales</h3>
+      <% for (const a of answers) { %><p class="small"><strong><%= a.label %>:</strong> <%= a.answer %></p><% } %>
+    <% } %>
+  </div>
+</div>

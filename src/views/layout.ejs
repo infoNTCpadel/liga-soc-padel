@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><%= clubName %> · <%= seasonName %></title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap topbar-in">
+    <a class="brand" href="/">
+      <span class="brand-ball">◉</span>
+      <span><strong><%= clubName %></strong><small><%= seasonName %></small></span>
+    </a>
+    <nav class="nav">
+      <a href="/" class="<%= section==='public' && !locals.sub ? 'on' : '' %>">Inicio</a>
+      <a href="/normativa">Normativa</a>
+      <a href="/inscripcion">Inscripción</a>
+      <a href="/liga">Liga</a>
+      <a href="/ranking">Ranking</a>
+      <a href="/playoffs">Playoffs</a>
+      <a href="/master-final">Master Final</a>
+    </nav>
+    <div class="userbox">
+      <% if (isAdmin) { %>
+        <a class="btn small" href="/admin">Panel</a>
+        <form action="/admin/logout" method="post" style="display:inline"><button class="btn small ghost" type="submit">Salir</button></form>
+      <% } else if (pairId) { %>
+        <a class="btn small" href="/pareja">Mi pareja</a>
+        <a class="btn small ghost" href="/salir">Salir</a>
+      <% } else { %>
+        <a class="btn small" href="/acceso">Acceso parejas</a>
+      <% } %>
+    </div>
+    <button class="burger" onclick="document.querySelector('.nav').classList.toggle('open')" aria-label="Menú">☰</button>
+  </div>
+</header>
+
+<% if (section === 'admin') { %>
+<div class="adminbar"><div class="wrap adminbar-in">
+  <span class="admin-tag">ORGANIZACIÓN</span>
+  <nav class="anav">
+    <a href="/admin">Panel</a>
+    <a href="/admin/inscripciones">Inscripciones</a>
+    <a href="/admin/preguntas">Preguntas</a>
+    <a href="/admin/parejas">Parejas</a>
+    <a href="/admin/grupos">Grupos</a>
+    <a href="/admin/partidos">Partidos</a>
+    <a href="/admin/playoffs">Playoffs</a>
+    <a href="/admin/cambios">Cambios</a>
+    <a href="/admin/ajustes">Ajustes</a>
+  </nav>
+</div></div>
+<% } %>
+
+<main class="wrap"><%- body %></main>
+
+<footer class="footer"><div class="wrap">
+  <p><%= clubName %> · <%= seasonName %> — Liga de pádel por parejas</p>
+</div></footer>
+</body>
+</html>

@@ -1,0 +1,56 @@
+<h1>Partidos</h1>
+
+<div class="tabs">
+  <a href="/admin/partidos?stage=groups&category=M" class="<%= stage==='groups'&&category==='M'?'on':'' %>">Grupos M</a>
+  <a href="/admin/partidos?stage=groups&category=F" class="<%= stage==='groups'&&category==='F'?'on':'' %>">Grupos F</a>
+  <a href="/admin/partidos?stage=po&category=M" class="<%= stage==='po'&&category==='M'?'on':'' %>">Playoffs M</a>
+  <a href="/admin/partidos?stage=po&category=F" class="<%= stage==='po'&&category==='F'?'on':'' %>">Playoffs F</a>
+  <% if (stage === 'groups') { %><span style="flex:1"></span>
+    <% for (const r of [1,2,3]) { %><a href="/admin/partidos?stage=groups&category=<%= category %>&round=<%= r %>" class="<%= round===r?'on':'' %>">R<%= r %></a><% } %>
+  <% } %>
+</div>
+
+<% for (const m of matches) { %>
+<div class="card">
+  <p><strong><%= pairName(m.pair_a_id) %></strong> <span class="mut">vs</span> <strong><%= pairName(m.pair_b_id) %></strong>
+    <% if (m.group_no) { %><span class="small mut">· R<%= m.round_no %> · Grupo <%= m.group_no %></span><% } %>
+    <% if (m.bracket_round) { %><span class="small mut">· <%= m.stage === 'po1' ? '1ª' : '2ª' %> · <%= bracketName(m.bracket_round) %></span><% } %>
+  </p>
+  <p class="small">Resultado actual: <strong><%= scoreStr(m) %></strong>
+    <% const vb = valBadge(m); %>
+    <% if (vb === 'pending') { %><span class="badge pending">pendiente de validación (subido por <%= pairName(m.submitted_by) %>)</span><% } %>
+    <% if (vb === 'disputado') { %><span class="badge disputado">disputado</span>
+      <form method="post" action="/admin/partidos/<%= m.id %>/resolver" style="display:inline"><button class="btn small" type="submit">Dar por válido</button></form>
+    <% } %>
+    <% if (vb === 'auto') { %><span class="badge auto">validado automáticamente (24h)</span><% } %>
+    <% if (vb === 'validado') { %><span class="badge validado">validado</span><% } %>
+  </p>
+  <details>
+    <summary class="small" style="cursor:pointer; color: var(--lime)">Introducir / corregir resultado</summary>
+    <form method="post" action="/admin/partidos/<%= m.id %>/resultado" style="margin-top:10px">
+      <div class="field"><label>Ganador</label>
+        <select name="winner_id">
+          <% if (m.pair_a_id) { %><option value="<%= m.pair_a_id %>"><%= pairName(m.pair_a_id) %></option><% } %>
+          <% if (m.pair_b_id) { %><option value="<%= m.pair_b_id %>"><%= pairName(m.pair_b_id) %></option><% } %>
+        </select>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Set 1</label><div class="scorein"><input type="number" name="s1a" min="0" max="7" value="<%= m.s1a ?? '' %>">–<input type="number" name="s1b" min="0" max="7" value="<%= m.s1b ?? '' %>"></div></div>
+        <div class="field"><label>Set 2</label><div class="scorein"><input type="number" name="s2a" min="0" max="7" value="<%= m.s2a ?? '' %>">–<input type="number" name="s2b" min="0" max="7" value="<%= m.s2b ?? '' %>"></div></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>3er set pactado</label><div class="scorein"><input type="number" name="s3a" min="0" max="30" value="<%= m.s3a ?? '' %>">–<input type="number" name="s3b" min="0" max="30" value="<%= m.s3b ?? '' %>"></div></div>
+        <div class="field"><label>Súper tie-break</label><div class="scorein"><input type="number" name="stb_a" min="0" max="30" value="<%= m.stb_a ?? '' %>">–<input type="number" name="stb_b" min="0" max="30" value="<%= m.stb_b ?? '' %>"></div></div>
+      </div>
+      <div class="field">
+        <label><input type="checkbox" name="wo" value="1" <%= m.wo_winner_id ? 'checked' : '' %>> W.O. (el ganador se lleva el partido 6-4 / 6-4)</label><br>
+        <label><input type="checkbox" name="unplayed" value="1" <%= m.unplayed ? 'checked' : '' %>> Partido no jugado</label>
+      </div>
+      <div class="field"><label>Notas</label><input type="text" name="notes" value="<%= m.notes %>"></div>
+      <input type="hidden" name="back" value="<%= '/admin/partidos?stage=' + stage + '&category=' + category + (round ? '&round=' + round : '') %>">
+      <button class="btn small" type="submit">Guardar resultado</button>
+    </form>
+  </details>
+</div>
+<% } %>
+<% if (!matches.length) { %><p class="mut">No hay partidos.</p><% } %>

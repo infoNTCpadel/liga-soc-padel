@@ -1,0 +1,17 @@
+{
+  "name": "liga-padel",
+  "version": "1.0.0",
+  "description": "Gestión de liga de pádel por parejas (Master Padel League) - un club",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "ejs": "^3.1.10",
+    "express": "^4.21.2",
+    "express-session": "^1.18.1"
+  },
+  "engines": { "node": ">=18" }
+}

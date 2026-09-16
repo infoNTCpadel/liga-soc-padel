@@ -1,0 +1,36 @@
+<h1>Ajustes</h1>
+<% if (msg) { %><div class="alert ok"><%= msg %></div><% } %>
+
+<div class="card">
+  <h3>Club y temporada</h3>
+  <form method="post" action="/admin/ajustes">
+    <div class="row2">
+      <div class="field"><label>Nombre del club</label><input type="text" name="club_name" value="<%= s.club_name %>"></div>
+      <div class="field"><label>Temporada</label><input type="text" name="season_name" value="<%= s.season_name %>"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Precio inscripción (€)</label><input type="text" name="inscription_price" value="<%= s.inscription_price %>"></div>
+      <div class="field"><label>Precio camiseta (€)</label><input type="text" name="shirt_price" value="<%= s.shirt_price %>"></div>
+    </div>
+    <h3>Calendario</h3>
+    <% for (const k of ['insc','r1','r2','r3','po']) { %>
+      <div class="row2">
+        <div class="field"><label>Fase</label><input type="text" name="phase_<%= k %>_label" value="<%= s['phase_'+k+'_label'] %>"></div>
+        <div class="field"><label>Fechas</label><div class="scorein"><input type="date" name="phase_<%= k %>_ini" value="<%= s['phase_'+k+'_ini'] %>"><span>–</span><input type="date" name="phase_<%= k %>_fin" value="<%= s['phase_'+k+'_fin'] %>"></div></div>
+      </div>
+    <% } %>
+    <div class="row2">
+      <div class="field"><label>Master Final (título)</label><input type="text" name="phase_mf_label" value="<%= s.phase_mf_label %>"></div>
+      <div class="field"><label>Master Final (fechas)</label><input type="text" name="phase_mf_dates" value="<%= s.phase_mf_dates %>"></div>
+    </div>
+    <button class="btn" type="submit">Guardar ajustes</button>
+  </form>
+</div>
+
+<div class="card">
+  <h3>Cambiar contraseña</h3>
+  <form method="post" action="/admin/ajustes/password">
+    <div class="field"><label>Nueva contraseña</label><input type="password" name="password" required minlength="6"></div>
+    <button class="btn small" type="submit">Actualizar</button>
+  </form>
+</div>

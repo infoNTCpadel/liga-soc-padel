@@ -1,0 +1,34 @@
+<h1>Panel de organización</h1>
+
+<div class="grid c3">
+  <div class="stat"><b><%= stats.pending %></b><span>inscripciones pendientes</span></div>
+  <div class="stat"><b><%= stats.active %></b><span>parejas activas</span></div>
+  <div class="stat"><b><%= stats.unpaid %></b><span>jugadores sin pagar</span></div>
+  <div class="stat"><b><%= stats.toValidate %></b><span>resultados por validar</span></div>
+  <div class="stat"><b><%= stats.disputed %></b><span>resultados disputados</span></div>
+  <div class="stat"><b><%= stats.changes %></b><span>cambios de pareja pendientes</span></div>
+</div>
+
+<% if (stats.disputed) { %><div class="alert error">Hay <%= stats.disputed %> resultado(s) disputado(s): revísalos en <a href="/admin/partidos">Partidos</a>.</div><% } %>
+<% if (stats.pending) { %><div class="alert info">Hay <%= stats.pending %> inscripción(es) pendientes de revisión: <a href="/admin/inscripciones?status=pending">revisar</a>.</div><% } %>
+
+<h2>Estado de la competición</h2>
+<% for (const r of rounds) { %>
+<div class="card">
+  <h3>Ronda <%= r.n %> <%= r.closed ? '<span class="badge ok">cerrada</span>' : '<span class="badge warn">abierta</span>' %></h3>
+  <% for (const cat of ['M','F']) { const i = r.info[cat]; %>
+    <p class="small"><span class="badge cat"><%= cat === 'F' ? 'Femenina' : 'Masculina' %></span>
+      <%= i.groups %> grupos · <%= i.done %>/<%= i.total %> partidos con resultado
+      <a href="/admin/grupos?category=<%= cat %>&round=<%= r.n %>">Gestionar grupos</a></p>
+  <% } %>
+  <p>
+    <% if (!r.closed) { %><a class="btn small" href="/admin/rondas/<%= r.n %>/cerrar">Cerrar ronda <%= r.n %></a><% } %>
+    <% if (r.closed) { %><form method="post" action="/admin/rondas/<%= r.n %>/reabrir" style="display:inline"><button class="btn small ghost" type="submit">Reabrir</button></form><% } %>
+  </p>
+</div>
+<% } %>
+
+<div class="card">
+  <h3>Playoffs <%= playoffsGenerated ? '<span class="badge ok">generados</span>' : '' %></h3>
+  <p><a class="btn small" href="/admin/playoffs">Gestionar playoffs</a> <a class="btn small ghost" href="/admin/master-final">Master Final</a></p>
+</div>

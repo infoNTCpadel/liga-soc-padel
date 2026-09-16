@@ -1,0 +1,31 @@
+<% /* Cuadro de eliminatorias. Recibe: rounds, pairName, scoreStr */ %>
+<% if (!rounds.length) { %>
+  <p class="mut">Cuadro aún no generado.</p>
+<% } else { %>
+<div class="bracket">
+  <% for (const r of rounds) { %>
+    <div class="bround">
+      <h4><%= r.name %></h4>
+      <% for (const m of r.matches) { %>
+        <div class="bmatch">
+          <% for (const pid of [m.pair_a_id, m.pair_b_id]) { %>
+            <% if (!pid) { %>
+              <div class="p tbd"><span>A definir</span><span class="sc"></span></div>
+            <% } else {
+              const o = m.outcome;
+              const win = o && o.winnerId === pid;
+            %>
+              <div class="p <%= win ? 'win' : '' %>">
+                <span><%= pairName(pid) %></span>
+                <span class="sc"><%= scoreStr(m) %></span>
+              </div>
+            <% } %>
+          <% } %>
+          <% if (m.validation === 'pending') { %><div class="p tbd"><span>⏳ pendiente de validación</span></div><% } %>
+          <% if (m.validation === 'disputed') { %><div class="p tbd"><span>⚠ resultado disputado</span></div><% } %>
+        </div>
+      <% } %>
+    </div>
+  <% } %>
+</div>
+<% } %>

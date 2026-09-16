@@ -1,0 +1,66 @@
+<h1>Grupos y calendario</h1>
+
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+
+<div class="tabs">
+  <a href="/admin/grupos?category=M&round=<%= round %>" class="<%= category==='M'?'on':'' %>">Masculina</a>
+  <a href="/admin/grupos?category=F&round=<%= round %>" class="<%= category==='F'?'on':'' %>">Femenina</a>
+  <span style="flex:1"></span>
+  <% for (const r of [1,2,3]) { %><a href="/admin/grupos?category=<%= category %>&round=<%= r %>" class="<%= round===r?'on':'' %>">Ronda <%= r %></a><% } %>
+</div>
+
+<% if (closed) { %><div class="alert info">Ronda cerrada.</div><% } %>
+
+<div class="card">
+  <% if (!groups.length) { %>
+    <p class="mut">No hay grupos generados para esta ronda y categoría.</p>
+    <% if (round === 1) { %>
+      <form method="post" action="/admin/grupos/generar-r1">
+        <input type="hidden" name="category" value="<%= category %>">
+        <button class="btn" type="submit">Generar grupos de la Ronda 1 por nivel</button>
+      </form>
+    <% } else if (prevClosed) { %>
+      <form method="post" action="/admin/grupos/generar-siguiente">
+        <input type="hidden" name="category" value="<%= category %>">
+        <input type="hidden" name="round" value="<%= round %>">
+        <button class="btn" type="submit">Generar grupos de la Ronda <%= round %> (ascensos/descensos)</button>
+      </form>
+    <% } else { %>
+      <p class="mut">Primero hay que cerrar la ronda anterior.</p>
+    <% } %>
+  <% } else { %>
+    <p class="small mut">Puedes mover parejas entre grupos mientras no tengan resultados. Genera el calendario cuando los grupos estén definitivos.</p>
+  <% } %>
+</div>
+
+<% for (const g of groups) { %>
+<div class="card">
+  <h3>Grupo <%= g.group_no %> <span class="small mut">(<%= g.members.length %> parejas · <%= g.matchCount %> partidos)</span></h3>
+  <div class="tblwrap"><table class="tbl">
+    <tr><th>Pareja</th><th class="num">Nivel</th><th></th></tr>
+    <% for (const m of g.members) { %>
+      <tr>
+        <td><%= m.name1 %> / <%= m.name2 %></td>
+        <td class="num"><%= m.level_avg %></td>
+        <td>
+          <form method="post" action="/admin/grupos/<%= g.id %>/mover" style="display:inline">
+            <input type="hidden" name="pair_id" value="<%= m.pair_id %>">
+            <select name="target_group_id">
+              <% for (const t of groups) { if (t.id === g.id) continue; %>
+                <option value="<%= t.id %>">→ Grupo <%= t.group_no %></option>
+              <% } %>
+            </select>
+            <button class="btn small ghost" type="submit">Mover</button>
+          </form>
+        </td>
+      </tr>
+    <% } %>
+  </table></div>
+  <p>
+    <form method="post" action="/admin/grupos/<%= g.id %>/calendario" style="display:inline">
+      <button class="btn small" type="submit"><%= g.matchCount ? 'Regenerar calendario' : 'Generar calendario (todos contra todos)' %></button>
+    </form>
+    <a class="btn small ghost" href="/admin/partidos?category=<%= category %>&round=<%= round %>">Ver partidos</a>
+  </p>
+</div>
+<% } %>

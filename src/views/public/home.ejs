@@ -1,0 +1,34 @@
+<div class="hero">
+  <h1>Liga de pádel por parejas</h1>
+  <p>Fase de grupos con ascensos y descensos, ranking por puntos, playoffs y Master Final. Todo con las reglas oficiales de la competición.</p>
+  <p>
+    <a class="btn" href="/inscripcion">Inscribir a mi pareja</a>
+    <a class="btn ghost" href="/liga">Ver la liga</a>
+  </p>
+</div>
+
+<div class="grid c3">
+  <div class="stat"><b><%= counts.active %></b><span>parejas en competición</span></div>
+  <div class="stat"><b>3 + playoffs</b><span>rondas de grupos y fase final</span></div>
+  <div class="stat"><b>2</b><span>categorías: masculina y femenina</span></div>
+</div>
+
+<h2>Calendario <%= seasonName %></h2>
+<div class="timeline">
+  <% for (const p of phases) { %>
+    <div class="phase <%= p.current ? 'current' : '' %> <%= p.past ? 'past' : '' %>">
+      <span class="dot"></span>
+      <div>
+        <div class="dates"><%= p.dates || (fmtDate(p.ini) + ' – ' + fmtDate(p.fin)) %></div>
+        <div class="plabel"><%= p.label %></div>
+      </div>
+      <% if (p.current) { %><span class="badge ok" style="margin-left:auto">En curso</span><% } %>
+    </div>
+  <% } %>
+</div>
+
+<div class="card">
+  <h3>¿Cómo funciona?</h3>
+  <p>Grupos de 4 parejas por nivel. Cada ronda juegas 3 partidos en tu club. Al terminar la ronda, <strong>subes o bajas de grupo</strong> según tu clasificación, y sumas <strong>puntos para el ranking</strong> según el grupo y la posición. Tras 3 rondas, el ranking se divide en dos: los mejores juegan el <strong>Playoff de 1ª categoría</strong> y el resto el de <strong>2ª</strong>. Los ganadores van al <strong>Master Final</strong>.</p>
+  <p><a href="/normativa">Leer la normativa completa →</a></p>
+</div>

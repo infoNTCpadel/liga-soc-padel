@@ -1,0 +1,33 @@
+<h1>Preguntas del formulario de inscripción</h1>
+<p class="mut">Los datos básicos (nombres, teléfonos, email, nivel, camiseta y capitán) siempre se piden. Aquí puedes añadir preguntas extra.</p>
+
+<div class="card">
+  <h3>Añadir pregunta</h3>
+  <form method="post" action="/admin/preguntas">
+    <div class="field"><label>Pregunta</label><input type="text" name="label" required></div>
+    <div class="row2">
+      <div class="field"><label>Tipo</label>
+        <select name="type"><option value="text">Texto libre</option><option value="select">Lista de opciones</option><option value="yesno">Sí / No</option></select>
+      </div>
+      <div class="field"><label><input type="checkbox" name="required" value="1"> Obligatoria</label></div>
+    </div>
+    <div class="field"><label>Opciones <span class="hint">(una por línea, solo para "Lista de opciones")</span></label><textarea name="options" rows="3"></textarea></div>
+    <button class="btn small" type="submit">Añadir</button>
+  </form>
+</div>
+
+<div class="card"><div class="tblwrap"><table class="tbl">
+  <tr><th>Pregunta</th><th>Tipo</th><th>Obligatoria</th><th>Activa</th><th></th></tr>
+  <% for (const q of qs) { %>
+    <tr>
+      <td><%= q.label %><% if (q.options.length) { %><br><span class="small mut"><%= q.options.join(' · ') %></span><% } %></td>
+      <td><%= q.type %></td>
+      <td><%= q.required ? 'Sí' : 'No' %></td>
+      <td><span class="badge <%= q.active ? 'ok' : 'bad' %>"><%= q.active ? 'sí' : 'no' %></span></td>
+      <td>
+        <form method="post" action="/admin/preguntas/<%= q.id %>/toggle" style="display:inline"><button class="btn small ghost" type="submit"><%= q.active ? 'Desactivar' : 'Activar' %></button></form>
+        <form method="post" action="/admin/preguntas/<%= q.id %>/eliminar" style="display:inline" onsubmit="return confirm('¿Eliminar pregunta?')"><button class="btn small danger" type="submit">Eliminar</button></form>
+      </td>
+    </tr>
+  <% } %>
+</table></div></div>

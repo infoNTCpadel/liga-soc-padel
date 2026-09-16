@@ -1,0 +1,21 @@
+<h1>Parejas</h1>
+<p><a class="btn small" href="/admin/parejas/nueva">Añadir pareja manualmente</a></p>
+<div class="card"><div class="tblwrap"><table class="tbl">
+  <tr><th>Código</th><th>Pareja</th><th>Cat</th><th class="num">Nivel</th><th>Estado</th><th>Cambios</th><th></th></tr>
+  <% for (const r of rows) { %>
+    <tr>
+      <td><strong><%= r.code %></strong></td>
+      <td><%= r.n1 %> / <%= r.n2 %></td>
+      <td><%= r.category %></td>
+      <td class="num"><%= r.level_avg %></td>
+      <td><span class="badge <%= r.status==='active'?'ok':r.status==='pending'?'warn':'bad' %>"><%= r.status %></span></td>
+      <td class="num"><%= r.changes_used %></td>
+      <td>
+        <form method="post" action="/admin/parejas/<%= r.id %>/codigo" style="display:inline"><button class="btn small ghost" type="submit" title="Generar nuevo código">Nuevo código</button></form>
+        <% if (r.status === 'active') { %>
+        <form method="post" action="/admin/parejas/<%= r.id %>/retirar" style="display:inline" onsubmit="return confirm('¿Retirar a esta pareja de la liga?')"><button class="btn small danger" type="submit">Retirar</button></form>
+        <% } %>
+      </td>
+    </tr>
+  <% } %>
+</table></div></div>

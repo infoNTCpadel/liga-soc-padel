@@ -1,0 +1,11 @@
+<h1>Master Final</h1>
+<p class="mut">Los ganadores de cada playoff se clasifican para la gran final.</p>
+<div class="grid c2">
+  <% for (const q of qualifiers) { %>
+    <div class="card center">
+      <span class="badge cat"><%= q.category === 'F' ? 'Femenina' : 'Masculina' %> · <%= q.stage === 'po1' ? 'Playoff 1ª' : 'Playoff 2ª' %></span>
+      <h3><%= q.name || 'Por decidir' %></h3>
+      <% if (q.name) { %><span class="badge ok">Clasificada</span><% } %>
+    </div>
+  <% } %>
+</div>

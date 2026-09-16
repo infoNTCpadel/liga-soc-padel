@@ -1,0 +1,17 @@
+<h1>Cambios de pareja</h1>
+<p class="mut">Normas: un solo cambio por pareja, mismo nivel (mismo tramo Playtomic), y ningún jugador sin partidos de fase de grupos puede jugar los playoffs.</p>
+
+<% if (!rows.length) { %><div class="card"><p class="mut">No hay solicitudes.</p></div><% } %>
+
+<% for (const c of rows) { %>
+<div class="card">
+  <p><strong><%= pairName(c.pair_id) %></strong> <span class="small mut">(<%= c.code %> · <%= c.category %>)</span>
+  <span class="badge <%= c.status==='pending'?'warn':c.status==='approved'?'ok':'bad' %>"><%= c.status %></span></p>
+  <p class="small">Sale: <strong><%= c.old_name %></strong> (nivel <%= c.old_level %>, tramo <%= brackets.find(b => c.old_level >= b.min && c.old_level <= b.max).name %>)</p>
+  <p class="small">Entra: <strong><%= c.new_name %></strong> · <%= c.new_phone %> · nivel <%= c.new_level %></p>
+  <% if (c.status === 'pending') { %>
+    <form method="post" action="/admin/cambios/<%= c.id %>/aprobar" style="display:inline"><button class="btn small" type="submit">Aprobar</button></form>
+    <form method="post" action="/admin/cambios/<%= c.id %>/rechazar" style="display:inline"><button class="btn small danger" type="submit">Rechazar</button></form>
+  <% } %>
+</div>
+<% } %>
