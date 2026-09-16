@@ -118,28 +118,37 @@ router.post('/resultado/:id', (req, res) => {
     return res.redirect('/pareja');
   }
 
-  const s1a = parseScore(b.s1a), s1b = parseScore(b.s1b);
-  const s2a = parseScore(b.s2a), s2b = parseScore(b.s2b);
+  // El formulario usa columnas "tú – rival" (sufijo F); la BD usa pair_a/pair_b.
+  const s1aF = parseScore(b.s1a), s1bF = parseScore(b.s1b);
+  const s2aF = parseScore(b.s2a), s2bF = parseScore(b.s2b);
   const mode = b.set3mode === 'set' ? 'set' : (b.set3mode === 'stb' ? 'stb' : 'none');
-  const s3a = mode !== 'none' ? parseScore(b.s3a) : null;
-  const s3b = mode !== 'none' ? parseScore(b.s3b) : null;
+  const s3aF = mode !== 'none' ? parseScore(b.s3a) : null;
+  const s3bF = mode !== 'none' ? parseScore(b.s3b) : null;
 
-  const vals = [s1a, s1b, s2a, s2b].concat(mode !== 'none' ? [s3a, s3b] : []);
+  const vals = [s1aF, s1bF, s2aF, s2bF].concat(mode !== 'none' ? [s3aF, s3bF] : []);
   if (vals.some(v => v == null || Number.isNaN(v))) return fail('Revisa el marcador: faltan juegos o hay valores no válidos.');
-  if (s1a === s1b || s2a === s2b) return fail('Un set no puede terminar en empate.');
+  if (s1aF === s1bF || s2aF === s2bF) return fail('Un set no puede terminar en empate.');
 
   // Coherencia: quien sube el resultado debe ser el ganador (normativa).
-  const meIsA = m.pair_a_id === pair.id;
-  let setsMe = 0, setsRival = 0, tbOk = true;
-  for (const [a, b2] of [[s1a, s1b], [s2a, s2b]]) {
-    if (L.isSetFinished(a, b2)) { if ((meIsA && a > b2) || (!meIsA && b2 > a)) setsMe++; else setsRival++; }
+  // En columnas "tú – rival", los sets de quien sube son la columna a.
+  let setsMe = 0, setsRival = 0;
+  for (const [a, b2] of [[s1aF, s1bF], [s2aF, s2bF]]) {
+    if (L.isSetFinished(a, b2)) { if (a > b2) setsMe++; else setsRival++; }
   }
+  let tbOk = true;
   if (mode !== 'none') {
-    const iWin = (meIsA && s3a > s3b) || (!meIsA && s3b > s3a);
-    if (!iWin) tbOk = false;
-    if (mode === 'stb' && !((s3a >= 10 || s3b >= 10) && Math.abs(s3a - s3b) >= 2)) tbOk = false;
+    if (!(s3aF > s3bF)) tbOk = false;
+    if (mode === 'stb' && !((s3aF >= 10 || s3bF >= 10) && Math.abs(s3aF - s3bF) >= 2)) tbOk = false;
+  } else if (setsMe === setsRival) {
+    tbOk = false; // empate a sets sin desempate no es un resultado válido
   }
   if (!tbOk || setsRival > setsMe) return fail('El marcador no es coherente: quien sube el resultado debe ser la pareja ganadora.');
+
+  // Convertir "tú – rival" a columnas pair_a/pair_b para guardar en la BD.
+  const meIsA = m.pair_a_id === pair.id;
+  const s1a = meIsA ? s1aF : s1bF, s1b = meIsA ? s1bF : s1aF;
+  const s2a = meIsA ? s2aF : s2bF, s2b = meIsA ? s2bF : s2aF;
+  const s3a = meIsA ? s3aF : s3bF, s3b = meIsA ? s3bF : s3aF;
 
   const q = mode === 'set' ? [s3a, s3b, null, null] : mode === 'stb' ? [null, null, s3a, s3b] : [null, null, null, null];
   db.prepare(`UPDATE matches SET s1a=?, s1b=?, s2a=?, s2b=?, s3a=?, s3b=?, stb_a=?, stb_b=?,

@@ -47,7 +47,7 @@ function roundPoints(groupNo, position) {
 // sets: solo cuentan los sets terminados; los juegos cuentan siempre.
 // El súper tie-break (o tercer set pactado) cuenta como 1 set + 1 juego.
 // W.O.: 6-4 / 6-4 → 2-0 en sets, 12-8 en juegos.
-// Puntos: victoria 3, derrota 1, no jugado 0.
+// Puntos: victoria 3, derrota ganando 1 set 2, derrota sin sets 1, no jugado 0.
 // ---------------------------------------------------------------------------
 function isSetFinished(a, b) {
   if (a == null || b == null) return false;
@@ -63,14 +63,15 @@ function matchOutcome(m) {
   const A = m.pair_a_id, B = m.pair_b_id;
   if (!A || !B) return null;
 
-  // W.O.: se cuenta como 6-4 / 6-4, partido ganado / perdido.
+  // W.O.: en sets y juegos se cuenta como 6-4 / 6-4; en puntos es 3 para la
+  // pareja presente y 0 para la ausente (como no jugado).
   if (m.wo_winner_id) {
     const wIsA = m.wo_winner_id === A;
     return {
       winnerId: m.wo_winner_id, loserId: wIsA ? B : A,
       setsA: wIsA ? 2 : 0, setsB: wIsA ? 0 : 2,
       gamesA: wIsA ? 12 : 8, gamesB: wIsA ? 8 : 12,
-      ptsA: wIsA ? 3 : 1, ptsB: wIsA ? 1 : 3,
+      ptsA: wIsA ? 3 : 0, ptsB: wIsA ? 0 : 3,
       wo: true,
     };
   }
@@ -92,10 +93,13 @@ function matchOutcome(m) {
     else if (m.stb_b > m.stb_a) { setsB++; gamesB += 1; }
   }
 
+  // Derrota ganando 1 set: 2 puntos; derrota sin ganar sets: 1 punto.
+  const loserSets = wIsA ? setsB : setsA;
+  const loserPts = loserSets >= 1 ? 2 : 1;
   return {
     winnerId: m.winner_id, loserId: wIsA ? B : A,
     setsA, setsB, gamesA, gamesB,
-    ptsA: wIsA ? 3 : 1, ptsB: wIsA ? 1 : 3,
+    ptsA: wIsA ? 3 : loserPts, ptsB: wIsA ? loserPts : 3,
     wo: false,
   };
 }
