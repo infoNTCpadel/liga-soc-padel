@@ -48,7 +48,8 @@ CREATE TABLE IF NOT EXISTS custom_questions (
   options TEXT NOT NULL DEFAULT '[]',     -- JSON array (para select)
   required INTEGER NOT NULL DEFAULT 0,
   position INTEGER NOT NULL DEFAULT 0,
-  active INTEGER NOT NULL DEFAULT 1
+  active INTEGER NOT NULL DEFAULT 1,
+  sys_key TEXT NOT NULL DEFAULT ''        -- 'shirt' = pregunta del sistema (camiseta)
 );
 
 CREATE TABLE IF NOT EXISTS players (
@@ -74,6 +75,7 @@ CREATE TABLE IF NOT EXISTS pairs (
   level_avg REAL NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'pending', -- pending | active | rejected | withdrawn
   changes_used INTEGER NOT NULL DEFAULT 0,
+  availability TEXT NOT NULL DEFAULT '', -- días que no puede jugar (nota breve de la pareja)
   notes TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -118,11 +120,13 @@ CREATE TABLE IF NOT EXISTS round_results (
 CREATE TABLE IF NOT EXISTS matches (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   category TEXT NOT NULL,                 -- M | F | X
-  stage TEXT NOT NULL DEFAULT 'groups',   -- groups | po1 | po2
+  stage TEXT NOT NULL DEFAULT 'groups',   -- groups | po1 | po2 | po3 | ...
   round_no INTEGER,                       -- 1..3 cuando stage='groups'
   group_id INTEGER REFERENCES groups(id) ON DELETE SET NULL,
   bracket_round TEXT,                     -- R32 | R16 | QF | SF | F (playoffs)
   bracket_slot INTEGER,                   -- posición dentro de la ronda del cuadro
+  seed_a INTEGER,                         -- cabeza de serie de pair_a (solo 1ª ronda)
+  seed_b INTEGER,                         -- cabeza de serie de pair_b (solo 1ª ronda)
   pair_a_id INTEGER REFERENCES pairs(id) ON DELETE SET NULL,
   pair_b_id INTEGER REFERENCES pairs(id) ON DELETE SET NULL,
   s1a INTEGER, s1b INTEGER,
@@ -152,10 +156,16 @@ CREATE TABLE IF NOT EXISTS courts (
 
 CREATE TABLE IF NOT EXISTS playoff_seeding (
   category TEXT NOT NULL,
-  stage TEXT NOT NULL,                -- po1 | po2
+  stage TEXT NOT NULL,                -- po1 | po2 | po3 | ...
   pair_id INTEGER NOT NULL REFERENCES pairs(id) ON DELETE CASCADE,
   pos INTEGER NOT NULL,
   PRIMARY KEY (category, stage, pair_id)
+);
+
+CREATE TABLE IF NOT EXISTS playoff_excluded (
+  category TEXT NOT NULL,
+  pair_id INTEGER NOT NULL REFERENCES pairs(id) ON DELETE CASCADE,
+  PRIMARY KEY (category, pair_id)
 );
 
 CREATE TABLE IF NOT EXISTS pair_changes (
@@ -206,10 +216,27 @@ function seasonDb(id) {
     for (const sql of [
       'ALTER TABLE matches ADD COLUMN court_id INTEGER REFERENCES courts(id) ON DELETE SET NULL',
       "ALTER TABLE matches ADD COLUMN scheduled_at TEXT",
+      'ALTER TABLE matches ADD COLUMN seed_a INTEGER',
+      'ALTER TABLE matches ADD COLUMN seed_b INTEGER',
+      "ALTER TABLE custom_questions ADD COLUMN sys_key TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE pairs ADD COLUMN availability TEXT NOT NULL DEFAULT ''",
+      `CREATE TABLE IF NOT EXISTS playoff_excluded (
+         category TEXT NOT NULL,
+         pair_id INTEGER NOT NULL REFERENCES pairs(id) ON DELETE CASCADE,
+         PRIMARY KEY (category, pair_id)
+       )`,
     ]) {
-      try { sdb.exec(sql); } catch (e) { /* la columna ya existe */ }
+      try { sdb.exec(sql); } catch (e) { /* ya existe */ }
     }
     sdb.prepare("INSERT OR IGNORE INTO settings(key, value) VALUES('match_duration_min', '90')").run();
+    sdb.prepare("INSERT OR IGNORE INTO settings(key, value) VALUES('shirt_price', '14.95')").run();
+    // Pregunta del sistema: camiseta (preconfigurada, inactiva por defecto)
+    if (!sdb.prepare("SELECT 1 FROM custom_questions WHERE sys_key = 'shirt'").get()) {
+      sdb.prepare(
+        `INSERT INTO custom_questions(label, type, options, required, position, active, sys_key)
+         VALUES('Camiseta oficial', 'select', ?, 0, 999, 0, 'shirt')`
+      ).run(JSON.stringify(['No la quiero', 'XS', 'S', 'M', 'L', 'XL', 'XXL']));
+    }
     openDbs.set(id, sdb);
   }
   return openDbs.get(id);

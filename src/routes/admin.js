@@ -158,7 +158,7 @@ router.post('/preguntas', (req, res) => {
   res.redirect('/admin/preguntas');
 });
 router.post('/preguntas/:id/eliminar', (req, res) => {
-  db.prepare('DELETE FROM custom_questions WHERE id = ?').run(req.params.id);
+  db.prepare("DELETE FROM custom_questions WHERE id = ? AND sys_key = ''").run(req.params.id);
   res.redirect('/admin/preguntas');
 });
 router.post('/preguntas/:id/toggle', (req, res) => {
@@ -357,15 +357,19 @@ router.get('/partidos', (req, res) => {
   if (stage === 'groups') {
     const round = Math.min(3, Math.max(1, parseInt(req.query.round) || 1));
     matches = db.prepare(
-      `SELECT m.*, g.group_no, g.round_no, c.name AS court_name FROM matches m
+      `SELECT m.*, g.group_no, g.round_no, c.name AS court_name, pa.availability AS avail_a, pb.availability AS avail_b
+       FROM matches m
        LEFT JOIN groups g ON g.id = m.group_id LEFT JOIN courts c ON c.id = m.court_id
+       LEFT JOIN pairs pa ON pa.id = m.pair_a_id LEFT JOIN pairs pb ON pb.id = m.pair_b_id
        WHERE m.stage = 'groups' AND m.category = ? AND m.round_no = ? ORDER BY g.group_no, m.id`
     ).all(category, round);
     res.renderPage('admin/partidos', { ...common, round, matches });
   } else {
     matches = db.prepare(
-      `SELECT m.*, c.name AS court_name FROM matches m LEFT JOIN courts c ON c.id = m.court_id
-       WHERE m.stage IN ('po1','po2') AND m.category = ?
+      `SELECT m.*, c.name AS court_name, pa.availability AS avail_a, pb.availability AS avail_b
+       FROM matches m LEFT JOIN courts c ON c.id = m.court_id
+       LEFT JOIN pairs pa ON pa.id = m.pair_a_id LEFT JOIN pairs pb ON pb.id = m.pair_b_id
+       WHERE m.stage LIKE 'po%' AND m.category = ?
        ORDER BY m.stage, CASE m.bracket_round WHEN 'R32' THEN 0 WHEN 'R16' THEN 1 WHEN 'QF' THEN 2 WHEN 'SF' THEN 3 WHEN 'F' THEN 4 ELSE 9 END, m.bracket_slot`
     ).all(category);
     res.renderPage('admin/partidos', { ...common, round: null, matches });
@@ -470,19 +474,107 @@ router.post('/rondas/:n/reabrir', (req, res) => {
 });
 
 // ================= PLAYOFFS =================
+// Categorías del playoff: grupos de 16 del ranking (ver splitPlayoffCategories).
+function playoffStages(category) {
+  const ranking = L.getRanking(db, category).map(r => r.pair_id);
+  const { cats, unused } = L.splitPlayoffCategories(ranking);
+  return { stages: cats.map((ids, i) => ({ stage: `po${i + 1}`, ids })), unused };
+}
+function excludedPairs(category) {
+  return new Set(
+    db.prepare('SELECT pair_id FROM playoff_excluded WHERE category = ?').all(category).map(r => r.pair_id)
+  );
+}
 // Orden de sembrado: el guardado manualmente o, por defecto, el ranking.
 function playoffOrder(category, stage) {
-  const ranking = L.getRanking(db, category).map(r => r.pair_id);
-  const { po1, po2 } = L.splitPlayoffs(ranking);
-  const base = stage === 'po1' ? po1 : po2;
+  const st = playoffStages(category).stages.find(s => s.stage === stage);
+  const base = st ? st.ids : [];
   const saved = db.prepare('SELECT pair_id FROM playoff_seeding WHERE category = ? AND stage = ? ORDER BY pos')
     .all(category, stage).map(r => r.pair_id);
-  if (!saved.length) return base;
+  if (!saved.length) return { order: base, excluded: excludedPairs(category) };
   const inBase = new Set(base);
   const ordered = saved.filter(id => inBase.has(id));
   for (const id of base) if (!ordered.includes(id)) ordered.push(id);
-  return ordered;
+  return { order: ordered, excluded: excludedPairs(category) };
 }
+function playoffPlaying(category, stage) {
+  const { order, excluded } = playoffOrder(category, stage);
+  return order.filter(id => !excluded.has(id));
+}
+function playoffHasResults(category) {
+  return db.prepare(
+    `SELECT COUNT(*) c FROM matches WHERE stage LIKE 'po%' AND category = ?
+     AND (winner_id IS NOT NULL OR wo_winner_id IS NOT NULL)`
+  ).get(category).c > 0;
+}
+// ¿Hay resultados "reales" (no byes automáticos) en este cuadro?
+function playoffHasRealResults(category, stage) {
+  return db.prepare(
+    `SELECT COUNT(*) c FROM matches WHERE stage = ? AND category = ?
+     AND (unplayed = 1 OR wo_winner_id IS NOT NULL OR validation IN ('pending', 'disputed', 'validated'))`
+  ).get(stage, category).c > 0;
+}
+// Los byes solo existen en la primera ronda: avanzan solos a la siguiente.
+// (Un cruce de rondas posteriores con un lado vacío está esperando rival, no es bye.)
+function cascadeByes(category, stage) {
+  const first = db.prepare(`
+    SELECT bracket_round br FROM matches WHERE category = ? AND stage = ?
+    ORDER BY ${ROUND_ORDER_CASE} LIMIT 1
+  `).get(category, stage);
+  if (!first) return;
+  const ms = db.prepare(
+    `SELECT * FROM matches WHERE category = ? AND stage = ? AND bracket_round = ?
+     AND winner_id IS NULL AND wo_winner_id IS NULL AND unplayed = 0
+     AND ((pair_a_id IS NOT NULL AND pair_b_id IS NULL) OR (pair_a_id IS NULL AND pair_b_id IS NOT NULL))`
+  ).all(category, stage, first.br);
+  for (const m of ms) {
+    const w = m.pair_a_id || m.pair_b_id;
+    db.prepare("UPDATE matches SET winner_id = ?, validation = 'auto' WHERE id = ?").run(w, m.id);
+    const next = L.BRACKET_NEXT[m.bracket_round];
+    if (next) {
+      const slot = Math.floor(m.bracket_slot / 2);
+      const col = m.bracket_slot % 2 === 0 ? 'pair_a_id' : 'pair_b_id';
+      const nm = db.prepare(
+        'SELECT * FROM matches WHERE stage = ? AND category = ? AND bracket_round = ? AND bracket_slot = ?'
+      ).get(stage, category, next, slot);
+      if (nm && !nm[col]) db.prepare(`UPDATE matches SET ${col} = ? WHERE id = ?`).run(w, nm.id);
+    }
+  }
+}
+const ROUND_ORDER_CASE = `CASE bracket_round WHEN 'R32' THEN 0 WHEN 'R16' THEN 1 WHEN 'QF' THEN 2 WHEN 'SF' THEN 3 WHEN 'F' THEN 4 ELSE 9 END`;
+function firstRoundMatches(category, stage) {
+  const ms = db.prepare(
+    `SELECT * FROM matches WHERE category = ? AND stage = ? ORDER BY ${ROUND_ORDER_CASE}, bracket_slot`
+  ).all(category, stage);
+  if (!ms.length) return [];
+  const firstCode = ms[0].bracket_round;
+  return ms.filter(m => m.bracket_round === firstCode);
+}
+
+router.get('/playoffs', (req, res) => {
+  const data = L.CATEGORY_CODES.map(category => {
+    const { stages, unused } = playoffStages(category);
+    const sd = stages.map(({ stage, ids }) => {
+      const { order, excluded } = playoffOrder(category, stage);
+      const playing = order.filter(id => !excluded.has(id));
+      const size = L.nextPowerOfTwo(Math.max(playing.length, 2));
+      const seeds = Math.min(size >= 16 ? 4 : 2, playing.length);
+      return {
+        stage, ordinal: L.playoffOrdinal(stage), ids: order, excluded,
+        seeds, hasRealResults: playoffHasRealResults(category, stage),
+        firstRound: firstRoundMatches(category, stage),
+      };
+    });
+    return {
+      category, stages: sd, unused,
+      generated: getSetting('playoffs_generated', '0') === '1',
+      round3closed: getSetting('round3_closed', '0') === '1',
+      hasResults: playoffHasResults(category),
+      pairName: (id) => L.pairName(db, id),
+    };
+  });
+  res.renderPage('admin/playoffs', { data, error: req.query.error || null, ok: req.query.ok || null });
+});
 function savePlayoffOrder(category, stage, ids) {
   const del = db.prepare('DELETE FROM playoff_seeding WHERE category = ? AND stage = ?');
   const ins = db.prepare('INSERT INTO playoff_seeding(category, stage, pair_id, pos) VALUES(?, ?, ?, ?)');
@@ -496,38 +588,14 @@ function savePlayoffOrder(category, stage, ids) {
     throw e;
   }
 }
-function playoffHasResults(category) {
-  return db.prepare(
-    `SELECT COUNT(*) c FROM matches WHERE stage IN ('po1','po2') AND category = ?
-     AND (winner_id IS NOT NULL OR wo_winner_id IS NOT NULL)`
-  ).get(category).c > 0;
-}
-
-router.get('/playoffs', (req, res) => {
-  const data = L.CATEGORY_CODES.map(category => {
-    const o1 = playoffOrder(category, 'po1'), o2 = playoffOrder(category, 'po2');
-    return {
-      category,
-      po1: o1, po2: o2,
-      seeds1: L.nextPowerOfTwo(Math.max(o1.length, 2)) / 4,
-      seeds2: L.nextPowerOfTwo(Math.max(o2.length, 2)) / 4,
-      hasResults: playoffHasResults(category),
-    };
-  });
-  res.renderPage('admin/playoffs', {
-    data, generated: getSetting('playoffs_generated', '0') === '1',
-    round3closed: getSetting('round3_closed', '0') === '1',
-    pairName: (id) => L.pairName(db, id),
-  });
-});
 
 // Mover una pareja en el orden de sembrado (antes de generar el cuadro)
 router.post('/playoffs/orden', (req, res) => {
   const category = L.validCategory(req.body.category);
-  const stage = req.body.stage === 'po2' ? 'po2' : 'po1';
+  const stage = /^po\d+$/.test(req.body.stage) ? req.body.stage : 'po1';
   const pairId = parseInt(req.body.pair_id, 10);
   const dir = req.body.dir === 'down' ? 1 : -1;
-  const ids = playoffOrder(category, stage);
+  const { order: ids } = playoffOrder(category, stage);
   const i = ids.indexOf(pairId);
   const j = i + dir;
   if (i >= 0 && j >= 0 && j < ids.length) {
@@ -537,36 +605,88 @@ router.post('/playoffs/orden', (req, res) => {
   res.redirect('/admin/playoffs');
 });
 
+// Marcar una pareja como "no juega el playoff" (antes de generar)
+router.post('/playoffs/excluir', (req, res) => {
+  const category = L.validCategory(req.body.category);
+  const pairId = parseInt(req.body.pair_id, 10);
+  if (playoffHasResults(category)) return res.redirect('/admin/playoffs');
+  const has = db.prepare('SELECT 1 FROM playoff_excluded WHERE category = ? AND pair_id = ?').get(category, pairId);
+  if (has) db.prepare('DELETE FROM playoff_excluded WHERE category = ? AND pair_id = ?').run(category, pairId);
+  else db.prepare('INSERT INTO playoff_excluded(category, pair_id) VALUES(?, ?)').run(category, pairId);
+  res.redirect('/admin/playoffs');
+});
+
 router.post('/playoffs/generar', (req, res) => {
   const category = L.validCategory(req.body.category);
   if (getSetting('round3_closed', '0') !== '1') return res.redirect('/admin/playoffs');
   // Regenerar solo si no hay resultados en los cuadros de esta categoría
   if (playoffHasResults(category)) return res.redirect('/admin/playoffs');
-  db.prepare(`DELETE FROM matches WHERE stage IN ('po1','po2') AND category = ?`).run(category);
+  db.prepare(`DELETE FROM matches WHERE stage LIKE 'po%' AND category = ?`).run(category);
 
-  const ins = db.prepare(`INSERT INTO matches(category, stage, bracket_round, bracket_slot, pair_a_id, pair_b_id)
-                          VALUES(?, ?, ?, ?, ?, ?)`);
-  const processByes = [];
-  for (const [stage, ids] of [['po1', playoffOrder(category, 'po1')], ['po2', playoffOrder(category, 'po2')]]) {
-    if (ids.length < 2) continue;
-    for (const round of L.buildBracket(ids)) {
+  const ins = db.prepare(`INSERT INTO matches(category, stage, bracket_round, bracket_slot, pair_a_id, pair_b_id, seed_a, seed_b)
+                          VALUES(?, ?, ?, ?, ?, ?, ?, ?)`);
+  for (const { stage } of playoffStages(category).stages) {
+    const playing = playoffPlaying(category, stage);
+    if (playing.length < 2) continue;
+    const draw34 = L.drawSeeds34();
+    const rounds = L.buildBracket(playing, draw34);
+    rounds.forEach((round, ri) => {
       for (const mt of round.matches) {
-        const r = ins.run(category, stage, round.code, mt.slot, mt.a, mt.b);
-        if (round.code !== 'F' || true) { /* nada */ }
-        if (mt.a && !mt.b) processByes.push(Number(r.lastInsertRowid));
-        else if (mt.b && !mt.a) processByes.push(Number(r.lastInsertRowid));
+        ins.run(category, stage, round.code, mt.slot, mt.a, mt.b,
+          ri === 0 ? mt.seedA : null, ri === 0 ? mt.seedB : null);
       }
-    }
-  }
-  // Los byes avanzan directamente a la siguiente ronda
-  for (const id of processByes) {
-    const m = db.prepare('SELECT * FROM matches WHERE id = ?').get(id);
-    const w = m.pair_a_id || m.pair_b_id;
-    db.prepare("UPDATE matches SET winner_id = ?, validation = 'auto' WHERE id = ?").run(w, id);
-    advanceWinner(db.prepare('SELECT * FROM matches WHERE id = ?').get(id));
+    });
+    cascadeByes(category, stage);
   }
   setSetting('playoffs_generated', '1');
   res.redirect('/admin/playoffs');
+});
+
+// Intercambiar parejas dentro del cuadro ya generado (solo 1ª ronda y sin resultados reales)
+router.post('/playoffs/intercambiar', (req, res) => {
+  const category = L.validCategory(req.body.category);
+  const stage = req.body.stage;
+  const back = '/admin/playoffs';
+  const err = (msg) => res.redirect(back + '?error=' + encodeURIComponent(msg));
+  if (!/^po\d+$/.test(stage || '')) return res.redirect(back);
+  if (playoffHasRealResults(category, stage)) return err('No se puede intercambiar: el cuadro ya tiene resultados.');
+  const first = firstRoundMatches(category, stage);
+  if (!first.length) return res.redirect(back);
+
+  const current = [];
+  for (const m of first) { current.push(m.pair_a_id); current.push(m.pair_b_id); }
+  const next = [];
+  const updates = [];
+  for (const m of first) {
+    const na = req.body[`a_${m.id}`] ? parseInt(req.body[`a_${m.id}`], 10) : null;
+    const nb = req.body[`b_${m.id}`] ? parseInt(req.body[`b_${m.id}`], 10) : null;
+    next.push(na); next.push(nb);
+    updates.push({ id: m.id, na, nb });
+  }
+  // Debe ser una reordenación de las mismas parejas (sin duplicados ni intrusos)
+  const playing = new Set(playoffPlaying(category, stage));
+  const norm = (arr) => arr.filter(x => x != null).sort((x, y) => x - y).join(',');
+  if (norm(current) !== norm(next)) return err('El intercambio debe mantener las mismas parejas, sin duplicar.');
+  if (next.some(x => x != null && !playing.has(x))) return err('Hay parejas no válidas en el intercambio.');
+
+  const clearResult = `s1a=NULL, s1b=NULL, s2a=NULL, s2b=NULL, s3a=NULL, s3b=NULL, stb_a=NULL, stb_b=NULL,
+    winner_id=NULL, wo_winner_id=NULL, unplayed=0, submitted_by=NULL, submitted_at=NULL,
+    validation='none', validation_deadline=NULL, notes=''`;
+  db.exec('BEGIN');
+  try {
+    const up1 = db.prepare(`UPDATE matches SET pair_a_id = ?, pair_b_id = ?, seed_a = NULL, seed_b = NULL, ${clearResult} WHERE id = ?`);
+    for (const u of updates) up1.run(u.na, u.nb, u.id);
+    // Vaciar las rondas siguientes (solo podían tener avances automáticos de byes)
+    db.prepare(`UPDATE matches SET pair_a_id = NULL, pair_b_id = NULL, seed_a = NULL, seed_b = NULL, ${clearResult}
+                WHERE category = ? AND stage = ? AND bracket_round != ?`)
+      .run(category, stage, first[0].bracket_round);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    return err('No se pudo aplicar el intercambio.');
+  }
+  cascadeByes(category, stage);
+  res.redirect(back + '?ok=' + encodeURIComponent('Cuadro actualizado.'));
 });
 
 

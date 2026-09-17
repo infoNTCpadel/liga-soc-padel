@@ -14,7 +14,8 @@
 <div class="card">
   <p><strong><%= pairName(m.pair_a_id) %></strong> <span class="mut">vs</span> <strong><%= pairName(m.pair_b_id) %></strong>
     <% if (m.group_no) { %><span class="small mut">· R<%= m.round_no %> · Grupo <%= m.group_no %></span><% } %>
-    <% if (m.bracket_round) { %><span class="small mut">· <%= m.stage === 'po1' ? '1ª' : '2ª' %> · <%= bracketName(m.bracket_round) %></span><% } %>
+    <% if (m.bracket_round) { %><span class="small mut">· <%= playoffOrdinal(m.stage) %> · <%= bracketName(m.bracket_round) %></span><% } %>
+    <% if (m.avail_a || m.avail_b) { %><button type="button" class="btn small ghost" data-avail data-aa="<%= m.avail_a || '' %>" data-ab="<%= m.avail_b || '' %>" data-na="<%= pairName(m.pair_a_id) %>" data-nb="<%= pairName(m.pair_b_id) %>" title="Ver los días que no pueden jugar">📝 disponibilidad</button><% } %>
   </p>
   <p class="small">Resultado actual: <strong><%= scoreStr(m) %></strong>
     <% const vb = valBadge(m); %>
@@ -26,7 +27,7 @@
     <% if (vb === 'validado') { %><span class="badge validado">validado</span><% } %>
   </p>
   <p class="small">📍 <strong><%= slotStr(m) || 'Sin programar' %></strong></p>
-  <details>
+  <details data-sched <% if (m.avail_a || m.avail_b) { %>data-avail data-aa="<%= m.avail_a || '' %>" data-ab="<%= m.avail_b || '' %>" data-na="<%= pairName(m.pair_a_id) %>" data-nb="<%= pairName(m.pair_b_id) %>"<% } %>>
     <summary class="small" style="cursor:pointer; color: var(--lime)">Pista y horario</summary>
     <form method="post" action="/admin/partidos/<%= m.id %>/horario" style="margin-top:10px">
       <div class="row2">
@@ -75,3 +76,41 @@
 </div>
 <% } %>
 <% if (!matches.length) { %><p class="mut">No hay partidos.</p><% } %>
+
+<div id="availModal" class="modal" hidden>
+  <div class="modal-box">
+    <h3>📝 Disponibilidad de las parejas</h3>
+    <div id="availBody"></div>
+    <p style="margin-top:12px"><button class="btn small" type="button" id="availClose">Cerrar</button></p>
+  </div>
+</div>
+<style>
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+.modal[hidden] { display: none; }
+.modal-box { background: var(--card, #1c1f26); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; max-width: 440px; width: 100%; }
+.modal-box p { margin: 8px 0; }
+</style>
+<script>
+(function () {
+  var modal = document.getElementById('availModal');
+  var body = document.getElementById('availBody');
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function show(el) {
+    var h = '';
+    if (el.dataset.aa) h += '<p><strong>' + esc(el.dataset.na) + '</strong><br>' + esc(el.dataset.aa) + '</p>';
+    if (el.dataset.ab) h += '<p><strong>' + esc(el.dataset.nb) + '</strong><br>' + esc(el.dataset.ab) + '</p>';
+    if (!h) return;
+    body.innerHTML = h;
+    modal.hidden = false;
+  }
+  document.getElementById('availClose').addEventListener('click', function () { modal.hidden = true; });
+  modal.addEventListener('click', function (e) { if (e.target === modal) modal.hidden = true; });
+  document.querySelectorAll('[data-avail]').forEach(function (el) {
+    if (el.tagName === 'BUTTON') {
+      el.addEventListener('click', function () { show(el); });
+    } else if (el.tagName === 'DETAILS') {
+      el.addEventListener('toggle', function () { if (el.open) show(el); });
+    }
+  });
+})();
+</script>

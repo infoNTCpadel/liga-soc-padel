@@ -104,7 +104,7 @@
   const done = m.winner_id || m.wo_winner_id || m.unplayed;
 %>
   <div class="match">
-    <span class="teams"><span class="badge cat"><%= m.stage === 'po1' ? '1ª' : '2ª' %> · <%= bracketName(m.bracket_round) %></span> vs <%= rival ? pairName(rival) : 'Por decidir' %>
+    <span class="teams"><span class="badge cat"><%= playoffOrdinal(m.stage) %> · <%= bracketName(m.bracket_round) %></span> vs <%= rival ? pairName(rival) : 'Por decidir' %>
       <% const slp = slotStr(m); if (slp) { %><br><span class="small mut">📍 <%= slp %></span><% } %>
     </span>
     <span class="score"><%= scoreStr(m) %></span>

@@ -123,14 +123,21 @@ si quieres, elimina la de prueba.
 ### 1. Preparación
 - **/admin/ajustes**: pon el nombre de tu club, revisa las fechas de cada fase.
 - **/admin/preguntas**: añade preguntas extra al formulario de inscripción
-  (los datos básicos —nombres, teléfonos, nivel, camiseta— siempre se piden).
+  (los datos básicos —nombres, teléfonos, nivel— siempre se piden). La
+  **camiseta oficial** es una pregunta del sistema: está inactiva por defecto
+  y se activa aquí cuando el club la ofrezca; el precio se configura en
+  **/admin/ajustes**.
 - Comparte el enlace **/inscripcion** con los jugadores.
 
 ### 2. Inscripciones (hasta el 2 de octubre)
 - Revisa cada inscripción en **/admin/inscripciones** y actívala.
 - Marca quién ha pagado en el club (19,95 €/jugador) desde la ficha de cada
-  pareja; controla las camisetas (14,95 €) en el mismo sitio.
+  pareja; si activaste la camiseta, controla los pedidos (talla por jugador)
+  en el mismo sitio.
 - Cada pareja recibe un **código de acceso** para gestionar sus partidos.
+  Desde **Mis datos** pueden actualizar sus datos y anotar su
+  **disponibilidad** (días que no pueden jugar, máx. 120 caracteres); al
+  programar pista y horario en **/admin/partidos** verás esa nota.
 
 ### 3. Ronda 1 (5 oct – 1 nov)
 - **/admin/grupos**: genera los grupos por nivel y el calendario (todos contra todos).
@@ -154,8 +161,14 @@ si quieres, elimina la de prueba.
   puntos de cada ronda automáticamente.
 
 ### 5. Playoffs (28 dic – 31 ene)
-- **/admin/playoffs**: genera los cuadros. El ranking se divide por la mitad:
-  playoff de 1ª y de 2ª categoría, con cabezas de serie y byes si hace falta.
+- **/admin/playoffs**: genera los cuadros. El ranking se divide en categorías
+  de 16 parejas (1ª, 2ª, 3ª…); si el resto final tiene menos de 8 parejas, esas
+  no juegan. Antes de generar puedes reordenar cabezas de serie (↑ ↓) y marcar
+  las parejas que no vayan a jugar.
+- Colocación: cabeza nº 2 arriba del todo, nº 1 abajo del todo, nº 3 y 4 por
+  sorteo en los cuartos que cruzarían en semifinales. Huecos vacíos = BYE (la
+  pareja exenta pasa de ronda automáticamente). Ya generado, puedes
+  intercambiar parejas dentro del cuadro mientras no haya resultados.
 - Los ganadores avanzan solos de ronda. Los resultados los suben las parejas
   o la organización. Los campeones de cada playoff son los campeones de la
   temporada en su categoría.

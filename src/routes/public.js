@@ -43,15 +43,21 @@ router.get('/normativa', (req, res) => {
 
 // ---- Inscripción ----
 function activeQuestions() {
-  return db.prepare('SELECT * FROM custom_questions WHERE active = 1 ORDER BY position, id').all()
+  // Preguntas genéricas (la camiseta del sistema se gestiona aparte, por jugador)
+  return db.prepare("SELECT * FROM custom_questions WHERE active = 1 AND sys_key = '' ORDER BY position, id").all()
     .map(q => ({ ...q, options: JSON.parse(q.options || '[]') }));
+}
+// Pregunta del sistema "camiseta": preconfigurada, por jugador; solo visible si está activa.
+function shirtQuestion() {
+  const q = db.prepare("SELECT * FROM custom_questions WHERE sys_key = 'shirt' AND active = 1").get();
+  return q ? { ...q, options: JSON.parse(q.options || '[]') } : null;
 }
 
 function eur(v) { return Number(v || 0).toFixed(2).replace('.', ','); }
 router.get('/inscripcion', (req, res) => {
   res.renderPage('public/inscripcion', { questions: activeQuestions(), error: null, form: {},
     priceInscription: eur(getSetting('inscription_price', '19.95')),
-    priceShirt: eur(getSetting('shirt_price', '14.95')) });
+    priceShirt: eur(getSetting('shirt_price', '14.95')), shirtQ: shirtQuestion() });
 });
 
 function genCode() {
@@ -67,16 +73,17 @@ router.post('/inscripcion', (req, res) => {
   const b = req.body;
   const error = (msg) => res.renderPage('public/inscripcion', { questions: activeQuestions(), error: msg, form: b,
     priceInscription: eur(getSetting('inscription_price', '19.95')),
-    priceShirt: eur(getSetting('shirt_price', '14.95')) });
+    priceShirt: eur(getSetting('shirt_price', '14.95')), shirtQ: shirtQuestion() });
 
   const category = L.validCategory(b.category);
+  const shirtActive = !!shirtQuestion();
   const mk = (n) => ({
     name: (b[`p${n}_name`] || '').trim(),
     email: (b[`p${n}_email`] || '').trim(),
     phone: (b[`p${n}_phone`] || '').trim(),
     level: parseFloat(b[`p${n}_level`]),
-    shirt: b[`p${n}_shirt`] ? 1 : 0,
-    shirt_size: (b[`p${n}_shirt_size`] || '').trim(),
+    shirt: shirtActive && b[`p${n}_shirt`] ? 1 : 0,
+    shirt_size: shirtActive ? (b[`p${n}_shirt_size`] || '').trim() : '',
   });
   const p1 = mk(1), p2 = mk(2);
 
@@ -184,13 +191,12 @@ function bracketView(category, stage) {
     if (!r) { r = { code: m.bracket_round, name: L.BRACKET_NAME_BY_CODE[m.bracket_round] || m.bracket_round, matches: [] }; rounds.push(r); }
     r.matches.push({ ...m, outcome: L.matchOutcome(m), slot: L.formatSlot(m.scheduled_at, m.court_name) });
   }
-  // Cabezas de serie en la primera ronda (orden clásico de sembrado).
+  // Cabezas de serie en la primera ronda (guardadas al generar el cuadro).
   if (rounds.length) {
     const first = rounds[0].matches;
-    const order = L.seedOrder(first.length * 2);
-    first.forEach((m, i) => {
-      m.seed_a = m.pair_a_id ? order[i * 2] : null;
-      m.seed_b = m.pair_b_id ? order[i * 2 + 1] : null;
+    first.forEach((m) => {
+      m.seed_a = m.pair_a_id ? (m.seed_a || null) : null;
+      m.seed_b = m.pair_b_id ? (m.seed_b || null) : null;
     });
   }
   return rounds;
@@ -200,10 +206,14 @@ router.get('/playoffs', (req, res) => res.redirect('/playoffs/M'));
 router.get('/playoffs/:category', (req, res) => {
   const category = L.validCategory(req.params.category);
   const generated = getSetting('playoffs_generated', '0') === '1';
+  const stages = db.prepare(
+    `SELECT DISTINCT stage FROM matches WHERE category = ? AND stage LIKE 'po%' ORDER BY stage`
+  ).all(category).map(r => r.stage);
+  const brackets = stages.map(stage => ({
+    stage, ordinal: L.playoffOrdinal(stage), rounds: bracketView(category, stage),
+  }));
   res.renderPage('public/playoffs', {
-    category, generated,
-    po1: bracketView(category, 'po1'),
-    po2: bracketView(category, 'po2'),
+    category, generated, brackets,
     pairName: (id) => L.pairName(db, id),
   });
 });

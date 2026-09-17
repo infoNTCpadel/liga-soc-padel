@@ -17,6 +17,12 @@ function requirePair(req, res, next) {
 }
 router.use(requirePair);
 
+// Pregunta del sistema "camiseta": preconfigurada, por jugador; solo visible si está activa.
+function shirtQuestion() {
+  const q = db.prepare("SELECT * FROM custom_questions WHERE sys_key = 'shirt' AND active = 1").get();
+  return q ? { ...q, options: JSON.parse(q.options || '[]') } : null;
+}
+
 function pairPlayers(pairId) {
   return db.prepare(
     `SELECT p.*, pl.name, pl.email, pl.phone, pl.level, pl.shirt, pl.shirt_size, pl.paid
@@ -27,7 +33,7 @@ function pairPlayers(pairId) {
 
 // Propaga el ganador de un partido de playoff al siguiente cruce.
 function advanceWinner(match) {
-  if (match.stage !== 'po1' && match.stage !== 'po2') return;
+  if (!L.isPlayoffStage(match.stage)) return;
   const o = L.matchOutcome(match);
   if (!o || !L.countsForStandings({ ...match, validation: match.validation })) return;
   const next = L.BRACKET_NEXT[match.bracket_round];
@@ -62,7 +68,7 @@ router.get('/', (req, res) => {
   // Partidos de playoff
   const poMatches = db.prepare(
     `SELECT m.*, c.name AS court_name FROM matches m LEFT JOIN courts c ON c.id = m.court_id
-     WHERE stage IN ('po1','po2') AND (pair_a_id = ? OR pair_b_id = ?)
+     WHERE stage LIKE 'po%' AND (pair_a_id = ? OR pair_b_id = ?)
      ORDER BY CASE bracket_round WHEN 'R32' THEN 0 WHEN 'R16' THEN 1 WHEN 'QF' THEN 2 WHEN 'SF' THEN 3 WHEN 'F' THEN 4 ELSE 9 END`
   ).all(pair.id, pair.id);
 
@@ -234,18 +240,20 @@ router.get('/datos', (req, res) => {
   const pair = req.pair;
   const players = db.prepare('SELECT * FROM players WHERE id IN (?, ?)').all(pair.player1_id, pair.player2_id)
     .sort((a, b) => (a.id === pair.player1_id ? -1 : 1));
-  res.renderPage('pair/datos', { pair, players, error: null, ok: req.query.ok === '1' });
+  res.renderPage('pair/datos', { pair, players, error: null, ok: req.query.ok === '1', shirtQ: shirtQuestion() });
 });
 
 router.post('/datos', (req, res) => {
   const pair = req.pair;
   const b = req.body;
+  const shirtQ = shirtQuestion();
   const players = db.prepare('SELECT * FROM players WHERE id IN (?, ?)').all(pair.player1_id, pair.player2_id);
   const err = (msg) => res.renderPage('pair/datos', {
     pair,
     players: players.sort((a, x) => (a.id === pair.player1_id ? -1 : 1)),
-    error: msg, ok: false,
+    error: msg, ok: false, shirtQ,
   });
+  const availability = (b.availability || '').trim().slice(0, 120);
   const upd = [];
   for (const pl of players) {
     const n = pl.id === pair.player1_id ? 1 : 2;
@@ -253,8 +261,8 @@ router.post('/datos', (req, res) => {
     const phone = (b[`p${n}_phone`] || '').trim();
     const email = (b[`p${n}_email`] || '').trim();
     const level = parseFloat(b[`p${n}_level`]);
-    const shirt = b[`p${n}_shirt`] ? 1 : 0;
-    const shirtSize = (b[`p${n}_shirt_size`] || '').trim();
+    const shirt = shirtQ ? (b[`p${n}_shirt`] ? 1 : 0) : pl.shirt;
+    const shirtSize = shirtQ ? (b[`p${n}_shirt_size`] || '').trim() : pl.shirt_size;
     if (!name) return err('El nombre de cada jugador es obligatorio.');
     if (!phone) return err('El teléfono de cada jugador es obligatorio (lo usan los rivales para organizar los partidos).');
     if (!(level >= 0 && level <= 6)) return err('El nivel debe estar entre 0 y 6.');
@@ -264,7 +272,7 @@ router.post('/datos', (req, res) => {
   const u = db.prepare('UPDATE players SET name = ?, phone = ?, email = ?, level = ?, shirt = ?, shirt_size = ? WHERE id = ?');
   for (const p of upd) u.run(p.name, p.phone, p.email, p.level, p.shirt, p.shirtSize, p.id);
   const avg = Math.round(((upd[0].level + upd[1].level) / 2) * 100) / 100;
-  db.prepare('UPDATE pairs SET level_avg = ? WHERE id = ?').run(avg, pair.id);
+  db.prepare('UPDATE pairs SET level_avg = ?, availability = ? WHERE id = ?').run(avg, availability, pair.id);
   res.redirect('/pareja/datos?ok=1');
 });
 

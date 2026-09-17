@@ -16,16 +16,25 @@
       <div class="field"><label>Email</label><input type="email" name="p<%= n %>_email" value="<%= pl.email %>"></div>
       <div class="field"><label>Nivel Playtomic (0 – 6) *</label><input type="number" name="p<%= n %>_level" step="0.1" min="0" max="6" required value="<%= pl.level %>"></div>
     </div>
+    <% if (shirtQ) { %>
     <div class="field">
       <label><input type="checkbox" name="p<%= n %>_shirt" value="1" <%= pl.shirt ? 'checked' : '' %>> Quiero la camiseta oficial</label>
     </div>
     <div class="field"><label>Talla de camiseta <span class="hint">(si la quieres)</span></label>
       <select name="p<%= n %>_shirt_size">
         <option value="">—</option>
-        <% for (const t of ['XS','S','M','L','XL','XXL']) { %><option <%= pl.shirt_size === t ? 'selected' : '' %>><%= t %></option><% } %>
+        <% for (const t of shirtQ.options.slice(1)) { %><option <%= pl.shirt_size === t ? 'selected' : '' %>><%= t %></option><% } %>
       </select>
     </div>
+    <% } %>
   </div>
   <% }); %>
+  <div class="card">
+    <h3>Disponibilidad</h3>
+    <p class="mut small">Indica en pocas palabras qué días no podéis jugar (p. ej. «no podemos los martes ni los jueves por la tarde»). Lo verá la organización al programar los horarios.</p>
+    <div class="field"><label>Días que no podéis jugar</label>
+      <input type="text" name="availability" maxlength="120" value="<%= pair.availability || '' %>" placeholder="p. ej. no podemos los lunes">
+    </div>
+  </div>
   <p><button class="btn" type="submit">Guardar cambios</button> <a class="btn ghost" href="/pareja">Volver</a></p>
 </form>

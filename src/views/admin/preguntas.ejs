@@ -1,5 +1,5 @@
 <h1>Preguntas del formulario de inscripción</h1>
-<p class="mut">Los datos básicos (nombres, teléfonos, email, nivel, camiseta y capitán) siempre se piden. Aquí puedes añadir preguntas extra.</p>
+<p class="mut">Los datos básicos (nombres, teléfonos, email, nivel y capitán) siempre se piden. La <strong>camiseta</strong> es una pregunta del sistema: viene preconfigurada e inactiva, actívala cuando quieras ofrecerla (el precio se configura en Ajustes). Aquí puedes añadir preguntas extra.</p>
 
 <div class="card">
   <h3>Añadir pregunta</h3>
@@ -20,13 +20,15 @@
   <tr><th>Pregunta</th><th>Tipo</th><th>Obligatoria</th><th>Activa</th><th></th></tr>
   <% for (const q of qs) { %>
     <tr>
-      <td><%= q.label %><% if (q.options.length) { %><br><span class="small mut"><%= q.options.join(' · ') %></span><% } %></td>
+      <td><%= q.label %><% if (q.sys_key === 'shirt') { %> <span class="badge info">sistema</span><% } %><% if (q.options.length) { %><br><span class="small mut"><%= q.options.join(' · ') %></span><% } %></td>
       <td><%= q.type %></td>
       <td><%= q.required ? 'Sí' : 'No' %></td>
       <td><span class="badge <%= q.active ? 'ok' : 'bad' %>"><%= q.active ? 'sí' : 'no' %></span></td>
       <td>
         <form method="post" action="/admin/preguntas/<%= q.id %>/toggle" style="display:inline"><button class="btn small ghost" type="submit"><%= q.active ? 'Desactivar' : 'Activar' %></button></form>
+        <% if (!q.sys_key) { %>
         <form method="post" action="/admin/preguntas/<%= q.id %>/eliminar" style="display:inline" onsubmit="return confirm('¿Eliminar pregunta?')"><button class="btn small danger" type="submit">Eliminar</button></form>
+        <% } %>
       </td>
     </tr>
   <% } %>

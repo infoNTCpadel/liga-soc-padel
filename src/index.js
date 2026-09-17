@@ -68,6 +68,7 @@ app.use((req, res, next) => {
     return 'Baja 2 grupos';
   };
   res.locals.bracketName = (code) => L.BRACKET_NAME_BY_CODE[code] || code || '';
+  res.locals.playoffOrdinal = (stage) => L.playoffOrdinal(stage);
   res.locals.CATEGORIES = L.CATEGORIES;
   res.locals.catName = L.catName;
   next();

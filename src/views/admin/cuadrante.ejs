@@ -19,7 +19,7 @@
         <td rowspan="<%= cell.span %>" class="qmatch<%= cell.m.clash ? ' clash' : '' %>">
           <strong><%= pairName(cell.m.pair_a_id) %></strong><br>
           <span class="mut">vs</span> <strong><%= pairName(cell.m.pair_b_id) %></strong><br>
-          <span class="small mut"><%= cell.m.bracket_round ? (cell.m.stage === 'po1' ? 'Playoff 1ª' : 'Playoff 2ª') + ' · ' + cell.m.bracket_round : 'R' + (cell.m.gr || cell.m.round_no) + (cell.m.group_no ? ' · Grupo ' + cell.m.group_no : '') %></span>
+          <span class="small mut"><%= cell.m.bracket_round ? ('Playoff ' + playoffOrdinal(cell.m.stage)) + ' · ' + cell.m.bracket_round : 'R' + (cell.m.gr || cell.m.round_no) + (cell.m.group_no ? ' · Grupo ' + cell.m.group_no : '') %></span>
           <% if (cell.m.clash) { %><br><span class="badge disputado">¡Solape!</span><% } %>
         </td>
       <% } else { %>

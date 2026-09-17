@@ -24,15 +24,17 @@
       <div class="field"><label>Email</label><input type="email" name="p<%= n %>_email" value="<%= form['p'+n+'_email'] || '' %>"></div>
       <div class="field"><label>Nivel Playtomic (0 – 6) *</label><input type="number" name="p<%= n %>_level" step="0.1" min="0" max="6" required value="<%= form['p'+n+'_level'] || '' %>"></div>
     </div>
+    <% if (shirtQ) { %>
     <div class="field">
       <label><input type="checkbox" name="p<%= n %>_shirt" value="1" <%= form['p'+n+'_shirt'] ? 'checked' : '' %>> Quiero la camiseta oficial (+<%= priceShirt %>&nbsp;€)</label>
     </div>
     <div class="field"><label>Talla de camiseta <span class="hint">(si la quieres)</span></label>
       <select name="p<%= n %>_shirt_size">
         <option value="">—</option>
-        <% for (const t of ['XS','S','M','L','XL','XXL']) { %><option <%= (form['p'+n+'_shirt_size']||'')===t?'selected':'' %>><%= t %></option><% } %>
+        <% for (const t of shirtQ.options.slice(1)) { %><option <%= (form['p'+n+'_shirt_size']||'')===t?'selected':'' %>><%= t %></option><% } %>
       </select>
     </div>
+    <% } %>
   </div>
   <% } %>
 

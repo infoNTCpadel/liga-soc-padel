@@ -298,12 +298,38 @@ function roundRobin(ids) {
 
 // ---------------------------------------------------------------------------
 // Cuadros de playoff (eliminatoria simple).
-// Cabezas de serie clásicas: 1 vs último, etc. Con byes si no es potencia de 2.
+// Colocación de cabezas de serie: la nº 2 arriba del todo (posición 1),
+// la nº 1 abajo del todo (última posición), y las nº 3 y 4 por sorteo entre
+// la cabeza del 2º cuarto (posición 5) y la del 3er cuarto (posición 12),
+// que son las que se cruzarían con la 2 y la 1 en semifinales.
+// El resto de parejas rellena los huecos libres en orden de ranking.
 // ---------------------------------------------------------------------------
 function nextPowerOfTwo(n) {
   let p = 1;
   while (p < n) p *= 2;
   return p;
+}
+
+// draw34: [3,4] o [4,3] (sorteo de las semillas 3 y 4). Devuelve array de
+// longitud `size` con el nº de semilla (1..n) en cada posición, o null (bye).
+function placeSeeds(size, n, draw34) {
+  const pos = new Array(size).fill(null);
+  if (n >= 1) pos[size - 1] = 1;   // semilla 1: abajo del todo
+  if (n >= 2) pos[0] = 2;          // semilla 2: arriba del todo
+  let next = 3;
+  if (size >= 16 && n >= 4) {
+    const d = draw34 && draw34.length === 2 ? draw34 : [3, 4];
+    pos[4] = d[0]; pos[11] = d[1]; // sorteo: cuartos que cruzan en semis
+    next = 5;
+  }
+  for (let i = 0; i < size && next <= n; i++) {
+    if (pos[i] === null) pos[i] = next++;
+  }
+  return pos;
+}
+
+function drawSeeds34() {
+  return Math.random() < 0.5 ? [3, 4] : [4, 3];
 }
 
 function seedOrder(size) {
@@ -320,17 +346,17 @@ const BRACKET_NAME_BY_CODE = { R32: 'Dieciseisavos', R16: 'Octavos', QF: 'Cuarto
 const BRACKET_NEXT = { R32: 'R16', R16: 'QF', QF: 'SF', SF: 'F', F: null };
 const BRACKET_CODE = { 32: 'R32', 16: 'R16', 8: 'QF', 4: 'SF', 2: 'F' };
 
-function buildBracket(rankedIds) {
+function buildBracket(rankedIds, draw34) {
   const n = rankedIds.length;
   const size = nextPowerOfTwo(Math.max(n, 2));
-  const order = seedOrder(size);
-  const seeds = order.map(s => (s <= n ? rankedIds[s - 1] : null)); // null = bye
+  const placement = placeSeeds(size, n, draw34);
+  const seeds = placement.map(s => (s && s <= n ? rankedIds[s - 1] : null)); // null = bye
   const rounds = [];
   let matchCount = size / 2;
   let code = BRACKET_CODE[size];
   const first = [];
   for (let i = 0; i < size; i += 2) {
-    first.push({ slot: i / 2, a: seeds[i], b: seeds[i + 1] });
+    first.push({ slot: i / 2, a: seeds[i], b: seeds[i + 1], seedA: placement[i], seedB: placement[i + 1] });
   }
   rounds.push({ code, name: BRACKET_NAMES[size], matches: first });
   let prevSlots = matchCount;
@@ -345,14 +371,27 @@ function buildBracket(rankedIds) {
   return rounds;
 }
 
-// División del ranking en dos mitades para los playoffs de 1ª y 2ª.
-// Máximo 32 parejas por cuadro (normativa).
-function splitPlayoffs(rankedIds) {
-  const half = Math.ceil(rankedIds.length / 2);
-  return {
-    po1: rankedIds.slice(0, half).slice(0, 32),
-    po2: rankedIds.slice(half).slice(0, 32),
-  };
+// División del ranking en categorías de 16 parejas para los playoffs.
+// Se completan categorías de 16 desde lo alto del ranking; el resto forma su
+// propia categoría si tiene 8 o más parejas; si tiene menos de 8, esas parejas
+// no juegan el playoff.
+function splitPlayoffCategories(rankedIds) {
+  const rest = [...rankedIds];
+  const cats = [];
+  while (rest.length >= 16) cats.push(rest.splice(0, 16));
+  let unused = [];
+  if (rest.length >= 8) cats.push(rest);
+  else unused = rest;
+  return { cats, unused };
+}
+
+// 'po1' -> '1ª', 'po2' -> '2ª', ...
+function playoffOrdinal(stage) {
+  const m = /^po(\d+)$/.exec(stage || '');
+  return m ? `${m[1]}ª` : '';
+}
+function isPlayoffStage(stage) {
+  return /^po\d+$/.test(stage || '');
 }
 
 // ---------------------------------------------------------------------------
@@ -450,7 +489,8 @@ module.exports = {
   roundPoints, matchOutcome, countsForStandings, isSetFinished,
   computeStandings, movementDelta, targetGroup,
   chunkIntoGroups, roundRobin, nextPowerOfTwo, seedOrder, formatSlot,
-  buildBracket, splitPlayoffs, BRACKET_NEXT, BRACKET_NAMES, BRACKET_NAME_BY_CODE,
+  buildBracket, splitPlayoffCategories, placeSeeds, drawSeeds34, playoffOrdinal, isPlayoffStage,
+  BRACKET_NEXT, BRACKET_NAMES, BRACKET_NAME_BY_CODE,
   autoValidateExpired,
   getGroups, getGroupMembers, getGroupMatches, pairName, getRanking,
   PLAYTOMIC_BRACKETS, bracketOf,

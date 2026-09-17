@@ -12,7 +12,7 @@
         <div class="bmatch<%= r.code === 'F' ? ' final' : '' %>">
           <% for (const [pid, seed] of [[m.pair_a_id, m.seed_a], [m.pair_b_id, m.seed_b]]) { %>
             <% if (!pid) { %>
-              <div class="p tbd"><span>A definir</span></div>
+              <div class="p tbd"><span><%= isBye ? 'BYE' : 'A definir' %></span></div>
             <% } else {
               const o = m.outcome;
               const win = !!(o && o.winnerId === pid);
