@@ -138,6 +138,7 @@ router.post('/resultado/:id', (req, res) => {
   if (!m || (m.pair_a_id !== pair.id && m.pair_b_id !== pair.id)) return res.status(403).send('Partido no válido.');
   if (m.winner_id || m.wo_winner_id) return res.redirect('/pareja'); // ya tiene resultado
   const fail = (msg) => res.redirect('/pareja?error=' + encodeURIComponent(msg));
+  if (L.matchStageClosed(getSetting, m)) return fail('La fase está cerrada: no se pueden subir resultados.');
 
   const b = req.body;
   const wo = !!b.wo;
@@ -190,6 +191,7 @@ router.post('/validar/:id', (req, res) => {
   const m = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.id);
   if (!m || (m.pair_a_id !== pair.id && m.pair_b_id !== pair.id)) return res.status(403).send('No válido.');
   if (m.validation !== 'pending' || m.submitted_by === pair.id) return res.redirect('/pareja');
+  if (L.matchStageClosed(getSetting, m)) return res.redirect('/pareja?error=' + encodeURIComponent('La fase está cerrada.'));
   db.prepare("UPDATE matches SET validation = 'validated' WHERE id = ?").run(m.id);
   res.redirect('/pareja');
 });
@@ -199,6 +201,7 @@ router.post('/disputar/:id', (req, res) => {
   const m = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.id);
   if (!m || (m.pair_a_id !== pair.id && m.pair_b_id !== pair.id)) return res.status(403).send('No válido.');
   if (m.validation !== 'pending' || m.submitted_by === pair.id) return res.redirect('/pareja');
+  if (L.matchStageClosed(getSetting, m)) return res.redirect('/pareja?error=' + encodeURIComponent('La fase está cerrada.'));
   db.prepare("UPDATE matches SET validation = 'disputed' WHERE id = ?").run(m.id);
   res.redirect('/pareja');
 });

@@ -13,6 +13,17 @@
   <% } %>
 <% } %>
 
+<div class="card">
+  <h3>Cierre de playoffs</h3>
+  <% if (playoffsClosed) { %>
+    <p><span class="badge bad">Cerrados</span> <span class="mut small">No se admiten resultados (ni de parejas ni del admin).</span></p>
+    <form method="post" action="/admin/playoffs/cierre"><button class="btn small" type="submit">Reabrir playoffs</button></form>
+  <% } else { %>
+    <p class="mut small">Al terminar los playoffs, ciérralos para bloquear la entrada de resultados.</p>
+    <form method="post" action="/admin/playoffs/cierre" onsubmit="return confirm('¿Cerrar los playoffs? Ya no se podrán subir ni corregir resultados.')"><button class="btn small danger" type="submit">Cerrar playoffs</button></form>
+  <% } %>
+</div>
+
 <% for (const d of data) { %>
 <div class="card">
   <h3>Categoría <%= catName(d.category).toLowerCase() %></h3>

@@ -7,8 +7,13 @@
   <% for (const c of CATEGORIES) { %><a href="/admin/partidos?stage=po&category=<%= c.code %>" class="<%= stage==='po'&&category===c.code?'on':'' %>">Playoffs <%= c.code %></a><% } %>
   <% if (stage === 'groups') { %><span style="flex:1"></span>
     <% for (const r of [1,2,3]) { %><a href="/admin/partidos?stage=groups&category=<%= category %>&round=<%= r %>" class="<%= round===r?'on':'' %>">R<%= r %></a><% } %>
+  <% } else if (blocks.length > 1) { %><span style="flex:1"></span>
+    <a href="/admin/partidos?stage=po&category=<%= category %>" class="<%= block==='all'?'on':'' %>">Todos</a>
+    <% for (const b of blocks) { %><a href="/admin/partidos?stage=po&category=<%= category %>&block=<%= b %>" class="<%= block===b?'on':'' %>"><%= playoffOrdinal(b) %></a><% } %>
   <% } %>
 </div>
+
+<% if (unscheduled > 0) { %><p><span class="badge pending"><%= unscheduled %> sin programar</span> <span class="mut small">sin pista u horario asignado</span></p><% } %>
 
 <% for (const m of matches) { %>
 <div class="card">

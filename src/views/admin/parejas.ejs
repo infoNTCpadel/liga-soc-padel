@@ -1,4 +1,10 @@
 <h1>Parejas</h1>
+<div class="tabs">
+  <a href="/admin/parejas?category=all" class="<%= category==='all'?'on':'' %>">Todas</a>
+  <% for (const c of CATEGORIES) { %><a href="/admin/parejas?category=<%= c.code %>" class="<%= category===c.code?'on':'' %>"><%= c.name %></a><% } %>
+  <span style="margin-left:auto"></span>
+  <a class="btn small ghost" href="/admin/export/parejas<%= category==='all'?'':'?category='+category %>">Exportar CSV</a>
+</div>
 <p><a class="btn small" href="/admin/parejas/nueva">Añadir pareja manualmente</a></p>
 <div class="card"><div class="tblwrap"><table class="tbl">
   <tr><th>Código</th><th>Pareja</th><th>Cat</th><th class="num">Nivel</th><th>Estado</th><th>Cambios</th><th></th></tr>

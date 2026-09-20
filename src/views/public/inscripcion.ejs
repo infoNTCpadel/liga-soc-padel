@@ -1,3 +1,6 @@
+<% if (closed) { %>
+<div class="alert error">La inscripción está cerrada. Si tienes cualquier duda, contacta con la organización del club.</div>
+<% } else { %>
 <h1>Inscripción de parejas</h1>
 <p class="mut">Rellena los datos de los dos jugadores. Al enviar recibirás un <strong>código de acceso</strong> para gestionar vuestros partidos. El pago (<%= priceInscription %>&nbsp;€ por jugador) se realiza en el club.</p>
 
@@ -72,3 +75,4 @@
   <p><button class="btn" type="submit">Enviar inscripción</button></p>
   <p class="mut small">Al inscribiros aceptáis la normativa de la liga. La organización revisará vuestra inscripción antes de activarla.</p>
 </form>
+<% } %>

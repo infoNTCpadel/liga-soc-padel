@@ -87,7 +87,23 @@ router.get('/inscripciones', (req, res) => {
   if (paid === '1') { sql += ' AND p1.paid = 1 AND p2.paid = 1'; }
   if (q) { sql += ' AND (p1.name LIKE ? OR p2.name LIKE ? OR p.code LIKE ?)'; params.push(`%${q}%`, `%${q}%`, `%${q}%`); }
   sql += ' ORDER BY p.created_at DESC';
-  res.renderPage('admin/inscripciones', { rows: db.prepare(sql).all(...params), status, paid, q });
+  const rows = db.prepare(sql).all(...params);
+  // Posibles duplicados: mismo nombre o mismo teléfono en 2+ parejas distintas
+  const dupes = new Set();
+  const seen = {};
+  for (const pl of db.prepare(`SELECT pl.name, pl.phone, p.id AS pair_id FROM players pl
+      JOIN pairs p ON p.player1_id = pl.id OR p.player2_id = pl.id`).all()) {
+    const keys = [];
+    const nm = (pl.name || '').trim().toLowerCase();
+    if (nm) keys.push('n:' + nm);
+    const ph = (pl.phone || '').replace(/\D/g, '');
+    if (ph.length >= 6) keys.push('t:' + ph);
+    for (const k of keys) {
+      if (seen[k] && seen[k] !== pl.pair_id) { dupes.add(seen[k]); dupes.add(pl.pair_id); }
+      else if (!seen[k]) seen[k] = pl.pair_id;
+    }
+  }
+  res.renderPage('admin/inscripciones', { rows, status, paid, q, dupes: [...dupes] });
 });
 
 router.get('/inscripciones/:id', (req, res) => {
@@ -140,6 +156,45 @@ router.get('/inscripciones.csv', (req, res) => {
   res.send('﻿' + lines.join('\r\n'));
 });
 
+const csvEsc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+
+// Exportar parejas (respeta el filtro de categoría)
+router.get('/export/parejas', (req, res) => {
+  const category = L.CATEGORY_CODES.includes(req.query.category) ? req.query.category : 'all';
+  const params = [];
+  let sql = `SELECT p.code, p.category, p.status, p.level_avg,
+                    p1.name n1, p1.phone t1, p1.email e1, p2.name n2, p2.phone t2, p2.email e2
+             FROM pairs p JOIN players p1 ON p1.id = p.player1_id JOIN players p2 ON p2.id = p.player2_id`;
+  if (category !== 'all') { sql += ' WHERE p.category = ?'; params.push(category); }
+  sql += ' ORDER BY p.level_avg DESC, p.category, p.id';
+  const rows = db.prepare(sql).all(...params);
+  const lines = [['codigo', 'categoria', 'estado', 'nivel_medio', 'jugador1', 'telefono1', 'email1',
+    'jugador2', 'telefono2', 'email2'].map(csvEsc).join(';')];
+  for (const r of rows) lines.push([r.code, r.category, r.status, r.level_avg, r.n1, r.t1, r.e1, r.n2, r.t2, r.e2].map(csvEsc).join(';'));
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="parejas${category === 'all' ? '' : '-' + category}.csv"`);
+  res.send('﻿' + lines.join('\r\n'));
+});
+
+// Exportar clasificación de una ronda y categoría
+router.get('/export/clasificacion', (req, res) => {
+  const category = L.validCategory(req.query.category);
+  const round = Math.min(3, Math.max(1, parseInt(req.query.round) || 1));
+  const lines = [['categoria', 'ronda', 'grupo', 'posicion', 'pareja', 'puntos', 'partidos',
+    'ganados', 'perdidos', 'sets_favor', 'sets_contra', 'juegos_favor', 'juegos_contra'].map(csvEsc).join(';')];
+  for (const g of L.getGroups(db, category, round)) {
+    const members = L.getGroupMembers(db, g.id);
+    const matches = L.getGroupMatches(db, g.id);
+    for (const s of L.computeStandings(members.map(x => x.pair_id), matches)) {
+      lines.push([category, round, g.group_no, s.position, L.pairName(db, s.pairId), s.pts, s.pj, s.pg, s.pp,
+        s.setsW, s.setsL, s.gamesW, s.gamesL].map(csvEsc).join(';'));
+    }
+  }
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="clasificacion-${category}-r${round}.csv"`);
+  res.send('﻿' + lines.join('\r\n'));
+});
+
 // ================= PREGUNTAS DEL FORMULARIO =================
 router.get('/preguntas', (req, res) => {
   const qs = db.prepare('SELECT * FROM custom_questions ORDER BY position, id').all()
@@ -168,12 +223,14 @@ router.post('/preguntas/:id/toggle', (req, res) => {
 
 // ================= PAREJAS =================
 router.get('/parejas', (req, res) => {
-  const rows = db.prepare(
-    `SELECT p.*, p1.name n1, p2.name n2 FROM pairs p
-     JOIN players p1 ON p1.id = p.player1_id JOIN players p2 ON p2.id = p.player2_id
-     ORDER BY p.category, p.status, p.id`
-  ).all();
-  res.renderPage('admin/parejas', { rows });
+  const category = L.CATEGORY_CODES.includes(req.query.category) ? req.query.category : 'all';
+  const params = [];
+  let sql = `SELECT p.*, p1.name n1, p2.name n2 FROM pairs p
+     JOIN players p1 ON p1.id = p.player1_id JOIN players p2 ON p2.id = p.player2_id`;
+  if (category !== 'all') { sql += ' WHERE p.category = ?'; params.push(category); }
+  sql += ' ORDER BY p.level_avg DESC, p.category, p.status, p.id';
+  const rows = db.prepare(sql).all(...params);
+  res.renderPage('admin/parejas', { rows, category });
 });
 
 router.get('/parejas/nueva', (req, res) => {
@@ -353,7 +410,7 @@ router.get('/partidos', (req, res) => {
   const stage = req.query.stage === 'po' ? 'po' : 'groups';
   const courts = db.prepare('SELECT * FROM courts WHERE active = 1 ORDER BY name').all();
   const common = { category, stage, courts, error: req.query.error || null, pairName: (id) => L.pairName(db, id) };
-  let matches;
+  let matches, blocks = [], block = 'all';
   if (stage === 'groups') {
     const round = Math.min(3, Math.max(1, parseInt(req.query.round) || 1));
     matches = db.prepare(
@@ -363,16 +420,22 @@ router.get('/partidos', (req, res) => {
        LEFT JOIN pairs pa ON pa.id = m.pair_a_id LEFT JOIN pairs pb ON pb.id = m.pair_b_id
        WHERE m.stage = 'groups' AND m.category = ? AND m.round_no = ? ORDER BY g.group_no, m.id`
     ).all(category, round);
-    res.renderPage('admin/partidos', { ...common, round, matches });
+    const unscheduled = matches.filter(m => !m.court_id || !m.scheduled_at).length;
+    res.renderPage('admin/partidos', { ...common, round, matches, blocks, block, unscheduled });
   } else {
-    matches = db.prepare(
-      `SELECT m.*, c.name AS court_name, pa.availability AS avail_a, pb.availability AS avail_b
+    blocks = db.prepare(`SELECT DISTINCT stage FROM matches WHERE stage LIKE 'po%' AND category = ? ORDER BY stage`)
+      .all(category).map(r => r.stage);
+    if (blocks.includes(req.query.block)) block = req.query.block;
+    const params = [category];
+    let sql = `SELECT m.*, c.name AS court_name, pa.availability AS avail_a, pb.availability AS avail_b
        FROM matches m LEFT JOIN courts c ON c.id = m.court_id
        LEFT JOIN pairs pa ON pa.id = m.pair_a_id LEFT JOIN pairs pb ON pb.id = m.pair_b_id
-       WHERE m.stage LIKE 'po%' AND m.category = ?
-       ORDER BY m.stage, CASE m.bracket_round WHEN 'R32' THEN 0 WHEN 'R16' THEN 1 WHEN 'QF' THEN 2 WHEN 'SF' THEN 3 WHEN 'F' THEN 4 ELSE 9 END, m.bracket_slot`
-    ).all(category);
-    res.renderPage('admin/partidos', { ...common, round: null, matches });
+       WHERE m.stage LIKE 'po%' AND m.category = ?`;
+    if (block !== 'all') { sql += ' AND m.stage = ?'; params.push(block); }
+    sql += ` ORDER BY m.stage, CASE m.bracket_round WHEN 'R32' THEN 0 WHEN 'R16' THEN 1 WHEN 'QF' THEN 2 WHEN 'SF' THEN 3 WHEN 'F' THEN 4 ELSE 9 END, m.bracket_slot`;
+    matches = db.prepare(sql).all(...params);
+    const unscheduled = matches.filter(m => !m.court_id || !m.scheduled_at).length;
+    res.renderPage('admin/partidos', { ...common, round: null, matches, blocks, block, unscheduled });
   }
 });
 
@@ -380,6 +443,9 @@ router.get('/partidos', (req, res) => {
 router.post('/partidos/:id/resultado', (req, res) => {
   const m = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.id);
   if (!m) return res.redirect('/admin');
+  if (L.matchStageClosed(getSetting, m)) {
+    return res.redirect((req.body.back || '/admin/partidos') + '&error=' + encodeURIComponent('La fase está cerrada: reábrela para corregir resultados.'));
+  }
   const b = req.body;
   const num = (v) => (v === '' || v == null ? null : parseInt(v, 10));
   const winner = parseInt(b.winner_id, 10);
@@ -401,11 +467,15 @@ router.post('/partidos/:id/resultado', (req, res) => {
 // Resolver una disputa a favor del resultado subido
 router.post('/partidos/:id/resolver', (req, res) => {
   const m = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.id);
+  const back = req.body.back || '/admin';
+  if (m && L.matchStageClosed(getSetting, m)) {
+    return res.redirect(back + '&error=' + encodeURIComponent('La fase está cerrada: reábrela para resolver disputas.'));
+  }
   if (m && m.validation === 'disputed') {
     db.prepare("UPDATE matches SET validation = 'validated' WHERE id = ?").run(m.id);
     advanceWinner(db.prepare('SELECT * FROM matches WHERE id = ?').get(m.id));
   }
-  res.redirect(req.body.back || '/admin');
+  res.redirect(back);
 });
 
 // ================= CIERRE DE RONDAS =================
@@ -573,7 +643,8 @@ router.get('/playoffs', (req, res) => {
       pairName: (id) => L.pairName(db, id),
     };
   });
-  res.renderPage('admin/playoffs', { data, error: req.query.error || null, ok: req.query.ok || null });
+  res.renderPage('admin/playoffs', { data, error: req.query.error || null, ok: req.query.ok || null,
+    playoffsClosed: getSetting('playoffs_closed', '0') === '1' });
 });
 function savePlayoffOrder(category, stage, ids) {
   const del = db.prepare('DELETE FROM playoff_seeding WHERE category = ? AND stage = ?');
@@ -603,6 +674,13 @@ router.post('/playoffs/orden', (req, res) => {
     savePlayoffOrder(category, stage, ids);
   }
   res.redirect('/admin/playoffs');
+});
+
+// Cerrar / reabrir los playoffs (bloquea la entrada de resultados)
+router.post('/playoffs/cierre', (req, res) => {
+  const closed = getSetting('playoffs_closed', '0') === '1';
+  setSetting('playoffs_closed', closed ? '0' : '1');
+  res.redirect('/admin/playoffs?ok=' + encodeURIComponent(closed ? 'Playoffs reabiertos.' : 'Playoffs cerrados: ya no se admiten resultados.'));
 });
 
 // Marcar una pareja como "no juega el playoff" (antes de generar)
@@ -856,7 +934,7 @@ router.get('/ajustes', (req, res) => {
   const keys = ['club_name', 'season_name', 'phase_insc_label', 'phase_insc_ini', 'phase_insc_fin',
     'phase_r1_label', 'phase_r1_ini', 'phase_r1_fin', 'phase_r2_label', 'phase_r2_ini', 'phase_r2_fin',
     'phase_r3_label', 'phase_r3_ini', 'phase_r3_fin', 'phase_po_label', 'phase_po_ini', 'phase_po_fin',
-    'inscription_price', 'shirt_price'];
+    'inscription_price', 'shirt_price', 'registration_closed'];
   const s = Object.fromEntries(keys.map(k => [k, getSetting(k, '')]));
   res.renderPage('admin/ajustes', { s, msg: req.query.msg || null });
 });
@@ -867,6 +945,8 @@ router.post('/ajustes', (req, res) => {
       setSetting(k, (v || '').trim());
     }
   }
+  // Checkbox: solo llega cuando está marcado
+  setSetting('registration_closed', req.body.registration_closed ? '1' : '0');
   res.redirect('/admin/ajustes?msg=' + encodeURIComponent('Ajustes guardados.'));
 });
 

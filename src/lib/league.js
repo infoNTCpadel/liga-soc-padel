@@ -394,6 +394,15 @@ function isPlayoffStage(stage) {
   return /^po\d+$/.test(stage || '');
 }
 
+// Indica si la fase de un partido está cerrada (no se admiten resultados).
+// getSetting: función (clave, defecto) => valor.
+function matchStageClosed(getSetting, m) {
+  if (!m) return false;
+  if (m.stage === 'groups') return getSetting(`round${m.round_no}_closed`, '0') === '1';
+  if (isPlayoffStage(m.stage)) return getSetting('playoffs_closed', '0') === '1';
+  return false;
+}
+
 // ---------------------------------------------------------------------------
 // Validación automática: resultados pendientes de más de 24h se validan solos.
 // ---------------------------------------------------------------------------
@@ -489,7 +498,7 @@ module.exports = {
   roundPoints, matchOutcome, countsForStandings, isSetFinished,
   computeStandings, movementDelta, targetGroup,
   chunkIntoGroups, roundRobin, nextPowerOfTwo, seedOrder, formatSlot,
-  buildBracket, splitPlayoffCategories, placeSeeds, drawSeeds34, playoffOrdinal, isPlayoffStage,
+  buildBracket, splitPlayoffCategories, placeSeeds, drawSeeds34, playoffOrdinal, isPlayoffStage, matchStageClosed,
   BRACKET_NEXT, BRACKET_NAMES, BRACKET_NAME_BY_CODE,
   autoValidateExpired,
   getGroups, getGroupMembers, getGroupMatches, pairName, getRanking,

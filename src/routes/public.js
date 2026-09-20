@@ -33,7 +33,8 @@ router.get('/', (req, res) => {
     pairs: db.prepare("SELECT COUNT(*) c FROM pairs WHERE status = 'active'").get().c,
     pending: db.prepare("SELECT COUNT(*) c FROM pairs WHERE status = 'pending'").get().c,
   };
-  res.renderPage('public/home', { phases: phases(), fmtDate, counts });
+  res.renderPage('public/home', { phases: phases(), fmtDate, counts,
+    registrationClosed: getSetting('registration_closed', '0') === '1' });
 });
 
 // ---- Normativa (resumen fiel al documento oficial) ----
@@ -56,6 +57,7 @@ function shirtQuestion() {
 function eur(v) { return Number(v || 0).toFixed(2).replace('.', ','); }
 router.get('/inscripcion', (req, res) => {
   res.renderPage('public/inscripcion', { questions: activeQuestions(), error: null, form: {},
+    closed: getSetting('registration_closed', '0') === '1',
     priceInscription: eur(getSetting('inscription_price', '19.95')),
     priceShirt: eur(getSetting('shirt_price', '14.95')), shirtQ: shirtQuestion() });
 });
@@ -72,8 +74,11 @@ function genCode() {
 router.post('/inscripcion', (req, res) => {
   const b = req.body;
   const error = (msg) => res.renderPage('public/inscripcion', { questions: activeQuestions(), error: msg, form: b,
+    closed: getSetting('registration_closed', '0') === '1',
     priceInscription: eur(getSetting('inscription_price', '19.95')),
     priceShirt: eur(getSetting('shirt_price', '14.95')), shirtQ: shirtQuestion() });
+
+  if (getSetting('registration_closed', '0') === '1') return error('La inscripción está cerrada.');
 
   const category = L.validCategory(b.category);
   const shirtActive = !!shirtQuestion();

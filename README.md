@@ -127,10 +127,15 @@ si quieres, elimina la de prueba.
   **camiseta oficial** es una pregunta del sistema: está inactiva por defecto
   y se activa aquí cuando el club la ofrezca; el precio se configura en
   **/admin/ajustes**.
-- Comparte el enlace **/inscripcion** con los jugadores.
+- Comparte el enlace **/inscripcion** con los jugadores. Cuando se acabe el
+  plazo, marca **«Inscripción cerrada»** en **/admin/ajustes**: el formulario
+  público dejará de admitir parejas (el admin puede seguir añadiéndolas a
+  mano desde **/admin/parejas**).
 
 ### 2. Inscripciones (hasta el 2 de octubre)
-- Revisa cada inscripción en **/admin/inscripciones** y actívala.
+- Revisa cada inscripción en **/admin/inscripciones** y actívala. Si un jugador
+  aparece en dos parejas (mismo nombre o teléfono), verás el aviso
+  «⚠ posible duplicado».
 - Marca quién ha pagado en el club (19,95 €/jugador) desde la ficha de cada
   pareja; si activaste la camiseta, controla los pedidos (talla por jugador)
   en el mismo sitio.
@@ -146,12 +151,17 @@ si quieres, elimina la de prueba.
   «Eliminar grupos y volver a generar», solo si no hay resultados): útil si se
   apunta alguna pareja de última hora.
 - En la vista pública **/liga**, la clasificación muestra los **movimientos
-  previstos** (quién sube, baja o permanece) según la posición actual.
+  previstos** (quién sube, baja o permanece) según la posición actual. Desde
+  **/admin/grupos** puedes exportar la clasificación de cada ronda a CSV.
 - Las parejas suben sus resultados desde **/pareja**; el rival tiene 24 h para
   validarlos (si no, se validan solos). Puedes corregir resultados en
   **/admin/partidos** y marcar W.O. o partidos no jugados.
+- **/admin/parejas**: filtra por categoría (M/F/X) y ordena por nivel de mayor
+  a menor; también puedes exportar la lista a CSV.
 - **Cerrar la ronda** (vista previa con movimientos y puntos) cuando termine el
-  plazo: los partidos sin resultado contarán como no jugados.
+  plazo: los partidos sin resultado contarán como no jugados y **ya no se
+  podrán subir ni corregir resultados** (ni las parejas ni el admin) hasta
+  reabrirla.
 
 ### 4. Rondas 2 y 3
 - Genera los nuevos grupos: se aplican solos los **ascensos y descensos**
@@ -172,6 +182,9 @@ si quieres, elimina la de prueba.
 - Los ganadores avanzan solos de ronda. Los resultados los suben las parejas
   o la organización. Los campeones de cada playoff son los campeones de la
   temporada en su categoría.
+- Al terminar, **cierra los playoffs** desde **/admin/playoffs** para bloquear
+  la entrada de resultados. En **/admin/partidos** puedes filtrar por bloque
+  (1ª, 2ª, 3ª…) y ver cuántos partidos quedan sin programar.
 
 ### Cambios de pareja
 Las parejas lo solicitan desde su panel; la app solo permite un cambio, exige

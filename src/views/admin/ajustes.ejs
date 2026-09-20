@@ -19,6 +19,8 @@
         <div class="field"><label>Fechas</label><div class="scorein"><input type="date" name="phase_<%= k %>_ini" value="<%= s['phase_'+k+'_ini'] %>"><span>–</span><input type="date" name="phase_<%= k %>_fin" value="<%= s['phase_'+k+'_fin'] %>"></div></div>
       </div>
     <% } %>
+    <h3>Inscripción</h3>
+    <div class="field"><label><input type="checkbox" name="registration_closed" value="1" <%= s.registration_closed==='1'?'checked':'' %>> Inscripción cerrada (no se admiten nuevas parejas desde el formulario público)</label></div>
     <button class="btn" type="submit">Guardar ajustes</button>
   </form>
 </div>
