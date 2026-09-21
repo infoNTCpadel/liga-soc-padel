@@ -142,6 +142,8 @@ router.post('/inscripcion', (req, res) => {
   for (const bl of blocks) for (const p of [bl.p1, bl.p2]) {
     if (L.personCategories(db, p.phone).includes(bl.category))
       return error(`${p.name} ya está inscrito en ${L.catName(bl.category).toLowerCase()}: no se puede inscribir dos veces en la misma modalidad.`);
+    if (!L.validSpanishMobile(p.phone))
+      return error(`El teléfono de ${p.name} no parece un móvil válido (9 dígitos, empieza por 6 o 7): revísalo por favor.`);
     const allCats = [...catsOf(p.phone)];
     if (allCats.length > 2)
       return error(`${p.name} ya está inscrito en dos modalidades: no puede apuntarse a una tercera.`);
@@ -156,27 +158,36 @@ router.post('/inscripcion', (req, res) => {
     if (q.required && !ans) return error(`Falta responder: "${q.label}".`);
   }
 
+  // Las dos parejas de un mismo envío se crean en una transacción: o las dos o ninguna.
   const created = [];
-  for (const bl of blocks) {
-    const code = genCode();
-    const ins = db.prepare(
-      'INSERT INTO players(name, email, phone, level, gender, shirt, shirt_size) VALUES(?, ?, ?, ?, ?, ?, ?)'
-    );
-    const r1 = ins.run(bl.p1.name, bl.p1.email, bl.p1.phone, bl.p1.level, bl.p1.gender, bl.p1.shirt, bl.p1.shirt_size);
-    const r2 = ins.run(bl.p2.name, bl.p2.email, bl.p2.phone, bl.p2.level, bl.p2.gender, bl.p2.shirt, bl.p2.shirt_size);
-    const levelAvg = Math.round(((bl.p1.level + bl.p2.level) / 2) * 100) / 100;
-    const rp = db.prepare(
-      `INSERT INTO pairs(code, category, player1_id, player2_id, captain_id, level_avg, status)
-       VALUES(?, ?, ?, ?, ?, ?, 'pending')`
-    ).run(code, bl.category, Number(r1.lastInsertRowid), Number(r2.lastInsertRowid),
-      bl.captain === 2 ? Number(r2.lastInsertRowid) : Number(r1.lastInsertRowid), levelAvg);
-    const pairId = Number(rp.lastInsertRowid);
-    const ansIns = db.prepare('INSERT INTO registration_answers(pair_id, question_id, answer) VALUES(?, ?, ?)');
-    for (const q of questions) {
-      const ans = (b[`q_${q.id}`] || '').trim();
-      if (ans) ansIns.run(pairId, q.id, ans);
+  db.exec('BEGIN');
+  try {
+    for (const bl of blocks) {
+      const code = genCode();
+      const ins = db.prepare(
+        'INSERT INTO players(name, email, phone, level, gender, shirt, shirt_size) VALUES(?, ?, ?, ?, ?, ?, ?)'
+      );
+      const r1 = ins.run(bl.p1.name, bl.p1.email, bl.p1.phone, bl.p1.level, bl.p1.gender, bl.p1.shirt, bl.p1.shirt_size);
+      const r2 = ins.run(bl.p2.name, bl.p2.email, bl.p2.phone, bl.p2.level, bl.p2.gender, bl.p2.shirt, bl.p2.shirt_size);
+      const levelAvg = Math.round(((bl.p1.level + bl.p2.level) / 2) * 100) / 100;
+      const rp = db.prepare(
+        `INSERT INTO pairs(code, category, player1_id, player2_id, captain_id, level_avg, status)
+         VALUES(?, ?, ?, ?, ?, ?, 'pending')`
+      ).run(code, bl.category, Number(r1.lastInsertRowid), Number(r2.lastInsertRowid),
+        bl.captain === 2 ? Number(r2.lastInsertRowid) : Number(r1.lastInsertRowid), levelAvg);
+      const pairId = Number(rp.lastInsertRowid);
+      const ansIns = db.prepare('INSERT INTO registration_answers(pair_id, question_id, answer) VALUES(?, ?, ?)');
+      for (const q of questions) {
+        const ans = (b[`q_${q.id}`] || '').trim();
+        if (ans) ansIns.run(pairId, q.id, ans);
+      }
+      created.push({ code, category: bl.category, p1: bl.p1, p2: bl.p2, levelAvg });
     }
-    created.push({ code, category: bl.category, p1: bl.p1, p2: bl.p2, levelAvg });
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    console.error('inscripción', e);
+    return error('Ha ocurrido un error al guardar la inscripción. Por favor, inténtalo de nuevo.');
   }
 
   // Resumen de pago por persona (el precio depende de sus modalidades totales)

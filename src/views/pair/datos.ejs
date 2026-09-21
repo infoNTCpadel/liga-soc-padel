@@ -36,6 +36,17 @@
   </div>
   <% }); %>
   <div class="card">
+    <h3>Capitán de la pareja</h3>
+    <p class="mut small">El capitán es la persona de contacto de la pareja. Si lo decidís entre los dos, podéis cambiarlo aquí.</p>
+    <div class="field"><label>Capitán</label>
+      <select name="captain" required>
+        <% players.forEach((pl) => { %>
+        <option value="<%= pl.id %>" <%= pl.id === pair.captain_id ? 'selected' : '' %>><%= pl.name %></option>
+        <% }); %>
+      </select>
+    </div>
+  </div>
+  <div class="card">
     <h3>Disponibilidad</h3>
     <p class="mut small">Indica en pocas palabras qué días no podéis jugar (p. ej. «no podemos los martes ni los jueves por la tarde»). Lo verá la organización al programar los horarios.</p>
     <div class="field"><label>Días que no podéis jugar</label>

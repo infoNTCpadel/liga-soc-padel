@@ -146,7 +146,20 @@ router.post('/inscripciones/:id/pago', (req, res) => {
   const paid = req.body.paid === '1' ? 1 : 0;
   const p = db.prepare('SELECT * FROM pairs WHERE id = ?').get(req.params.id);
   if (p && [p.player1_id, p.player2_id].includes(playerId)) {
-    db.prepare('UPDATE players SET paid = ? WHERE id = ?').run(paid, playerId);
+    // El pago es por persona, no por pareja: se propaga a todas las parejas
+    // (pendientes o activas) de quien tenga ese mismo teléfono.
+    const me = db.prepare('SELECT phone FROM players WHERE id = ?').get(playerId);
+    const ids = L.personPlayerIds(db, me ? me.phone : '');
+    const targets = ids.length ? ids : [playerId];
+    db.exec('BEGIN');
+    try {
+      const u = db.prepare('UPDATE players SET paid = ? WHERE id = ?');
+      for (const id of targets) u.run(paid, id);
+      db.exec('COMMIT');
+    } catch (e) {
+      db.exec('ROLLBACK');
+      console.error('pago', e);
+    }
   }
   res.redirect('/admin/inscripciones/' + req.params.id);
 });
@@ -278,6 +291,8 @@ router.post('/parejas/nueva', (req, res) => {
   const p1 = mk(1), p2 = mk(2);
   if (!p1.name || !p2.name) return err('Faltan nombres.');
   if (!p1.phone || !p2.phone) return err('El teléfono es obligatorio (identifica al jugador entre modalidades).');
+  if (!L.validSpanishMobile(p1.phone) || !L.validSpanishMobile(p2.phone))
+    return err('Algún teléfono no parece un móvil válido (9 dígitos, empieza por 6 o 7): revísalo por favor.');
   if (L.normPhone(p1.phone) === L.normPhone(p2.phone)) return err('Los dos jugadores no pueden tener el mismo teléfono.');
   for (const [p, n] of [[p1, 1], [p2, 2]]) {
     if (!(p.level >= 0 && p.level <= 6)) return err(`Nivel del jugador ${n} no válido.`);

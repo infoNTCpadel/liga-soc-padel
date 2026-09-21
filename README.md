@@ -137,7 +137,7 @@ si quieres, elimina la de prueba.
   masculina + mixta, o femenina + mixta), con parejas distintas en cada una;
   puede inscribirlas juntas o en días distintos. No puede repetir modalidad
   ni jugar una tercera. La identidad entre inscripciones es el **teléfono**
-  (normalizado, sin +34).
+  (normalizado: da igual que se escriba con +34, 0034, espacios o guiones).
 - El formulario pide **sexo** (obligatorio): la mixta debe ser un hombre y
   una mujer; en las demás categorías, un sexo incoherente muestra un aviso
   «⚠ revisar sexo» en **/admin/inscripciones**.
@@ -148,10 +148,16 @@ si quieres, elimina la de prueba.
   defecto) e inscripción 2 modalidades (25 € por defecto). El pago sigue
   siendo simple (pagado/no pagado) y se controla en la ficha de cada pareja,
   donde verás el precio esperado de cada jugador según sus modalidades.
+  Como el pago es por persona, al marcarlo en una pareja se propaga
+  automáticamente a sus demás parejas (mismo teléfono).
+- El **teléfono** identifica al jugador entre modalidades e inscripciones:
+  se normaliza (+34, 0034, espacios y guiones dan igual) y se valida que
+  parezca un móvil español (9 dígitos, empieza por 6 o 7).
 - **Camiseta: una por jugador y temporada**. Si ya la pidió en otra
   inscripción, el formulario la ignora y avisa.
 - Cada pareja recibe un **código de acceso** para gestionar sus partidos.
-  Desde **Mis datos** pueden actualizar sus datos y anotar su
+  Desde **Mis datos** pueden actualizar sus datos, **cambiar el capitán**
+  de la pareja si lo deciden entre los dos, y anotar su
   **disponibilidad** (días que no pueden jugar, máx. 120 caracteres); al
   programar pista y horario en **/admin/partidos** verás esa nota.
 

@@ -228,6 +228,8 @@ router.post('/cambio', (req, res) => {
   const nl = parseFloat(b.new_level);
   if (!(nl >= 0 && nl <= 6)) return err('El nivel del nuevo jugador no es válido.');
   if (!(b.new_name || '').trim() || !(b.new_phone || '').trim()) return err('Faltan los datos del nuevo jugador.');
+  if (!L.validSpanishMobile(b.new_phone))
+    return err('El teléfono del nuevo jugador no parece un móvil válido (9 dígitos, empieza por 6 o 7): revísalo por favor.');
   const ng = (b.new_gender || '').toUpperCase();
   if (!['M', 'F'].includes(ng)) return err('Indica el sexo del nuevo jugador.');
   // Mismo nivel: mismo tramo Playtomic que el jugador sustituido.
@@ -284,10 +286,12 @@ router.post('/datos', (req, res) => {
   }
   if (pair.category === 'X' && upd[0].gender === upd[1].gender)
     return err('En la categoría mixta la pareja debe estar formada por un hombre y una mujer.');
+  const capId = parseInt(b.captain, 10);
+  if (!players.some((p) => p.id === capId)) return err('El capitán debe ser uno de los dos jugadores de la pareja.');
   const u = db.prepare('UPDATE players SET name = ?, phone = ?, email = ?, level = ?, gender = ?, shirt = ?, shirt_size = ? WHERE id = ?');
   for (const p of upd) u.run(p.name, p.phone, p.email, p.level, p.gender, p.shirt, p.shirtSize, p.id);
   const avg = Math.round(((upd[0].level + upd[1].level) / 2) * 100) / 100;
-  db.prepare('UPDATE pairs SET level_avg = ?, availability = ? WHERE id = ?').run(avg, availability, pair.id);
+  db.prepare('UPDATE pairs SET level_avg = ?, availability = ?, captain_id = ? WHERE id = ?').run(avg, availability, capId, pair.id);
   res.redirect('/pareja/datos?ok=1');
 });
 

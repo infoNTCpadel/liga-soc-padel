@@ -505,14 +505,17 @@ module.exports = {
   PLAYTOMIC_BRACKETS, bracketOf,
   CATEGORIES, CATEGORY_CODES, catName, validCategory,
   normPhone, personCategories, personHasShirt, priceForModalities, validModalityCombo,
+  validSpanishMobile, personPlayerIds,
 };
 
 // ---- Personas, modalidades y precios ----
-// Normaliza un teléfono (solo dígitos, sin prefijo +34) para identificar
-// a la misma persona entre distintas inscripciones.
+// Normaliza un teléfono (solo dígitos, sin prefijos +34 / 0034 / 34) para
+// identificar a la misma persona entre distintas inscripciones, escriba el
+// número como lo escriba (+34 612 345 678, 0034612345678, 612-345-678…).
 function normPhone(ph) {
   let d = String(ph || '').replace(/\D/g, '');
-  if (d.length === 11 && d.startsWith('34')) d = d.slice(2);
+  if (d.length > 9 && d.startsWith('0034')) d = d.slice(4);
+  else if (d.length === 11 && d.startsWith('34')) d = d.slice(2);
   return d;
 }
 // Categorías distintas en las que está inscrita una persona (por teléfono)
@@ -532,6 +535,23 @@ function personCategories(db, phone) {
 // combinar masculina y femenina (solo M+X o F+X, además de una sola).
 function validModalityCombo(cats) {
   return !(cats.includes('M') && cats.includes('F'));
+}
+// ¿Parece un móvil español válido? (9 dígitos, empieza por 6 o 7)
+function validSpanishMobile(ph) {
+  return /^[67]\d{8}$/.test(normPhone(ph));
+}
+// Ids de filas de jugador de una persona (por teléfono normalizado) en las
+// parejas pendientes o activas de la temporada. Una misma persona tiene una
+// fila distinta en cada pareja en la que juega.
+function personPlayerIds(db, phone) {
+  const ph = normPhone(phone);
+  if (ph.length < 6) return [];
+  return db.prepare(
+    `SELECT pl.id, pl.phone FROM players pl JOIN pairs pa
+     ON pl.id = pa.player1_id OR pl.id = pa.player2_id
+     WHERE pa.status IN ('pending', 'active')`).all()
+    .filter(r => normPhone(r.phone) === ph)
+    .map(r => r.id);
 }
 // ¿Esta persona ya pidió la camiseta en otra inscripción de la temporada?
 // (Solo una camiseta por jugador y temporada.)
