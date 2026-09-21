@@ -133,10 +133,11 @@ si quieres, elimina la de prueba.
   mano desde **/admin/parejas**).
 
 ### 2. Inscripciones (hasta el 2 de octubre)
-- Cada persona puede jugar **una o dos modalidades** (masculina, femenina,
-  mixta), con parejas distintas en cada una; puede inscribirlas juntas o en
-  días distintos. No puede repetir modalidad ni jugar una tercera. La
-  identidad entre inscripciones es el **teléfono** (normalizado, sin +34).
+- Cada persona puede jugar **una o dos modalidades** (combinaciones permitidas:
+  masculina + mixta, o femenina + mixta), con parejas distintas en cada una;
+  puede inscribirlas juntas o en días distintos. No puede repetir modalidad
+  ni jugar una tercera. La identidad entre inscripciones es el **teléfono**
+  (normalizado, sin +34).
 - El formulario pide **sexo** (obligatorio): la mixta debe ser un hombre y
   una mujer; en las demás categorías, un sexo incoherente muestra un aviso
   «⚠ revisar sexo» en **/admin/inscripciones**.

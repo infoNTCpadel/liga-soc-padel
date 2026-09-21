@@ -142,8 +142,11 @@ router.post('/inscripcion', (req, res) => {
   for (const bl of blocks) for (const p of [bl.p1, bl.p2]) {
     if (L.personCategories(db, p.phone).includes(bl.category))
       return error(`${p.name} ya está inscrito en ${L.catName(bl.category).toLowerCase()}: no se puede inscribir dos veces en la misma modalidad.`);
-    if (catsOf(p.phone).size > 2)
+    const allCats = [...catsOf(p.phone)];
+    if (allCats.length > 2)
       return error(`${p.name} ya está inscrito en dos modalidades: no puede apuntarse a una tercera.`);
+    if (!L.validModalityCombo(allCats))
+      return error(`${p.name} no puede combinar las modalidades masculina y femenina: solo se permite masculina + mixta o femenina + mixta.`);
   }
 
   // Preguntas adicionales (se guardan para cada pareja creada)

@@ -16,7 +16,7 @@
       <label><input type="checkbox" name="modality" value="<%= c.code %>" <%= fmods.includes(c.code) ? 'checked' : '' %>> <%= c.name %></label>
       <% } %>
     </div>
-    <p class="mut small">Si te inscribes en dos modalidades puedes hacerlo en días distintos: el precio por jugador siempre será el de dos modalidades (<%= price2 %>&nbsp;€).</p>
+    <p class="mut small">Combinaciones permitidas por persona: <strong>masculina + mixta</strong> o <strong>femenina + mixta</strong>. No se puede combinar masculina y femenina. Si te inscribes en dos modalidades puedes hacerlo en días distintos: el precio por jugador siempre será el de dos modalidades (<%= price2 %>&nbsp;€).</p>
   </div>
 
   <% for (const blk of [{ pfx: 'a', num: 1 }, { pfx: 'b', num: 2 }]) { %>

@@ -162,7 +162,13 @@ router.get('/inscripciones.csv', (req, res) => {
   const questions = db.prepare('SELECT id, label FROM custom_questions ORDER BY position, id').all();
   const head = ['id', 'codigo', 'categoria', 'estado', 'fecha', 'jugador1', 'email1', 'tlf1', 'nivel1', 'pagado1', 'precio_esperado1', 'camiseta1', 'talla1',
     'jugador2', 'email2', 'tlf2', 'nivel2', 'pagado2', 'precio_esperado2', 'camiseta2', 'talla2', ...questions.map(q => q.label)];
-  const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  // Evita inyección de fórmulas al abrir el CSV en Excel: las celdas que
+  // empiezan por = + - @ se prefijan con una comilla simple.
+  const csvSafe = (v) => {
+    const s = String(v ?? '');
+    return /^[=+\-@]/.test(s) ? `'${s}` : s;
+  };
+  const esc = (v) => `"${csvSafe(v).replace(/"/g, '""')}"`;
   const lines = [head.map(esc).join(';')];
   const expPrice = (phone) => L.priceForModalities(getSetting, L.personCategories(db, phone).length).toFixed(2).replace('.', ',');
   for (const r of rows) {
@@ -175,7 +181,11 @@ router.get('/inscripciones.csv', (req, res) => {
   res.send('﻿' + lines.join('\r\n'));
 });
 
-const csvEsc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+const csvSafe = (v) => {
+  const s = String(v ?? '');
+  return /^[=+\-@]/.test(s) ? `'${s}` : s;
+};
+const csvEsc = (v) => `"${csvSafe(v).replace(/"/g, '""')}"`;
 
 // Exportar parejas (respeta el filtro de categoría)
 router.get('/export/parejas', (req, res) => {
@@ -274,7 +284,9 @@ router.post('/parejas/nueva', (req, res) => {
     if (!['M', 'F'].includes(p.gender)) return err(`Indica el sexo del jugador ${n}.`);
     const existing = L.personCategories(db, p.phone);
     if (existing.includes(category)) return err(`${p.name} ya está inscrito en ${L.catName(category).toLowerCase()}: no puede inscribirse dos veces en la misma modalidad.`);
-    if (new Set([...existing, category]).size > 2) return err(`${p.name} ya está inscrito en dos modalidades.`);
+    const allCats = [...new Set([...existing, category])];
+    if (allCats.length > 2) return err(`${p.name} ya está inscrito en dos modalidades.`);
+    if (!L.validModalityCombo(allCats)) return err(`${p.name} no puede combinar las modalidades masculina y femenina: solo se permite masculina + mixta o femenina + mixta.`);
   }
   if (category === 'X' && p1.gender === p2.gender) return err('En la categoría mixta la pareja debe estar formada por un hombre y una mujer.');
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';

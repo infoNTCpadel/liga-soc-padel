@@ -504,7 +504,7 @@ module.exports = {
   getGroups, getGroupMembers, getGroupMatches, pairName, getRanking,
   PLAYTOMIC_BRACKETS, bracketOf,
   CATEGORIES, CATEGORY_CODES, catName, validCategory,
-  normPhone, personCategories, personHasShirt, priceForModalities,
+  normPhone, personCategories, personHasShirt, priceForModalities, validModalityCombo,
 };
 
 // ---- Personas, modalidades y precios ----
@@ -527,6 +527,11 @@ function personCategories(db, phone) {
      WHERE p.status IN ('pending', 'active')`).all();
   for (const r of rows) if (normPhone(r.phone) === ph) cats.add(r.category);
   return [...cats];
+}
+// Combinación de modalidades válida para una persona: no se puede
+// combinar masculina y femenina (solo M+X o F+X, además de una sola).
+function validModalityCombo(cats) {
+  return !(cats.includes('M') && cats.includes('F'));
 }
 // ¿Esta persona ya pidió la camiseta en otra inscripción de la temporada?
 // (Solo una camiseta por jugador y temporada.)
