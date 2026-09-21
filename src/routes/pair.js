@@ -120,11 +120,11 @@ function deduceWinner(s1a, s1b, s2a, s2b, mode, s3a, s3b) {
   let deciderWinner = null; // 'a' | 'b'
   if (mode !== 'none') {
     if (s3a === s3b) return { error: 'El desempate no puede terminar en empate.' };
-    if (mode === 'stb' && !((s3a >= 10 || s3b >= 10) && Math.abs(s3a - s3b) >= 2))
+    if (!((s3a >= 10 || s3b >= 10) && Math.abs(s3a - s3b) >= 2))
       return { error: 'El súper tie-break se juega a 10 puntos con diferencia de 2.' };
     deciderWinner = s3a > s3b ? 'a' : 'b';
   } else if (setsA === 1) {
-    return { error: 'Con empate a un set hay que disputar el súper tie-break (o el tercer set).' };
+    return { error: 'Con empate a un set hay que disputar el súper tie-break.' };
   }
   const totA = setsA + (deciderWinner === 'a' ? 1 : 0);
   const totB = setsB + (deciderWinner === 'b' ? 1 : 0);
@@ -155,7 +155,7 @@ router.post('/resultado/:id', (req, res) => {
   // El formulario usa columnas "tú – rival" (sufijo F); la BD usa pair_a/pair_b.
   const s1aF = parseScore(b.s1a), s1bF = parseScore(b.s1b);
   const s2aF = parseScore(b.s2a), s2bF = parseScore(b.s2b);
-  const mode = b.set3mode === 'set' ? 'set' : (b.set3mode === 'stb' ? 'stb' : 'none');
+  const mode = b.set3mode === 'stb' ? 'stb' : 'none';
   const s3aF = mode !== 'none' ? parseScore(b.s3a) : null;
   const s3bF = mode !== 'none' ? parseScore(b.s3b) : null;
 
@@ -175,7 +175,7 @@ router.post('/resultado/:id', (req, res) => {
   const s2a = meIsA ? s2aF : s2bF, s2b = meIsA ? s2bF : s2aF;
   const s3a = meIsA ? s3aF : s3bF, s3b = meIsA ? s3bF : s3aF;
 
-  const q = mode === 'set' ? [s3a, s3b, null, null] : mode === 'stb' ? [null, null, s3a, s3b] : [null, null, null, null];
+  const q = mode === 'stb' ? [null, null, s3a, s3b] : [null, null, null, null];
   db.prepare(`UPDATE matches SET s1a=?, s1b=?, s2a=?, s2b=?, s3a=?, s3b=?, stb_a=?, stb_b=?,
               winner_id=?, submitted_by=?, submitted_at=datetime('now'),
               validation='pending', validation_deadline=datetime('now','+1 day'), notes=? WHERE id=?`)
@@ -228,13 +228,21 @@ router.post('/cambio', (req, res) => {
   const nl = parseFloat(b.new_level);
   if (!(nl >= 0 && nl <= 6)) return err('El nivel del nuevo jugador no es válido.');
   if (!(b.new_name || '').trim() || !(b.new_phone || '').trim()) return err('Faltan los datos del nuevo jugador.');
+  const ng = (b.new_gender || '').toUpperCase();
+  if (!['M', 'F'].includes(ng)) return err('Indica el sexo del nuevo jugador.');
   // Mismo nivel: mismo tramo Playtomic que el jugador sustituido.
   if (L.bracketOf(nl).name !== L.bracketOf(old.level).name) {
     return err(`El nuevo jugador debe ser del mismo nivel (${L.bracketOf(old.level).name}).`);
   }
-  db.prepare(`INSERT INTO pair_changes(pair_id, old_player_id, new_name, new_email, new_phone, new_level)
-              VALUES(?, ?, ?, ?, ?, ?)`)
-    .run(pair.id, oldId, b.new_name.trim(), (b.new_email || '').trim(), b.new_phone.trim(), nl);
+  // En mixta, la pareja debe seguir siendo un hombre y una mujer.
+  if (pair.category === 'X') {
+    const other = db.prepare('SELECT * FROM players WHERE id = ?')
+      .get(pair.player1_id === oldId ? pair.player2_id : pair.player1_id);
+    if (other && other.gender === ng) return err('En la categoría mixta la pareja debe estar formada por un hombre y una mujer.');
+  }
+  db.prepare(`INSERT INTO pair_changes(pair_id, old_player_id, new_name, new_email, new_phone, new_level, new_gender)
+              VALUES(?, ?, ?, ?, ?, ?, ?)`)
+    .run(pair.id, oldId, b.new_name.trim(), (b.new_email || '').trim(), b.new_phone.trim(), nl, ng);
   res.redirect('/pareja');
 });
 
@@ -264,16 +272,20 @@ router.post('/datos', (req, res) => {
     const phone = (b[`p${n}_phone`] || '').trim();
     const email = (b[`p${n}_email`] || '').trim();
     const level = parseFloat(b[`p${n}_level`]);
+    const gender = (b[`p${n}_gender`] || '').toUpperCase();
     const shirt = shirtQ ? (b[`p${n}_shirt`] ? 1 : 0) : pl.shirt;
     const shirtSize = shirtQ ? (b[`p${n}_shirt_size`] || '').trim() : pl.shirt_size;
     if (!name) return err('El nombre de cada jugador es obligatorio.');
     if (!phone) return err('El teléfono de cada jugador es obligatorio (lo usan los rivales para organizar los partidos).');
     if (!(level >= 0 && level <= 6)) return err('El nivel debe estar entre 0 y 6.');
+    if (!['M', 'F'].includes(gender)) return err(`Indica el sexo de ${name}.`);
     if (shirt && !shirtSize) return err(`Falta la talla de camiseta de ${name}.`);
-    upd.push({ id: pl.id, name, phone, email, level, shirt, shirtSize });
+    upd.push({ id: pl.id, name, phone, email, level, gender, shirt, shirtSize });
   }
-  const u = db.prepare('UPDATE players SET name = ?, phone = ?, email = ?, level = ?, shirt = ?, shirt_size = ? WHERE id = ?');
-  for (const p of upd) u.run(p.name, p.phone, p.email, p.level, p.shirt, p.shirtSize, p.id);
+  if (pair.category === 'X' && upd[0].gender === upd[1].gender)
+    return err('En la categoría mixta la pareja debe estar formada por un hombre y una mujer.');
+  const u = db.prepare('UPDATE players SET name = ?, phone = ?, email = ?, level = ?, gender = ?, shirt = ?, shirt_size = ? WHERE id = ?');
+  for (const p of upd) u.run(p.name, p.phone, p.email, p.level, p.gender, p.shirt, p.shirtSize, p.id);
   const avg = Math.round(((upd[0].level + upd[1].level) / 2) * 100) / 100;
   db.prepare('UPDATE pairs SET level_avg = ?, availability = ? WHERE id = ?').run(avg, availability, pair.id);
   res.redirect('/pareja/datos?ok=1');

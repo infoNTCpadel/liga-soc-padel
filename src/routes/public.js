@@ -39,7 +39,10 @@ router.get('/', (req, res) => {
 
 // ---- Normativa (resumen fiel al documento oficial) ----
 router.get('/normativa', (req, res) => {
-  res.renderPage('public/normativa', { brackets: L.PLAYTOMIC_BRACKETS });
+  res.renderPage('public/normativa', { brackets: L.PLAYTOMIC_BRACKETS,
+    price1: eur(getSetting('inscription_price', '15')),
+    price2: eur(getSetting('inscription_price_2', '25')),
+    priceShirt: eur(getSetting('shirt_price', '14.95')) });
 });
 
 // ---- Inscripción ----
@@ -55,11 +58,15 @@ function shirtQuestion() {
 }
 
 function eur(v) { return Number(v || 0).toFixed(2).replace('.', ','); }
-router.get('/inscripcion', (req, res) => {
-  res.renderPage('public/inscripcion', { questions: activeQuestions(), error: null, form: {},
+function formParams(b) {
+  return { questions: activeQuestions(), form: b || {},
     closed: getSetting('registration_closed', '0') === '1',
-    priceInscription: eur(getSetting('inscription_price', '19.95')),
-    priceShirt: eur(getSetting('shirt_price', '14.95')), shirtQ: shirtQuestion() });
+    price1: eur(getSetting('inscription_price', '15')),
+    price2: eur(getSetting('inscription_price_2', '25')),
+    priceShirt: eur(getSetting('shirt_price', '14.95')), shirtQ: shirtQuestion() };
+}
+router.get('/inscripcion', (req, res) => {
+  res.renderPage('public/inscripcion', { ...formParams({}), error: null });
 });
 
 function genCode() {
@@ -73,64 +80,124 @@ function genCode() {
 
 router.post('/inscripcion', (req, res) => {
   const b = req.body;
-  const error = (msg) => res.renderPage('public/inscripcion', { questions: activeQuestions(), error: msg, form: b,
-    closed: getSetting('registration_closed', '0') === '1',
-    priceInscription: eur(getSetting('inscription_price', '19.95')),
-    priceShirt: eur(getSetting('shirt_price', '14.95')), shirtQ: shirtQuestion() });
+  const error = (msg) => res.renderPage('public/inscripcion', { ...formParams(b), error: msg });
 
   if (getSetting('registration_closed', '0') === '1') return error('La inscripción está cerrada.');
 
-  const category = L.validCategory(b.category);
+  // Modalidades elegidas: 1 o 2 (orden M, F, X del formulario)
+  const rawMods = Array.isArray(b.modality) ? b.modality : (b.modality ? [b.modality] : []);
+  const mods = [...new Set(rawMods.filter(m => L.CATEGORY_CODES.includes(m)))];
+  if (!mods.length) return error('Elige al menos una modalidad.');
+  if (mods.length > 2) return error('Puedes inscribirte como máximo en dos modalidades.');
+
   const shirtActive = !!shirtQuestion();
-  const mk = (n) => ({
-    name: (b[`p${n}_name`] || '').trim(),
-    email: (b[`p${n}_email`] || '').trim(),
-    phone: (b[`p${n}_phone`] || '').trim(),
-    level: parseFloat(b[`p${n}_level`]),
-    shirt: shirtActive && b[`p${n}_shirt`] ? 1 : 0,
-    shirt_size: shirtActive ? (b[`p${n}_shirt_size`] || '').trim() : '',
-  });
-  const p1 = mk(1), p2 = mk(2);
-
-  if (!p1.name || !p2.name) return error('Faltan los nombres de los dos jugadores.');
-  if (!p1.phone || !p2.phone) return error('Faltan los teléfonos de contacto (los necesitaréis para organizar los partidos).');
-  for (const [p, n] of [[p1, 1], [p2, 2]]) {
-    if (!(p.level >= 0 && p.level <= 6)) return error(`El nivel del jugador ${n} no es válido (0 – 6).`);
-    if (p.shirt && !p.shirt_size) return error(`Falta la talla de camiseta del jugador ${n}.`);
+  const shirtPrice = parseFloat(String(getSetting('shirt_price', '14.95')).replace(',', '.')) || 0;
+  const blocks = [];
+  for (let i = 0; i < mods.length; i++) {
+    const pfx = i === 0 ? 'a' : 'b';
+    const category = mods[i];
+    const mk = (n) => ({
+      name: (b[`${pfx}_p${n}_name`] || '').trim(),
+      email: (b[`${pfx}_p${n}_email`] || '').trim(),
+      phone: (b[`${pfx}_p${n}_phone`] || '').trim(),
+      level: parseFloat(b[`${pfx}_p${n}_level`]),
+      gender: (b[`${pfx}_p${n}_gender`] || '').toUpperCase(),
+      shirt: shirtActive && b[`${pfx}_p${n}_shirt`] ? 1 : 0,
+      shirt_size: shirtActive ? (b[`${pfx}_p${n}_shirt_size`] || '').trim() : '',
+    });
+    const p1 = mk(1), p2 = mk(2);
+    const tag = `Pareja ${i + 1}`;
+    if (!p1.name || !p2.name) return error(`${tag}: faltan los nombres de los dos jugadores.`);
+    if (!p1.phone || !p2.phone) return error(`${tag}: faltan los teléfonos de contacto (los necesitaréis para organizar los partidos).`);
+    if (L.normPhone(p1.phone) === L.normPhone(p2.phone)) return error(`${tag}: los dos jugadores no pueden tener el mismo teléfono.`);
+    if (p1.name.toLowerCase() === p2.name.toLowerCase()) return error(`${tag}: los dos jugadores no pueden tener el mismo nombre.`);
+    for (const [p, n] of [[p1, 1], [p2, 2]]) {
+      if (!(p.level >= 0 && p.level <= 6)) return error(`${tag}: el nivel del jugador ${n} no es válido (0 – 6).`);
+      if (!['M', 'F'].includes(p.gender)) return error(`${tag}: indica el sexo del jugador ${n}.`);
+      if (p.shirt && !p.shirt_size) return error(`${tag}: falta la talla de camiseta del jugador ${n}.`);
+      // Solo una camiseta por jugador y temporada
+      if (p.shirt && L.personHasShirt(db, p.phone)) { p.shirt = 0; p.shirt_size = ''; p.shirtDup = true; }
+    }
+    if (category === 'X' && p1.gender === p2.gender)
+      return error(`${tag}: en la categoría mixta la pareja debe estar formada por un hombre y una mujer.`);
+    blocks.push({ category, p1, p2, captain: b[`${pfx}_captain`] === '2' ? 2 : 1 });
   }
-  if (p1.name.toLowerCase() === p2.name.toLowerCase()) return error('Los dos jugadores no pueden tener el mismo nombre.');
 
+  // Ni dos camisetas para la misma persona en este envío...
+  const shirtSeen = {};
+  for (const bl of blocks) for (const p of [bl.p1, bl.p2]) {
+    const ph = L.normPhone(p.phone);
+    if (p.shirt && shirtSeen[ph]) return error('Solo se puede pedir una camiseta por jugador y temporada.');
+    if (p.shirt) shirtSeen[ph] = true;
+  }
+
+  // ...ni repetir modalidad ni pasar de dos modalidades por persona
+  const catsOf = (phone) => {
+    const ph = L.normPhone(phone);
+    const s = new Set(L.personCategories(db, phone));
+    for (const bl of blocks)
+      if ([bl.p1, bl.p2].some(p => L.normPhone(p.phone) === ph)) s.add(bl.category);
+    return s;
+  };
+  for (const bl of blocks) for (const p of [bl.p1, bl.p2]) {
+    if (L.personCategories(db, p.phone).includes(bl.category))
+      return error(`${p.name} ya está inscrito en ${L.catName(bl.category).toLowerCase()}: no se puede inscribir dos veces en la misma modalidad.`);
+    if (catsOf(p.phone).size > 2)
+      return error(`${p.name} ya está inscrito en dos modalidades: no puede apuntarse a una tercera.`);
+  }
+
+  // Preguntas adicionales (se guardan para cada pareja creada)
   const questions = activeQuestions();
   for (const q of questions) {
     const ans = (b[`q_${q.id}`] || '').trim();
     if (q.required && !ans) return error(`Falta responder: "${q.label}".`);
   }
 
-  const captain = b.captain === '2' ? 2 : 1;
-  const code = genCode();
-  const ins = db.prepare(
-    'INSERT INTO players(name, email, phone, level, shirt, shirt_size) VALUES(?, ?, ?, ?, ?, ?)'
-  );
-  const r1 = ins.run(p1.name, p1.email, p1.phone, p1.level, p1.shirt, p1.shirt_size);
-  const r2 = ins.run(p2.name, p2.email, p2.phone, p2.level, p2.shirt, p2.shirt_size);
-  const levelAvg = Math.round(((p1.level + p2.level) / 2) * 100) / 100;
-  const rp = db.prepare(
-    `INSERT INTO pairs(code, category, player1_id, player2_id, captain_id, level_avg, status)
-     VALUES(?, ?, ?, ?, ?, ?, 'pending')`
-  ).run(code, category, Number(r1.lastInsertRowid), Number(r2.lastInsertRowid),
-    captain === 2 ? Number(r2.lastInsertRowid) : Number(r1.lastInsertRowid), levelAvg);
-  const pairId = Number(rp.lastInsertRowid);
-
-  const ansIns = db.prepare('INSERT INTO registration_answers(pair_id, question_id, answer) VALUES(?, ?, ?)');
-  for (const q of questions) {
-    const ans = (b[`q_${q.id}`] || '').trim();
-    if (ans) ansIns.run(pairId, q.id, ans);
+  const created = [];
+  for (const bl of blocks) {
+    const code = genCode();
+    const ins = db.prepare(
+      'INSERT INTO players(name, email, phone, level, gender, shirt, shirt_size) VALUES(?, ?, ?, ?, ?, ?, ?)'
+    );
+    const r1 = ins.run(bl.p1.name, bl.p1.email, bl.p1.phone, bl.p1.level, bl.p1.gender, bl.p1.shirt, bl.p1.shirt_size);
+    const r2 = ins.run(bl.p2.name, bl.p2.email, bl.p2.phone, bl.p2.level, bl.p2.gender, bl.p2.shirt, bl.p2.shirt_size);
+    const levelAvg = Math.round(((bl.p1.level + bl.p2.level) / 2) * 100) / 100;
+    const rp = db.prepare(
+      `INSERT INTO pairs(code, category, player1_id, player2_id, captain_id, level_avg, status)
+       VALUES(?, ?, ?, ?, ?, ?, 'pending')`
+    ).run(code, bl.category, Number(r1.lastInsertRowid), Number(r2.lastInsertRowid),
+      bl.captain === 2 ? Number(r2.lastInsertRowid) : Number(r1.lastInsertRowid), levelAvg);
+    const pairId = Number(rp.lastInsertRowid);
+    const ansIns = db.prepare('INSERT INTO registration_answers(pair_id, question_id, answer) VALUES(?, ?, ?)');
+    for (const q of questions) {
+      const ans = (b[`q_${q.id}`] || '').trim();
+      if (ans) ansIns.run(pairId, q.id, ans);
+    }
+    created.push({ code, category: bl.category, p1: bl.p1, p2: bl.p2, levelAvg });
   }
 
-  res.renderPage('public/inscripcion-ok', {
-    code, category, p1, p2, levelAvg,
-    price: getSetting('inscription_price', '19.95'),
-  });
+  // Resumen de pago por persona (el precio depende de sus modalidades totales)
+  const persons = [];
+  const seenP = new Set();
+  const personBlock = (ph) => {
+    for (const bl of created) for (const p of [bl.p1, bl.p2])
+      if (L.normPhone(p.phone) === ph) return p;
+    return null;
+  };
+  for (const bl of created) for (const p of [bl.p1, bl.p2]) {
+    const ph = L.normPhone(p.phone);
+    if (seenP.has(ph)) continue;
+    seenP.add(ph);
+    const cats = L.personCategories(db, p.phone).map(c => L.catName(c).toLowerCase());
+    const price = L.priceForModalities(getSetting, cats.length);
+    const bp = personBlock(ph);
+    const shirt = bp && bp.shirt ? shirtPrice : 0;
+    persons.push({ name: p.name, cats, price: eur(price), shirt: shirt ? eur(shirt) : null,
+      shirtDup: !!(bp && bp.shirtDup), total: eur(price + shirt) });
+  }
+  const grandTotal = eur(persons.reduce((s, ps) => s + parseFloat(ps.total.replace(',', '.')), 0));
+
+  res.renderPage('public/inscripcion-ok', { pairs: created, persons, grandTotal });
 });
 
 // ---- Consulta de la liga: grupos y clasificaciones ----

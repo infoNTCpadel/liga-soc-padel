@@ -9,11 +9,18 @@
   <h3>Jugador <%= n %></h3>
   <div class="row2">
     <div class="field"><label>Nombre *</label><input type="text" name="p<%= n %>_name" required></div>
-    <div class="field"><label>Teléfono</label><input type="tel" name="p<%= n %>_phone"></div>
+    <div class="field"><label>Teléfono *</label><input type="tel" name="p<%= n %>_phone" required></div>
   </div>
   <div class="row2">
     <div class="field"><label>Email</label><input type="email" name="p<%= n %>_email"></div>
     <div class="field"><label>Nivel (0–6) *</label><input type="number" name="p<%= n %>_level" step="0.1" min="0" max="6" required></div>
+  </div>
+  <div class="field"><label>Sexo *</label>
+    <select name="p<%= n %>_gender" required>
+      <option value="">—</option>
+      <option value="M">Hombre</option>
+      <option value="F">Mujer</option>
+    </select>
   </div>
   <div class="field"><label><input type="checkbox" name="p<%= n %>_paid" value="1"> Pagado</label></div>
   <% } %>

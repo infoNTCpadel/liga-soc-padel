@@ -16,6 +16,13 @@
     <div class="field"><label>Nivel Playtomic (0 – 6) *</label><input type="number" name="new_level" step="0.1" min="0" max="6" required>
       <span class="hint">Tramos: <% for (const b of brackets) { %><%= b.name %> (<%= b.min %>–<%= b.max %>) · <% } %></span>
     </div>
+    <div class="field"><label>Sexo del nuevo jugador *</label>
+      <select name="new_gender" required>
+        <option value="">—</option>
+        <option value="M">Hombre</option>
+        <option value="F">Mujer</option>
+      </select>
+    </div>
     <button class="btn" type="submit">Solicitar cambio</button>
   </form>
 </div>

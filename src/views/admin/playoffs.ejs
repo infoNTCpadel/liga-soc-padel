@@ -9,7 +9,7 @@
 <% } else { %>
   <% const anyGen = data.some(d => d.generated); %>
   <% if (!anyGen) { %>
-    <div class="alert info">Ronda 3 cerrada. Revisa el orden de cabezas de serie por categoría (puedes mover parejas con ↑ ↓), marca las parejas que no vayan a jugar el playoff y genera los cuadros. El ranking se divide en categorías de 16 parejas; si el resto final tiene menos de 8, esas parejas no juegan.</div>
+    <div class="alert info">Ronda 3 cerrada. Revisa el orden de cabezas de serie por categoría (puedes mover parejas con ↑ ↓), marca las parejas que no vayan a jugar el playoff y genera los cuadros. Las parejas marcadas se retiran <strong>antes</strong> de dividir el ranking en categorías de 16; si el resto final tiene menos de 8, esas parejas no juegan.</div>
   <% } %>
 <% } %>
 
@@ -34,12 +34,11 @@
       <p class="mut small">Sin parejas.</p>
     <% } else { %>
       <ol class="seedlist">
-      <% s.ids.forEach((id, i) => { const out = s.excluded.has(id); %>
-        <li class="<%= out ? 'out' : '' %>">
+      <% s.ids.forEach((id, i) => { %>
+        <li>
           <span class="seed"><%= i + 1 %></span>
-          <span class="<%= i < s.seeds && !out ? 'seedhead' : '' %>"><%= d.pairName(id) %></span>
-          <% if (i < s.seeds && !out) { %><span class="badge validado">cabeza de serie</span><% } %>
-          <% if (out) { %><span class="badge pendiente">no juega</span><% } %>
+          <span class="<%= i < s.seeds ? 'seedhead' : '' %>"><%= d.pairName(id) %></span>
+          <% if (i < s.seeds) { %><span class="badge validado">cabeza de serie</span><% } %>
           <% if (editable) { %>
             <span class="seedmove">
               <form method="post" action="/admin/playoffs/orden" style="display:inline">
@@ -59,7 +58,7 @@
               <form method="post" action="/admin/playoffs/excluir" style="display:inline" title="Marcar como que no juega el playoff">
                 <input type="hidden" name="category" value="<%= d.category %>">
                 <input type="hidden" name="pair_id" value="<%= id %>">
-                <label class="small" style="cursor:pointer"><input type="checkbox" <%= out ? 'checked' : '' %> onchange="this.form.submit()"> no juega</label>
+                <label class="small" style="cursor:pointer"><input type="checkbox" onchange="this.form.submit()"> no juega</label>
               </form>
             </span>
           <% } %>
@@ -74,7 +73,7 @@
           <input type="hidden" name="category" value="<%= d.category %>">
           <input type="hidden" name="stage" value="<%= s.stage %>">
           <p class="small mut">Cambia las parejas de sitio dentro de la primera ronda. Debe mantenerse el mismo conjunto de parejas, sin duplicar.</p>
-          <% const plist = s.ids.filter(id => !s.excluded.has(id)); %>
+          <% const plist = s.ids; %>
           <% for (const m of s.firstRound) { %>
             <div class="row2" style="margin-bottom:6px">
               <div class="field"><label>Hueco A</label>
@@ -99,7 +98,27 @@
   <% if (d.unused.length) { %>
     <p class="small mut">Sin playoff (resto de menos de 8 parejas): <%= d.unused.map(id => d.pairName(id)).join(', ') %></p>
   <% } %>
-  <% if (editable && d.stages.some(s => s.ids.filter(id => !s.excluded.has(id)).length >= 2)) { %>
+  <% if (d.excluded.length) { %>
+    <h4>No juegan el playoff <span class="mut small">· excluidas antes de formar las categorías</span></h4>
+    <ul class="seedlist">
+      <% for (const id of d.excluded) { %>
+        <li class="out">
+          <span><%= d.pairName(id) %></span>
+          <span class="badge pendiente">no juega</span>
+          <% if (editable) { %>
+            <span class="seedmove">
+              <form method="post" action="/admin/playoffs/excluir" style="display:inline" title="Volver a incluir en el playoff">
+                <input type="hidden" name="category" value="<%= d.category %>">
+                <input type="hidden" name="pair_id" value="<%= id %>">
+                <label class="small" style="cursor:pointer"><input type="checkbox" checked onchange="this.form.submit()"> no juega</label>
+              </form>
+            </span>
+          <% } %>
+        </li>
+      <% } %>
+    </ul>
+  <% } %>
+  <% if (editable && d.stages.some(s => s.ids.length >= 2)) { %>
     <form method="post" action="/admin/playoffs/generar" onsubmit="return confirm('¿Generar los cuadros de esta categoría con este orden?')">
       <input type="hidden" name="category" value="<%= d.category %>">
       <button class="btn small" type="submit"><%= d.generated ? 'Regenerar cuadros' : 'Generar cuadros' %></button>

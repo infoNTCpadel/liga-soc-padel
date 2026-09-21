@@ -45,7 +45,7 @@ function roundPoints(groupNo, position) {
 // Resultado computable de un partido.
 // Devuelve null si el partido no se ha jugado o no tiene resultado.
 // sets: solo cuentan los sets terminados; los juegos cuentan siempre.
-// El súper tie-break (o tercer set pactado) cuenta como 1 set + 1 juego.
+// El súper tie-break (o tercer set de partidos antiguos) cuenta como 1 set + 1 juego.
 // W.O.: 6-4 / 6-4 → 2-0 en sets, 12-8 en juegos.
 // Puntos: victoria 3, derrota ganando 1 set 2, derrota sin sets 1, no jugado 0.
 // ---------------------------------------------------------------------------
@@ -84,7 +84,7 @@ function matchOutcome(m) {
     gamesA += a; gamesB += b;
     if (isSetFinished(a, b)) { if (a > b) setsA++; else setsB++; }
   }
-  // Tercer set pactado: cuenta como si fuera un súper tie-break.
+  // Datos antiguos: el tercer set registrado se cuenta como si fuera un súper tie-break.
   if (m.s3a != null && m.s3b != null) {
     if (m.s3a > m.s3b) { setsA++; gamesA += 1; }
     else if (m.s3b > m.s3a) { setsB++; gamesB += 1; }
@@ -504,4 +504,46 @@ module.exports = {
   getGroups, getGroupMembers, getGroupMatches, pairName, getRanking,
   PLAYTOMIC_BRACKETS, bracketOf,
   CATEGORIES, CATEGORY_CODES, catName, validCategory,
+  normPhone, personCategories, personHasShirt, priceForModalities,
 };
+
+// ---- Personas, modalidades y precios ----
+// Normaliza un teléfono (solo dígitos, sin prefijo +34) para identificar
+// a la misma persona entre distintas inscripciones.
+function normPhone(ph) {
+  let d = String(ph || '').replace(/\D/g, '');
+  if (d.length === 11 && d.startsWith('34')) d = d.slice(2);
+  return d;
+}
+// Categorías distintas en las que está inscrita una persona (por teléfono)
+// en la temporada: parejas pendientes o activas.
+function personCategories(db, phone) {
+  const ph = normPhone(phone);
+  if (ph.length < 6) return [];
+  const cats = new Set();
+  const rows = db.prepare(
+    `SELECT p.category, pl.phone FROM pairs p
+     JOIN players pl ON pl.id = p.player1_id OR pl.id = p.player2_id
+     WHERE p.status IN ('pending', 'active')`).all();
+  for (const r of rows) if (normPhone(r.phone) === ph) cats.add(r.category);
+  return [...cats];
+}
+// ¿Esta persona ya pidió la camiseta en otra inscripción de la temporada?
+// (Solo una camiseta por jugador y temporada.)
+function personHasShirt(db, phone) {
+  const ph = normPhone(phone);
+  if (ph.length < 6) return false;
+  const rows = db.prepare(
+    `SELECT pl.shirt, pl.phone FROM pairs p
+     JOIN players pl ON pl.id = p.player1_id OR pl.id = p.player2_id
+     WHERE p.status IN ('pending', 'active') AND pl.shirt = 1`).all();
+  return rows.some(r => normPhone(r.phone) === ph);
+}
+// Precio de inscripción por jugador según su número total de modalidades.
+// getSetting: función (clave, defecto) => valor.
+function priceForModalities(getSetting, n) {
+  const key = n >= 2 ? 'inscription_price_2' : 'inscription_price';
+  const raw = String(getSetting(key, n >= 2 ? '25' : '15') || '').replace(',', '.');
+  const v = parseFloat(raw);
+  return Number.isFinite(v) && v >= 0 ? v : (n >= 2 ? 25 : 15);
+}

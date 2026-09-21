@@ -7,11 +7,12 @@
     <p><span class="badge cat"><%= catName(p.category) %></span>
     <span class="badge <%= p.status==='active'?'ok':p.status==='pending'?'warn':'bad' %>"><%= p.status %></span></p>
     <p class="small">Nivel medio: <strong><%= p.level_avg %></strong> · Inscrita el <%= p.created_at.slice(0,10) %></p>
-    <% for (const pl of players) { %>
+    <% for (const pl of players) { const pi = priceInfo.find(x => x.id === pl.id); %>
       <hr>
       <p><strong><%= pl.name %></strong> <%= p.captain_id === pl.id ? '<span class="badge info">capitán</span>' : '' %></p>
-      <p class="small mut"><%= pl.phone %> · <%= pl.email || 'sin email' %> · Nivel <%= pl.level %></p>
+      <p class="small mut"><%= pl.phone %> · <%= pl.email || 'sin email' %> · Nivel <%= pl.level %> · <%= pl.gender === 'F' ? 'Mujer' : 'Hombre' %></p>
       <p class="small">Camiseta: <%= pl.shirt ? 'sí (' + (pl.shirt_size || '?') + ')' : 'no' %></p>
+      <% if (pi) { %><p class="small">Modalidades de este jugador: <strong><%= pi.cats.join(' + ') || '—' %></strong> → <strong><%= pi.expected %>&nbsp;€</strong></p><% } %>
       <form method="post" action="/admin/inscripciones/<%= p.id %>/pago">
         <input type="hidden" name="player_id" value="<%= pl.id %>">
         <input type="hidden" name="paid" value="<%= pl.paid ? '0' : '1' %>">

@@ -29,7 +29,7 @@
     <tr>
       <td><strong><%= r.code %></strong></td>
       <td><%= r.n1 %> / <%= r.n2 %><br><span class="small mut"><%= r.t1 %> · <%= r.t2 %></span>
-        <% if (dupes.includes(r.id)) { %> <span class="badge warn" title="Mismo nombre o teléfono en otra pareja">⚠ posible duplicado</span><% } %></td>
+        <% if (dupes.includes(r.id)) { %> <span class="badge warn" title="Mismo nombre o teléfono en otra pareja de la misma categoría">⚠ posible duplicado</span><% } %><% if (multi.includes(r.id)) { %> <span class="badge info" title="Este jugador está inscrito en otra modalidad">2 modalidades</span><% } %><% if (xwarn.includes(r.id)) { %> <span class="badge warn" title="El sexo indicado no concuerda con la categoría">⚠ revisar sexo</span><% } %></td>
       <td><%= r.category %></td>
       <td class="num"><%= r.level_avg %></td>
       <td><span class="badge <%= r.paid1?'ok':'warn' %>">J1 <%= r.paid1?'✓':'✗' %></span> <span class="badge <%= r.paid2?'ok':'warn' %>">J2 <%= r.paid2?'✓':'✗' %></span></td>

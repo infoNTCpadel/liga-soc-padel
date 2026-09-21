@@ -131,7 +131,7 @@ CREATE TABLE IF NOT EXISTS matches (
   pair_b_id INTEGER REFERENCES pairs(id) ON DELETE SET NULL,
   s1a INTEGER, s1b INTEGER,
   s2a INTEGER, s2b INTEGER,
-  s3a INTEGER, s3b INTEGER,               -- tercer set pactado (cuenta como STB)
+  s3a INTEGER, s3b INTEGER,               -- tercer set de partidos antiguos (se cuenta como STB)
   stb_a INTEGER, stb_b INTEGER,           -- súper tie-break
   winner_id INTEGER REFERENCES pairs(id) ON DELETE SET NULL,
   wo_winner_id INTEGER REFERENCES pairs(id) ON DELETE SET NULL, -- ganador por W.O.
@@ -198,7 +198,7 @@ const DEFAULTS = {
   phase_po_ini: '2026-12-28',  phase_po_fin: '2027-01-31',  phase_po_label: 'Playoffs del Club',
   round1_closed: '0', round2_closed: '0', round3_closed: '0',
   playoffs_generated: '0', playoffs_closed: '0', registration_closed: '0',
-  inscription_price: '19.95', shirt_price: '14.95',
+  inscription_price: '15', inscription_price_2: '25', shirt_price: '14.95',
 };
 
 function seasonPath(id) {

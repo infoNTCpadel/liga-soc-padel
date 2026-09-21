@@ -1,8 +1,20 @@
 <div class="center" style="padding: 30px 0">
   <h1>¡Inscripción recibida!</h1>
-  <p>Vuestra pareja <strong><%= p1.name %> / <%= p2.name %></strong> (categoría <%= catName(category).toLowerCase() %>, nivel medio <%= levelAvg %>) está <strong>pendiente de revisión</strong> por la organización.</p>
-  <p class="mut">Guardad bien vuestro código de acceso: lo necesitaréis para subir resultados y ver vuestros partidos.</p>
-  <p><span class="code"><%= code %></span></p>
-  <p class="mut small">Recordad pasar por el club para formalizar el pago (<%= price %> € por jugador<%= (p1.shirt || p2.shirt) ? ' + camisetas' : '' %>).</p>
+  <p>Vuestras parejas están <strong>pendientes de revisión</strong> por la organización.</p>
+  <% for (const pr of pairs) { %>
+    <p><strong><%= pr.p1.name %> / <%= pr.p2.name %></strong> (<%= catName(pr.category).toLowerCase() %>, nivel medio <%= pr.levelAvg %>)<br>
+    <span class="mut small">Guardad bien vuestro código de acceso:</span> <span class="code"><%= pr.code %></span></p>
+  <% } %>
+  <div class="card" style="text-align:left; max-width:560px; margin: 18px auto">
+    <h3>Pago en el club</h3>
+    <ul>
+      <% for (const ps of persons) { %>
+      <li><strong><%= ps.name %></strong> — <%= ps.cats.join(' + ') %>:
+        <%= ps.price %>&nbsp;€<%= ps.shirt ? ' + camiseta ' + ps.shirt + '&nbsp;€' : '' %><%= ps.shirtDup ? ' <span class="mut small">(camiseta ya pedida en otra inscripción)</span>' : '' %>
+        → <strong><%= ps.total %>&nbsp;€</strong></li>
+      <% } %>
+    </ul>
+    <p><strong>Total: <%= grandTotal %>&nbsp;€</strong></p>
+  </div>
   <p><a class="btn" href="/acceso">Acceder con mi código</a></p>
 </div>

@@ -2,57 +2,68 @@
 <div class="alert error">La inscripción está cerrada. Si tienes cualquier duda, contacta con la organización del club.</div>
 <% } else { %>
 <h1>Inscripción de parejas</h1>
-<p class="mut">Rellena los datos de los dos jugadores. Al enviar recibirás un <strong>código de acceso</strong> para gestionar vuestros partidos. El pago (<%= priceInscription %>&nbsp;€ por jugador) se realiza en el club.</p>
+<p class="mut">Puedes inscribirte en <strong>una o dos modalidades</strong> (masculina, femenina y mixta), con parejas distintas en cada una. Al enviar recibirás un <strong>código de acceso por pareja</strong> para gestionar vuestros partidos.</p>
+<p class="mut">El pago (<strong><%= price1 %>&nbsp;€</strong> por jugador para una modalidad, <strong><%= price2 %>&nbsp;€</strong> para dos) se realiza en el club.</p>
 
 <% if (error) { %><div class="alert error"><%= error %></div><% } %>
+<% const fmods = form.modality ? (Array.isArray(form.modality) ? form.modality : [form.modality]) : ['M']; %>
 
 <form method="post" action="/inscripcion">
   <div class="card">
-    <h3>Categoría</h3>
-    <div class="field">
+    <h3>Modalidades (elige 1 o 2)</h3>
+    <div class="field" id="mods">
       <% for (const c of CATEGORIES) { %>
-      <label><input type="radio" name="category" value="<%= c.code %>" <%= (form.category || 'M') === c.code ? 'checked' : '' %>> <%= c.name %></label>
+      <label><input type="checkbox" name="modality" value="<%= c.code %>" <%= fmods.includes(c.code) ? 'checked' : '' %>> <%= c.name %></label>
       <% } %>
     </div>
+    <p class="mut small">Si te inscribes en dos modalidades puedes hacerlo en días distintos: el precio por jugador siempre será el de dos modalidades (<%= price2 %>&nbsp;€).</p>
   </div>
 
-  <% for (const n of [1, 2]) { %>
-  <div class="card">
-    <h3>Jugador <%= n %> <%= n === 1 ? '(capitán por defecto)' : '' %></h3>
-    <div class="row2">
-      <div class="field"><label>Nombre y apellidos *</label><input type="text" name="p<%= n %>_name" required value="<%= form['p'+n+'_name'] || '' %>"></div>
-      <div class="field"><label>Teléfono * <span class="hint">para organizar los partidos con los rivales</span></label><input type="tel" name="p<%= n %>_phone" required value="<%= form['p'+n+'_phone'] || '' %>"></div>
+  <% for (const blk of [{ pfx: 'a', num: 1 }, { pfx: 'b', num: 2 }]) { %>
+  <div id="block<%= blk.pfx.toUpperCase() %>" <%= blk.pfx === 'b' && fmods.length < 2 ? 'style="display:none"' : '' %>>
+    <div class="card">
+      <h3 id="title<%= blk.pfx.toUpperCase() %>">Pareja <%= blk.num %></h3>
+      <% for (const n of [1, 2]) { const f = (k) => form[`${blk.pfx}_p${n}_${k}`] || ''; %>
+      <h4>Jugador <%= n %> <%= n === 1 ? '(capitán por defecto)' : '' %></h4>
+      <div class="row2">
+        <div class="field"><label>Nombre y apellidos *</label><input type="text" name="<%= blk.pfx %>_p<%= n %>_name" <%= blk.pfx === 'a' ? 'required' : 'data-req' %> value="<%= f('name') %>"></div>
+        <div class="field"><label>Teléfono * <span class="hint">para organizar los partidos con los rivales</span></label><input type="tel" name="<%= blk.pfx %>_p<%= n %>_phone" <%= blk.pfx === 'a' ? 'required' : 'data-req' %> value="<%= f('phone') %>"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Email</label><input type="email" name="<%= blk.pfx %>_p<%= n %>_email" value="<%= f('email') %>"></div>
+        <div class="field"><label>Nivel Playtomic (0 – 6) *</label><input type="number" name="<%= blk.pfx %>_p<%= n %>_level" step="0.1" min="0" max="6" <%= blk.pfx === 'a' ? 'required' : 'data-req' %> value="<%= f('level') %>"></div>
+      </div>
+      <div class="field"><label>Sexo *</label>
+        <select name="<%= blk.pfx %>_p<%= n %>_gender" <%= blk.pfx === 'a' ? 'required' : 'data-req' %>>
+          <option value="">—</option>
+          <option value="M" <%= f('gender') === 'M' ? 'selected' : '' %>>Hombre</option>
+          <option value="F" <%= f('gender') === 'F' ? 'selected' : '' %>>Mujer</option>
+        </select>
+      </div>
+      <% if (shirtQ) { %>
+      <div class="field">
+        <label><input type="checkbox" name="<%= blk.pfx %>_p<%= n %>_shirt" value="1" <%= f('shirt') ? 'checked' : '' %>> Quiero la camiseta oficial (+<%= priceShirt %>&nbsp;€) <span class="hint">solo una por jugador y temporada</span></label>
+      </div>
+      <div class="field"><label>Talla de camiseta <span class="hint">(si la quieres)</span></label>
+        <select name="<%= blk.pfx %>_p<%= n %>_shirt_size">
+          <option value="">—</option>
+          <% for (const t of shirtQ.options.slice(1)) { %><option <%= f('shirt_size') === t ? 'selected' : '' %>><%= t %></option><% } %>
+        </select>
+      </div>
+      <% } %>
+      <% } %>
+      <div class="field"><label>Capitán de la pareja <span class="hint">organiza los partidos y reserva la pista</span></label><br>
+        <label><input type="radio" name="<%= blk.pfx %>_captain" value="1" checked> Jugador 1</label>
+        <label><input type="radio" name="<%= blk.pfx %>_captain" value="2"> Jugador 2</label>
+      </div>
     </div>
-    <div class="row2">
-      <div class="field"><label>Email</label><input type="email" name="p<%= n %>_email" value="<%= form['p'+n+'_email'] || '' %>"></div>
-      <div class="field"><label>Nivel Playtomic (0 – 6) *</label><input type="number" name="p<%= n %>_level" step="0.1" min="0" max="6" required value="<%= form['p'+n+'_level'] || '' %>"></div>
-    </div>
-    <% if (shirtQ) { %>
-    <div class="field">
-      <label><input type="checkbox" name="p<%= n %>_shirt" value="1" <%= form['p'+n+'_shirt'] ? 'checked' : '' %>> Quiero la camiseta oficial (+<%= priceShirt %>&nbsp;€)</label>
-    </div>
-    <div class="field"><label>Talla de camiseta <span class="hint">(si la quieres)</span></label>
-      <select name="p<%= n %>_shirt_size">
-        <option value="">—</option>
-        <% for (const t of shirtQ.options.slice(1)) { %><option <%= (form['p'+n+'_shirt_size']||'')===t?'selected':'' %>><%= t %></option><% } %>
-      </select>
-    </div>
-    <% } %>
   </div>
   <% } %>
-
-  <div class="card">
-    <h3>Capitán de la pareja</h3>
-    <p class="mut small">El capitán organiza los partidos con los rivales y reserva la pista.</p>
-    <div class="field">
-      <label><input type="radio" name="captain" value="1" checked> Jugador 1</label>
-      <label><input type="radio" name="captain" value="2"> Jugador 2</label>
-    </div>
-  </div>
 
   <% if (questions.length) { %>
   <div class="card">
     <h3>Preguntas adicionales</h3>
+    <p class="mut small">Estas respuestas se guardan para cada pareja que inscribas.</p>
     <% for (const q of questions) { %>
       <div class="field">
         <label><%= q.label %> <%= q.required ? '*' : '' %></label>
@@ -75,4 +86,24 @@
   <p><button class="btn" type="submit">Enviar inscripción</button></p>
   <p class="mut small">Al inscribiros aceptáis la normativa de la liga. La organización revisará vuestra inscripción antes de activarla.</p>
 </form>
+
+<script>
+(function () {
+  var boxes = Array.prototype.slice.call(document.querySelectorAll('#mods input[type=checkbox]'));
+  var names = { M: 'masculina', F: 'femenina', X: 'mixta' };
+  var blockB = document.getElementById('blockB');
+  var reqB = blockB.querySelectorAll('[data-req]');
+  function refresh() {
+    var sel = boxes.filter(function (b) { return b.checked; });
+    if (sel.length > 2) { sel[sel.length - 1].checked = false; return refresh(); }
+    var show = sel.length === 2;
+    blockB.style.display = show ? '' : 'none';
+    for (var i = 0; i < reqB.length; i++) reqB[i].required = show;
+    document.getElementById('titleA').textContent = 'Pareja 1' + (sel[0] ? ' — ' + names[sel[0].value] : '');
+    if (sel[1]) document.getElementById('titleB').textContent = 'Pareja 2 — ' + names[sel[1].value];
+  }
+  boxes.forEach(function (b) { b.addEventListener('change', refresh); });
+  refresh();
+})();
+</script>
 <% } %>

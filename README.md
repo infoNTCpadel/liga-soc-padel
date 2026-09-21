@@ -133,12 +133,22 @@ si quieres, elimina la de prueba.
   mano desde **/admin/parejas**).
 
 ### 2. Inscripciones (hasta el 2 de octubre)
-- Revisa cada inscripción en **/admin/inscripciones** y actívala. Si un jugador
-  aparece en dos parejas (mismo nombre o teléfono), verás el aviso
-  «⚠ posible duplicado».
-- Marca quién ha pagado en el club (19,95 €/jugador) desde la ficha de cada
-  pareja; si activaste la camiseta, controla los pedidos (talla por jugador)
-  en el mismo sitio.
+- Cada persona puede jugar **una o dos modalidades** (masculina, femenina,
+  mixta), con parejas distintas en cada una; puede inscribirlas juntas o en
+  días distintos. No puede repetir modalidad ni jugar una tercera. La
+  identidad entre inscripciones es el **teléfono** (normalizado, sin +34).
+- El formulario pide **sexo** (obligatorio): la mixta debe ser un hombre y
+  una mujer; en las demás categorías, un sexo incoherente muestra un aviso
+  «⚠ revisar sexo» en **/admin/inscripciones**.
+- El aviso «⚠ posible duplicado» solo salta con el mismo nombre o teléfono
+  en dos parejas de la **misma** categoría. Si el jugador está en otra
+  modalidad verás el distintivo «2 modalidades» (es legítimo).
+- **Precios configurables** en Ajustes: inscripción 1 modalidad (15 € por
+  defecto) e inscripción 2 modalidades (25 € por defecto). El pago sigue
+  siendo simple (pagado/no pagado) y se controla en la ficha de cada pareja,
+  donde verás el precio esperado de cada jugador según sus modalidades.
+- **Camiseta: una por jugador y temporada**. Si ya la pidió en otra
+  inscripción, el formulario la ignora y avisa.
 - Cada pareja recibe un **código de acceso** para gestionar sus partidos.
   Desde **Mis datos** pueden actualizar sus datos y anotar su
   **disponibilidad** (días que no pueden jugar, máx. 120 caracteres); al
@@ -171,10 +181,13 @@ si quieres, elimina la de prueba.
   puntos de cada ronda automáticamente.
 
 ### 5. Playoffs (28 dic – 31 ene)
-- **/admin/playoffs**: genera los cuadros. El ranking se divide en categorías
-  de 16 parejas (1ª, 2ª, 3ª…); si el resto final tiene menos de 8 parejas, esas
-  no juegan. Antes de generar puedes reordenar cabezas de serie (↑ ↓) y marcar
-  las parejas que no vayan a jugar.
+- **/admin/playoffs**: genera los cuadros. Las parejas marcadas como «no juega»
+  se retiran **antes** de dividir el ranking en categorías de 16 (1ª, 2ª,
+  3ª…), así las siguientes ascienden de categoría; si el resto final tiene
+  menos de 8 parejas, esas no juegan. Antes de generar puedes reordenar
+  cabezas de serie (↑ ↓). En el cuadro ya generado puedes intercambiar
+  parejas de primera ronda: las etiquetas de cabeza de serie viajan con la
+  pareja.
 - Colocación: cabeza nº 2 arriba del todo, nº 1 abajo del todo, nº 3 y 4 por
   sorteo en los cuartos que cruzarían en semifinales. Huecos vacíos = BYE (la
   pareja exenta pasa de ronda automáticamente). Ya generado, puedes

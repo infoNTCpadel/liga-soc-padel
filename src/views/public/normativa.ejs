@@ -14,9 +14,9 @@
 <div class="card">
   <h3>Formato de los partidos</h3>
   <ul>
-    <li>2 sets + <strong>súper tie-break a 10</strong> con diferencia de 2. Si ambas parejas están de acuerdo, se puede jugar a 3 sets (el tercero cuenta como súper tie-break).</li>
+    <li>2 sets + <strong>súper tie-break a 10</strong> con diferencia de 2.</li>
     <li>Cualquiera de las dos parejas puede subir el resultado, haya ganado o perdido, y la otra tiene <strong>24 horas para validarlo</strong>. Pasado ese plazo, el resultado se valida automáticamente.</li>
-    <li><strong>W.O.:</strong> si una pareja no se presenta, el partido cuenta como 6-4 / 6-4 a favor de la rival. La pareja presente suma 3 puntos y la ausente 0 puntos (como no jugado), y además deberá pagar la pista completa.</li>
+    <li><strong>W.O.:</strong> si una pareja no se presenta, el partido cuenta como 6-4 / 6-4 a favor de la rival. La pareja presente suma 3 puntos y la ausente 0 puntos (como no jugado).</li>
     <li>Solo cuentan como sets ganados los sets terminados; los juegos de un set sin terminar sí cuentan para los desempates.</li>
   </ul>
 </div>
@@ -43,6 +43,16 @@
       </td></tr>
     <% } %>
   </table></div>
+</div>
+
+<div class="card">
+  <h3>Inscripción</h3>
+  <ul>
+    <li>Cada jugador puede inscribirse en <strong>una o dos modalidades</strong> (masculina, femenina y mixta), con parejas distintas en cada una. No está permitido inscribirse dos veces en la misma modalidad.</li>
+    <li>Precio por jugador (pago en el club): <strong><%= price1 %> €</strong> para una modalidad, <strong><%= price2 %> €</strong> para dos modalidades.</li>
+    <li>Las parejas mixtas deben estar formadas por <strong>un hombre y una mujer</strong>.</li>
+    <li>Camiseta oficial: <strong>una por jugador y temporada</strong> (+<%= priceShirt %> €), aunque juegue en dos modalidades.</li>
+  </ul>
 </div>
 
 <div class="card">

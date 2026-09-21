@@ -79,7 +79,7 @@ router.get('/', (req, res) => {
 // ================= INSCRIPCIONES =================
 router.get('/inscripciones', (req, res) => {
   const { status = '', paid = '', q = '' } = req.query;
-  let sql = `SELECT p.*, p1.name n1, p1.phone t1, p1.paid paid1, p2.name n2, p2.phone t2, p2.paid paid2
+  let sql = `SELECT p.*, p1.name n1, p1.phone t1, p1.paid paid1, p1.gender g1, p2.name n2, p2.phone t2, p2.paid paid2, p2.gender g2
              FROM pairs p JOIN players p1 ON p1.id = p.player1_id JOIN players p2 ON p2.id = p.player2_id WHERE 1=1`;
   const params = [];
   if (status) { sql += ' AND p.status = ?'; params.push(status); }
@@ -88,22 +88,33 @@ router.get('/inscripciones', (req, res) => {
   if (q) { sql += ' AND (p1.name LIKE ? OR p2.name LIKE ? OR p.code LIKE ?)'; params.push(`%${q}%`, `%${q}%`, `%${q}%`); }
   sql += ' ORDER BY p.created_at DESC';
   const rows = db.prepare(sql).all(...params);
-  // Posibles duplicados: mismo nombre o mismo teléfono en 2+ parejas distintas
-  const dupes = new Set();
+  // Posibles duplicados: mismo nombre o teléfono en 2+ parejas de la MISMA
+  // categoría (entre categorías distintas es legítimo: hasta 2 modalidades).
+  const dupes = new Set(), multi = new Set(), xwarn = new Set();
   const seen = {};
-  for (const pl of db.prepare(`SELECT pl.name, pl.phone, p.id AS pair_id FROM players pl
-      JOIN pairs p ON p.player1_id = pl.id OR p.player2_id = pl.id`).all()) {
+  for (const pl of db.prepare(`SELECT pl.name, pl.phone, p.id AS pair_id, p.category FROM players pl
+      JOIN pairs p ON p.player1_id = pl.id OR p.player2_id = pl.id
+      WHERE p.status IN ('pending','active')`).all()) {
     const keys = [];
     const nm = (pl.name || '').trim().toLowerCase();
     if (nm) keys.push('n:' + nm);
-    const ph = (pl.phone || '').replace(/\D/g, '');
+    const ph = L.normPhone(pl.phone);
     if (ph.length >= 6) keys.push('t:' + ph);
     for (const k of keys) {
-      if (seen[k] && seen[k] !== pl.pair_id) { dupes.add(seen[k]); dupes.add(pl.pair_id); }
-      else if (!seen[k]) seen[k] = pl.pair_id;
+      const prev = seen[k];
+      if (prev && prev.pair_id !== pl.pair_id) {
+        if (prev.category === pl.category) { dupes.add(prev.pair_id); dupes.add(pl.pair_id); }
+        else { multi.add(prev.pair_id); multi.add(pl.pair_id); }
+      } else if (!prev) seen[k] = { pair_id: pl.pair_id, category: pl.category };
     }
   }
-  res.renderPage('admin/inscripciones', { rows, status, paid, q, dupes: [...dupes] });
+  for (const r of rows) {
+    if (r.category === 'X' && !((r.g1 === 'M' && r.g2 === 'F') || (r.g1 === 'F' && r.g2 === 'M'))) xwarn.add(r.id);
+    if (r.category === 'M' && (r.g1 === 'F' || r.g2 === 'F')) xwarn.add(r.id);
+    if (r.category === 'F' && (r.g1 === 'M' || r.g2 === 'M')) xwarn.add(r.id);
+  }
+  res.renderPage('admin/inscripciones', { rows, status, paid, q,
+    dupes: [...dupes], multi: [...multi], xwarn: [...xwarn] });
 });
 
 router.get('/inscripciones/:id', (req, res) => {
@@ -113,7 +124,14 @@ router.get('/inscripciones/:id', (req, res) => {
   const answers = db.prepare(
     `SELECT q.label, a.answer FROM registration_answers a JOIN custom_questions q ON q.id = a.question_id WHERE a.pair_id = ?`
   ).all(p.id);
-  res.renderPage('admin/inscripcion-detalle', { p, players, answers });
+  // Precio esperado por jugador según sus modalidades totales en la temporada
+  const eur = (v) => Number(v || 0).toFixed(2).replace('.', ',');
+  const priceInfo = players.map(pl => {
+    const cats = L.personCategories(db, pl.phone);
+    const expected = L.priceForModalities(getSetting, cats.length);
+    return { id: pl.id, cats: cats.map(c => L.catName(c).toLowerCase()), expected: eur(expected) };
+  });
+  res.renderPage('admin/inscripcion-detalle', { p, players, answers, priceInfo });
 });
 
 router.post('/inscripciones/:id/estado', (req, res) => {
@@ -142,14 +160,15 @@ router.get('/inscripciones.csv', (req, res) => {
      ORDER BY p.id`
   ).all();
   const questions = db.prepare('SELECT id, label FROM custom_questions ORDER BY position, id').all();
-  const head = ['id', 'codigo', 'categoria', 'estado', 'fecha', 'jugador1', 'email1', 'tlf1', 'nivel1', 'pagado1', 'camiseta1', 'talla1',
-    'jugador2', 'email2', 'tlf2', 'nivel2', 'pagado2', 'camiseta2', 'talla2', ...questions.map(q => q.label)];
+  const head = ['id', 'codigo', 'categoria', 'estado', 'fecha', 'jugador1', 'email1', 'tlf1', 'nivel1', 'pagado1', 'precio_esperado1', 'camiseta1', 'talla1',
+    'jugador2', 'email2', 'tlf2', 'nivel2', 'pagado2', 'precio_esperado2', 'camiseta2', 'talla2', ...questions.map(q => q.label)];
   const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const lines = [head.map(esc).join(';')];
+  const expPrice = (phone) => L.priceForModalities(getSetting, L.personCategories(db, phone).length).toFixed(2).replace('.', ',');
   for (const r of rows) {
     const ans = Object.fromEntries(db.prepare('SELECT question_id, answer FROM registration_answers WHERE pair_id = ?').all(r.id).map(a => [a.question_id, a.answer]));
-    lines.push([r.id, r.code, r.category, r.status, r.created_at, r.n1, r.e1, r.t1, r.l1, r.paid1, r.s1, r.ts1,
-      r.n2, r.e2, r.t2, r.l2, r.paid2, r.s2, r.ts2, ...questions.map(q => ans[q.id] || '')].map(esc).join(';'));
+    lines.push([r.id, r.code, r.category, r.status, r.created_at, r.n1, r.e1, r.t1, r.l1, r.paid1, expPrice(r.t1), r.s1, r.ts1,
+      r.n2, r.e2, r.t2, r.l2, r.paid2, expPrice(r.t2), r.s2, r.ts2, ...questions.map(q => ans[q.id] || '')].map(esc).join(';'));
   }
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="inscripciones.csv"');
@@ -240,23 +259,34 @@ router.get('/parejas/nueva', (req, res) => {
 router.post('/parejas/nueva', (req, res) => {
   const b = req.body;
   const err = (msg) => res.renderPage('admin/pareja-nueva', { error: msg, brackets: L.PLAYTOMIC_BRACKETS });
+  const category = L.validCategory(b.category);
   const mk = (n) => ({
     name: (b[`p${n}_name`] || '').trim(), email: (b[`p${n}_email`] || '').trim(),
     phone: (b[`p${n}_phone`] || '').trim(), level: parseFloat(b[`p${n}_level`]),
+    gender: (b[`p${n}_gender`] || '').toUpperCase(),
   });
   const p1 = mk(1), p2 = mk(2);
   if (!p1.name || !p2.name) return err('Faltan nombres.');
-  for (const [p, n] of [[p1, 1], [p2, 2]]) if (!(p.level >= 0 && p.level <= 6)) return err(`Nivel del jugador ${n} no válido.`);
+  if (!p1.phone || !p2.phone) return err('El teléfono es obligatorio (identifica al jugador entre modalidades).');
+  if (L.normPhone(p1.phone) === L.normPhone(p2.phone)) return err('Los dos jugadores no pueden tener el mismo teléfono.');
+  for (const [p, n] of [[p1, 1], [p2, 2]]) {
+    if (!(p.level >= 0 && p.level <= 6)) return err(`Nivel del jugador ${n} no válido.`);
+    if (!['M', 'F'].includes(p.gender)) return err(`Indica el sexo del jugador ${n}.`);
+    const existing = L.personCategories(db, p.phone);
+    if (existing.includes(category)) return err(`${p.name} ya está inscrito en ${L.catName(category).toLowerCase()}: no puede inscribirse dos veces en la misma modalidad.`);
+    if (new Set([...existing, category]).size > 2) return err(`${p.name} ya está inscrito en dos modalidades.`);
+  }
+  if (category === 'X' && p1.gender === p2.gender) return err('En la categoría mixta la pareja debe estar formada por un hombre y una mujer.');
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   let code; do { code = Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join(''); }
   while (db.prepare('SELECT 1 FROM pairs WHERE code = ?').get(code));
-  const ins = db.prepare('INSERT INTO players(name, email, phone, level, paid) VALUES(?, ?, ?, ?, ?)');
-  const r1 = ins.run(p1.name, p1.email, p1.phone, p1.level, b.p1_paid ? 1 : 0);
-  const r2 = ins.run(p2.name, p2.email, p2.phone, p2.level, b.p2_paid ? 1 : 0);
+  const ins = db.prepare('INSERT INTO players(name, email, phone, level, gender, paid) VALUES(?, ?, ?, ?, ?, ?)');
+  const r1 = ins.run(p1.name, p1.email, p1.phone, p1.level, p1.gender, b.p1_paid ? 1 : 0);
+  const r2 = ins.run(p2.name, p2.email, p2.phone, p2.level, p2.gender, b.p2_paid ? 1 : 0);
   const avg = Math.round(((p1.level + p2.level) / 2) * 100) / 100;
   db.prepare(`INSERT INTO pairs(code, category, player1_id, player2_id, captain_id, level_avg, status)
               VALUES(?, ?, ?, ?, ?, ?, 'active')`)
-    .run(code, L.validCategory(b.category), Number(r1.lastInsertRowid), Number(r2.lastInsertRowid),
+    .run(code, category, Number(r1.lastInsertRowid), Number(r2.lastInsertRowid),
       Number(r1.lastInsertRowid), avg);
   res.redirect('/admin/parejas');
 });
@@ -452,11 +482,11 @@ router.post('/partidos/:id/resultado', (req, res) => {
   if (![m.pair_a_id, m.pair_b_id].includes(winner) && !b.unplayed && !b.wo) return res.redirect('/admin/partidos');
   const wo = !!b.wo;
   const unplayed = !!b.unplayed;
-  db.prepare(`UPDATE matches SET s1a=?, s1b=?, s2a=?, s2b=?, s3a=?, s3b=?, stb_a=?, stb_b=?,
+  db.prepare(`UPDATE matches SET s1a=?, s1b=?, s2a=?, s2b=?, stb_a=?, stb_b=?,
               winner_id=?, wo_winner_id=?, unplayed=?, submitted_by=NULL,
               validation = CASE WHEN ? = 1 THEN 'none' ELSE 'validated' END,
               validation_deadline = NULL, notes = ? WHERE id = ?`)
-    .run(num(b.s1a), num(b.s1b), num(b.s2a), num(b.s2b), num(b.s3a), num(b.s3b), num(b.stb_a), num(b.stb_b),
+    .run(num(b.s1a), num(b.s1b), num(b.s2a), num(b.s2b), num(b.stb_a), num(b.stb_b),
       unplayed ? null : winner, wo ? winner : null, unplayed ? 1 : 0, unplayed ? 1 : 0,
       (b.notes || '').trim(), m.id);
   const upd = db.prepare('SELECT * FROM matches WHERE id = ?').get(m.id);
@@ -545,31 +575,36 @@ router.post('/rondas/:n/reabrir', (req, res) => {
 
 // ================= PLAYOFFS =================
 // Categorías del playoff: grupos de 16 del ranking (ver splitPlayoffCategories).
+// Las exclusiones se aplican ANTES de dividir en bloques: las parejas
+// excluidas salen del ranking y las siguientes ascienden de categoría.
 function playoffStages(category) {
   const ranking = L.getRanking(db, category).map(r => r.pair_id);
-  const { cats, unused } = L.splitPlayoffCategories(ranking);
-  return { stages: cats.map((ids, i) => ({ stage: `po${i + 1}`, ids })), unused };
+  const excluded = excludedPairs(category);
+  const playing = ranking.filter(id => !excluded.has(id));
+  const { cats, unused } = L.splitPlayoffCategories(playing);
+  return {
+    stages: cats.map((ids, i) => ({ stage: `po${i + 1}`, ids })),
+    unused,
+    excluded: ranking.filter(id => excluded.has(id)),
+  };
 }
 function excludedPairs(category) {
   return new Set(
     db.prepare('SELECT pair_id FROM playoff_excluded WHERE category = ?').all(category).map(r => r.pair_id)
   );
 }
-// Orden de sembrado: el guardado manualmente o, por defecto, el ranking.
+// Orden de sembrado: el guardado manualmente o, por defecto, el ranking
+// (ya sin las parejas excluidas).
 function playoffOrder(category, stage) {
   const st = playoffStages(category).stages.find(s => s.stage === stage);
   const base = st ? st.ids : [];
   const saved = db.prepare('SELECT pair_id FROM playoff_seeding WHERE category = ? AND stage = ? ORDER BY pos')
     .all(category, stage).map(r => r.pair_id);
-  if (!saved.length) return { order: base, excluded: excludedPairs(category) };
+  if (!saved.length) return base;
   const inBase = new Set(base);
   const ordered = saved.filter(id => inBase.has(id));
   for (const id of base) if (!ordered.includes(id)) ordered.push(id);
-  return { order: ordered, excluded: excludedPairs(category) };
-}
-function playoffPlaying(category, stage) {
-  const { order, excluded } = playoffOrder(category, stage);
-  return order.filter(id => !excluded.has(id));
+  return ordered;
 }
 function playoffHasResults(category) {
   return db.prepare(
@@ -623,20 +658,19 @@ function firstRoundMatches(category, stage) {
 
 router.get('/playoffs', (req, res) => {
   const data = L.CATEGORY_CODES.map(category => {
-    const { stages, unused } = playoffStages(category);
-    const sd = stages.map(({ stage, ids }) => {
-      const { order, excluded } = playoffOrder(category, stage);
-      const playing = order.filter(id => !excluded.has(id));
-      const size = L.nextPowerOfTwo(Math.max(playing.length, 2));
-      const seeds = Math.min(size >= 16 ? 4 : 2, playing.length);
+    const pg = playoffStages(category);
+    const sd = pg.stages.map(({ stage, ids }) => {
+      const order = playoffOrder(category, stage);
+      const size = L.nextPowerOfTwo(Math.max(order.length, 2));
+      const seeds = Math.min(size >= 16 ? 4 : 2, order.length);
       return {
-        stage, ordinal: L.playoffOrdinal(stage), ids: order, excluded,
+        stage, ordinal: L.playoffOrdinal(stage), ids: order,
         seeds, hasRealResults: playoffHasRealResults(category, stage),
         firstRound: firstRoundMatches(category, stage),
       };
     });
     return {
-      category, stages: sd, unused,
+      category, stages: sd, unused: pg.unused, excluded: pg.excluded,
       generated: getSetting('playoffs_generated', '0') === '1',
       round3closed: getSetting('round3_closed', '0') === '1',
       hasResults: playoffHasResults(category),
@@ -666,7 +700,7 @@ router.post('/playoffs/orden', (req, res) => {
   const stage = /^po\d+$/.test(req.body.stage) ? req.body.stage : 'po1';
   const pairId = parseInt(req.body.pair_id, 10);
   const dir = req.body.dir === 'down' ? 1 : -1;
-  const { order: ids } = playoffOrder(category, stage);
+  const ids = playoffOrder(category, stage);
   const i = ids.indexOf(pairId);
   const j = i + dir;
   if (i >= 0 && j >= 0 && j < ids.length) {
@@ -704,7 +738,7 @@ router.post('/playoffs/generar', (req, res) => {
   const ins = db.prepare(`INSERT INTO matches(category, stage, bracket_round, bracket_slot, pair_a_id, pair_b_id, seed_a, seed_b)
                           VALUES(?, ?, ?, ?, ?, ?, ?, ?)`);
   for (const { stage } of playoffStages(category).stages) {
-    const playing = playoffPlaying(category, stage);
+    const playing = playoffOrder(category, stage);
     if (playing.length < 2) continue;
     const draw34 = L.drawSeeds34();
     const rounds = L.buildBracket(playing, draw34);
@@ -742,18 +776,26 @@ router.post('/playoffs/intercambiar', (req, res) => {
     updates.push({ id: m.id, na, nb });
   }
   // Debe ser una reordenación de las mismas parejas (sin duplicados ni intrusos)
-  const playing = new Set(playoffPlaying(category, stage));
+  const playing = new Set(playoffOrder(category, stage));
   const norm = (arr) => arr.filter(x => x != null).sort((x, y) => x - y).join(',');
   if (norm(current) !== norm(next)) return err('El intercambio debe mantener las mismas parejas, sin duplicar.');
   if (next.some(x => x != null && !playing.has(x))) return err('Hay parejas no válidas en el intercambio.');
 
+  // Las etiquetas de cabeza de serie viajan con la pareja, no se quedan a NULL.
+  const seedOf = {};
+  for (const m of first) {
+    if (m.pair_a_id != null) seedOf[m.pair_a_id] = m.seed_a;
+    if (m.pair_b_id != null) seedOf[m.pair_b_id] = m.seed_b;
+  }
   const clearResult = `s1a=NULL, s1b=NULL, s2a=NULL, s2b=NULL, s3a=NULL, s3b=NULL, stb_a=NULL, stb_b=NULL,
     winner_id=NULL, wo_winner_id=NULL, unplayed=0, submitted_by=NULL, submitted_at=NULL,
     validation='none', validation_deadline=NULL, notes=''`;
   db.exec('BEGIN');
   try {
-    const up1 = db.prepare(`UPDATE matches SET pair_a_id = ?, pair_b_id = ?, seed_a = NULL, seed_b = NULL, ${clearResult} WHERE id = ?`);
-    for (const u of updates) up1.run(u.na, u.nb, u.id);
+    const up1 = db.prepare(`UPDATE matches SET pair_a_id = ?, pair_b_id = ?, seed_a = ?, seed_b = ?, ${clearResult} WHERE id = ?`);
+    for (const u of updates) up1.run(u.na, u.nb,
+      u.na != null ? (seedOf[u.na] ?? null) : null,
+      u.nb != null ? (seedOf[u.nb] ?? null) : null, u.id);
     // Vaciar las rondas siguientes (solo podían tener avances automáticos de byes)
     db.prepare(`UPDATE matches SET pair_a_id = NULL, pair_b_id = NULL, seed_a = NULL, seed_b = NULL, ${clearResult}
                 WHERE category = ? AND stage = ? AND bracket_round != ?`)
@@ -807,8 +849,8 @@ router.post('/cambios/:id/aprobar', (req, res) => {
   const pair = db.prepare('SELECT * FROM pairs WHERE id = ?').get(c.pair_id);
   db.exec('BEGIN');
   try {
-    const r = db.prepare('INSERT INTO players(name, email, phone, level) VALUES(?, ?, ?, ?)')
-      .run(c.new_name, c.new_email, c.new_phone, c.new_level);
+    const r = db.prepare('INSERT INTO players(name, email, phone, level, gender) VALUES(?, ?, ?, ?, ?)')
+      .run(c.new_name, c.new_email, c.new_phone, c.new_level, c.new_gender || 'M');
     const newId = Number(r.lastInsertRowid);
     const col = pair.player1_id === c.old_player_id ? 'player1_id' : 'player2_id';
     const old = db.prepare('SELECT level FROM players WHERE id = ?').get(pair.player1_id === c.old_player_id ? pair.player2_id : pair.player1_id);
@@ -934,14 +976,14 @@ router.get('/ajustes', (req, res) => {
   const keys = ['club_name', 'season_name', 'phase_insc_label', 'phase_insc_ini', 'phase_insc_fin',
     'phase_r1_label', 'phase_r1_ini', 'phase_r1_fin', 'phase_r2_label', 'phase_r2_ini', 'phase_r2_fin',
     'phase_r3_label', 'phase_r3_ini', 'phase_r3_fin', 'phase_po_label', 'phase_po_ini', 'phase_po_fin',
-    'inscription_price', 'shirt_price', 'registration_closed'];
+    'inscription_price', 'inscription_price_2', 'shirt_price', 'registration_closed'];
   const s = Object.fromEntries(keys.map(k => [k, getSetting(k, '')]));
   res.renderPage('admin/ajustes', { s, msg: req.query.msg || null });
 });
 
 router.post('/ajustes', (req, res) => {
   for (const [k, v] of Object.entries(req.body)) {
-    if (k.startsWith('phase_') || ['club_name', 'season_name', 'inscription_price', 'shirt_price'].includes(k)) {
+    if (k.startsWith('phase_') || ['club_name', 'season_name', 'inscription_price', 'inscription_price_2', 'shirt_price'].includes(k)) {
       setSetting(k, (v || '').trim());
     }
   }

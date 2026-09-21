@@ -9,8 +9,12 @@
       <div class="field"><label>Temporada</label><input type="text" name="season_name" value="<%= s.season_name %>"></div>
     </div>
     <div class="row2">
-      <div class="field"><label>Precio inscripción (€)</label><input type="text" name="inscription_price" value="<%= s.inscription_price %>"></div>
+      <div class="field"><label>Precio inscripción 1 modalidad (€)</label><input type="text" name="inscription_price" value="<%= s.inscription_price %>"></div>
+      <div class="field"><label>Precio inscripción 2 modalidades (€)</label><input type="text" name="inscription_price_2" value="<%= s.inscription_price_2 %>"></div>
+    </div>
+    <div class="row2">
       <div class="field"><label>Precio camiseta (€)</label><input type="text" name="shirt_price" value="<%= s.shirt_price %>"></div>
+      <div class="field"></div>
     </div>
     <h3>Calendario</h3>
     <% for (const k of ['insc','r1','r2','r3','po']) { %>

@@ -16,6 +16,12 @@
       <div class="field"><label>Email</label><input type="email" name="p<%= n %>_email" value="<%= pl.email %>"></div>
       <div class="field"><label>Nivel Playtomic (0 – 6) *</label><input type="number" name="p<%= n %>_level" step="0.1" min="0" max="6" required value="<%= pl.level %>"></div>
     </div>
+    <div class="field"><label>Sexo *</label>
+      <select name="p<%= n %>_gender" required>
+        <option value="M" <%= pl.gender === 'M' ? 'selected' : '' %>>Hombre</option>
+        <option value="F" <%= pl.gender === 'F' ? 'selected' : '' %>>Mujer</option>
+      </select>
+    </div>
     <% if (shirtQ) { %>
     <div class="field">
       <label><input type="checkbox" name="p<%= n %>_shirt" value="1" <%= pl.shirt ? 'checked' : '' %>> Quiero la camiseta oficial</label>
