@@ -1,0 +1,43 @@
+<h1>Cobros</h1>
+<p class="mut">Lo que debe pagar cada persona según sus modalidades (una o dos). Márcalo como <strong>pagado</strong> cuando lo cobre en el mostrador: se aplica a todas sus parejas. Si alguien ya pagado añade después otra modalidad, el importe sube y habrá que cobrar la diferencia.</p>
+
+<div class="card">
+  <form method="get" action="/recepcion/cobros" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:end">
+    <input type="hidden" name="f" value="<%= f %>">
+    <div class="field" style="margin:0"><label>Buscar por nombre o teléfono</label><input type="text" name="q" value="<%= q %>" placeholder="p. ej. García"></div>
+    <button class="btn small" type="submit">Buscar</button>
+    <% if (q) { %><a class="btn small ghost" href="/recepcion/cobros?f=<%= f %>">Limpiar</a><% } %>
+  </form>
+</div>
+
+<p>
+  <a class="btn small <%= f==='pendientes'?'':'ghost' %>" href="/recepcion/cobros?f=pendientes<%= q ? '&q='+encodeURIComponent(q) : '' %>">Pendientes de pago (<%= pendingCount %>)</a>
+  <a class="btn small <%= f==='todos'?'':'ghost' %>" href="/recepcion/cobros?f=todos<%= q ? '&q='+encodeURIComponent(q) : '' %>">Todos</a>
+</p>
+
+<% if (!people.length) { %>
+  <div class="card"><p class="mut">No hay nadie en esta lista. ¡Todo cobrado! 🎉</p></div>
+<% } else { %>
+<table>
+  <tr><th>Persona</th><th>Nº socio</th><th>Modalidades</th><th>A cobrar</th><th>Pagado</th><th></th></tr>
+  <% for (const p of people) { %>
+    <tr>
+      <td><strong><%= p.name %></strong><br><span class="small mut"><%= p.phone %></span>
+        <% if (!p.verified) { %> <span class="badge warn" title="Tiene el nº de socio sin verificar">⚠ socio sin verificar</span><% } %></td>
+      <td><%= p.members %></td>
+      <td class="small"><%= p.cats %></td>
+      <td class="num"><strong><%= p.expected %></strong></td>
+      <td><span class="badge <%= p.paid?'ok':'warn' %>"><%= p.paid ? 'Sí ✓' : 'No' %></span></td>
+      <td>
+        <form method="post" action="/recepcion/pago" style="display:inline">
+          <input type="hidden" name="phone" value="<%= p.phone %>">
+          <input type="hidden" name="paid" value="<%= p.paid ? '0' : '1' %>">
+          <input type="hidden" name="f" value="<%= f %>">
+          <input type="hidden" name="q" value="<%= q %>">
+          <button class="btn small <%= p.paid ? 'ghost' : '' %>" type="submit"><%= p.paid ? 'Marcar no pagado' : 'Marcar pagado' %></button>
+        </form>
+      </td>
+    </tr>
+  <% } %>
+</table>
+<% } %>

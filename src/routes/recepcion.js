@@ -1,8 +1,9 @@
-// Recepción: acceso limitado solo a la verificación de nº de socio.
+// Recepción: acceso limitado a la verificación de nº de socio y al control de cobros.
 // No puede entrar a /admin ni a ninguna otra sección.
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const { db, getReceptionHash } = require('../db');
+const { db, getSetting, getReceptionHash } = require('../db');
+const L = require('../lib/league');
 
 const router = express.Router();
 
@@ -62,9 +63,62 @@ router.post('/verificar', (req, res) => {
   const okRow = db.prepare(
     `SELECT 1 FROM players pl JOIN pairs p ON pl.id = p.player1_id OR pl.id = p.player2_id
      WHERE pl.id = ? AND p.status IN ('pending', 'active')`).get(playerId);
-  if (okRow) db.prepare('UPDATE players SET member_verified = ? WHERE id = ?').run(v, playerId);
+  // La verificación es de la persona (su nº de socio): se propaga a todas
+  // sus filas con el mismo número.
+  if (okRow) L.setMemberVerified(db, playerId, v);
   const f = req.body.f === 'verificados' ? 'verificados' : 'pendientes';
   res.redirect('/recepcion?f=' + f + (req.body.q ? '&q=' + encodeURIComponent(req.body.q) : ''));
+});
+
+// ---- Cobros: una fila por persona con lo que debe pagar y el estado ----
+router.get('/cobros', (req, res) => {
+  const f = req.query.f === 'todos' ? 'todos' : 'pendientes';
+  const q = (req.query.q || '').trim();
+  const ql = q.toLowerCase();
+  const rows = db.prepare(
+    `SELECT pl.id, pl.name, pl.phone, pl.member_no, pl.member_verified, pl.paid, p.category
+     FROM players pl JOIN pairs p ON pl.id = p.player1_id OR pl.id = p.player2_id
+     WHERE p.status IN ('pending', 'active')`).all();
+  const byPhone = new Map();
+  for (const r of rows) {
+    const ph = L.normPhone(r.phone);
+    if (ph.length < 6) continue;
+    if (!byPhone.has(ph)) byPhone.set(ph, { phone: r.phone, name: r.name, members: new Set(), cats: new Set(), paid: [], verified: [] });
+    const g = byPhone.get(ph);
+    if (r.member_no && r.member_no.trim()) g.members.add(r.member_no.trim());
+    g.cats.add(r.category);
+    g.paid.push(r.paid);
+    g.verified.push(r.member_verified);
+  }
+  const eur = (v) => Number(v || 0).toFixed(2).replace('.', ',') + ' €';
+  let people = [...byPhone.values()].map(g => {
+    const cats = [...g.cats];
+    return {
+      phone: g.phone,
+      name: g.name,
+      members: [...g.members].join(', ') || '—',
+      verified: g.verified.length > 0 && g.verified.every(v => v),
+      cats: cats.map(c => L.catName(c)).join(' + '),
+      expected: eur(L.priceForModalities(getSetting, cats.length)),
+      paid: g.paid.length > 0 && g.paid.every(v => v),
+    };
+  });
+  if (ql) people = people.filter(p => p.name.toLowerCase().includes(ql) || p.phone.includes(q));
+  people.sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  const pendingCount = people.filter(p => !p.paid).length;
+  if (f === 'pendientes') people = people.filter(p => !p.paid);
+  res.renderPage('recepcion/cobros', { people, f, q, pendingCount });
+});
+
+router.post('/pago', (req, res) => {
+  const paid = req.body.paid === '1' ? 1 : 0;
+  // El pago es por persona: se aplica a todas sus parejas (mismo teléfono).
+  const ids = L.personPlayerIds(db, req.body.phone || '');
+  if (ids.length) {
+    db.prepare(`UPDATE players SET paid = ? WHERE id IN (${ids.map(() => '?').join(',')})`).run(paid, ...ids);
+  }
+  const f = req.body.f === 'todos' ? 'todos' : 'pendientes';
+  res.redirect('/recepcion/cobros?f=' + f + (req.body.q ? '&q=' + encodeURIComponent(req.body.q) : ''));
 });
 
 module.exports = router;

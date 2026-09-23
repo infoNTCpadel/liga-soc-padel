@@ -146,7 +146,14 @@ si quieres, elimina la de prueba.
   una contraseña propia que se crea en **/admin/ajustes** («Acceso de
   recepción»). Recepción solo ve la lista de socios pendientes (con
   buscador por nombre o nº) y puede marcarlos como verificados: no entra
-  al panel de administración ni ve nada más.
+  al panel de administración ni ve nada más. Verificar un nº lo verifica
+  en todas las parejas de esa persona.
+- **Cobros** (`/recepcion/cobros`): una fila por persona con su nº de socio,
+  modalidades, **importe a cobrar** (calculado de sus modalidades: 15 € una,
+  25 € dos, según Ajustes) y el estado de **pagado sí/no**, que recepción
+  marca al cobrar en el mostrador (se aplica a todas sus parejas, igual que
+  en el panel). Si alguien ya pagado añade después otra modalidad, el
+  importe sube: habrá que cobrar la diferencia y volver a marcarlo.
 - Una pareja **no se puede activar** hasta que sus dos jugadores tengan el
   nº de socio verificado. Si un nº ya está verificado en otra inscripción,
   se hereda automáticamente (no hay que verificar dos veces a la misma

@@ -505,7 +505,7 @@ module.exports = {
   PLAYTOMIC_BRACKETS, bracketOf,
   CATEGORIES, CATEGORY_CODES, catName, validCategory,
   normPhone, personCategories, personHasShirt, priceForModalities, validModalityCombo,
-  validSpanishMobile, personPlayerIds, memberNoKey,
+  validSpanishMobile, personPlayerIds, memberNoKey, setMemberVerified,
 };
 
 // ---- Personas, modalidades y precios ----
@@ -539,6 +539,21 @@ function validModalityCombo(cats) {
 // Normaliza un nº de socio para compararlo (sin espacios, en mayúsculas).
 function memberNoKey(mn) {
   return String(mn || '').trim().replace(/\s+/g, '').toUpperCase();
+}
+// Marca la verificación del nº de socio de una persona en todas sus filas:
+// el nº identifica a la persona, no a la pareja. Si no hay nº, solo esa fila.
+function setMemberVerified(db, playerId, verified) {
+  const row = db.prepare('SELECT member_no FROM players WHERE id = ?').get(playerId);
+  if (!row) return 0;
+  const key = memberNoKey(row.member_no);
+  const ids = key
+    ? db.prepare('SELECT id, member_no FROM players').all()
+        .filter(r => memberNoKey(r.member_no) === key).map(r => r.id)
+    : [playerId];
+  if (!ids.length) return 0;
+  db.prepare(`UPDATE players SET member_verified = ? WHERE id IN (${ids.map(() => '?').join(',')})`)
+    .run(verified ? 1 : 0, ...ids);
+  return ids.length;
 }
 // ¿Parece un móvil español válido? (9 dígitos, empieza por 6 o 7)
 function validSpanishMobile(ph) {

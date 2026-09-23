@@ -168,8 +168,9 @@ router.post('/inscripciones/:id/socio', (req, res) => {
       const v = mn && known.has(L.memberNoKey(mn)) ? 1 : 0;
       db.prepare('UPDATE players SET member_no = ?, member_verified = ? WHERE id = ?').run(mn, v, playerId);
     } else {
+      // La verificación es de la persona: se propaga a sus demás filas con el mismo nº.
       const cur = db.prepare('SELECT member_verified FROM players WHERE id = ?').get(playerId).member_verified;
-      db.prepare('UPDATE players SET member_verified = ? WHERE id = ?').run(cur ? 0 : 1, playerId);
+      L.setMemberVerified(db, playerId, cur ? 0 : 1);
     }
   }
   res.redirect('/admin/inscripciones/' + req.params.id);

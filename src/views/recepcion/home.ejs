@@ -34,7 +34,11 @@
           <input type="hidden" name="q" value="<%= q %>">
           <% if (f === 'pendientes') { %>
             <input type="hidden" name="verified" value="1">
-            <button class="btn small" type="submit">Verificar</button>
+            <% if (r.member_no && r.member_no.trim()) { %>
+              <button class="btn small" type="submit">Verificar</button>
+            <% } else { %>
+              <button class="btn small" type="button" disabled title="Primero hay que anotar su nº de socio en la ficha de la pareja (panel de organización)">Verificar</button>
+            <% } %>
           <% } else { %>
             <input type="hidden" name="verified" value="0">
             <button class="btn small ghost" type="submit">Quitar verificación</button>
