@@ -11,6 +11,12 @@
       <hr>
       <p><strong><%= pl.name %></strong> <%= p.captain_id === pl.id ? '<span class="badge info">capitán</span>' : '' %></p>
       <p class="small mut"><%= pl.phone %> · <%= pl.email || 'sin email' %> · Nivel <%= pl.level %> · <%= pl.gender === 'F' ? 'Mujer' : 'Hombre' %></p>
+      <form method="post" action="/admin/inscripciones/<%= p.id %>/nivel" style="margin:.3rem 0">
+        <input type="hidden" name="player_id" value="<%= pl.id %>">
+        <label class="small mut">Nivel Playtomic</label>
+        <input type="number" name="level" step="0.1" min="0" max="6" value="<%= pl.level %>" style="width:5rem">
+        <button class="btn small ghost" type="submit">Guardar nivel</button>
+      </form>
       <p class="small">Camiseta: <%= pl.shirt ? 'sí (' + (pl.shirt_size || '?') + ')' : 'no' %></p>
       <% if (pi) { %><p class="small">Modalidades de este jugador: <strong><%= pi.cats.join(' + ') || '—' %></strong> → <strong><%= pi.expected %>&nbsp;€</strong></p><% } %>
       <form method="post" action="/admin/inscripciones/<%= p.id %>/pago">

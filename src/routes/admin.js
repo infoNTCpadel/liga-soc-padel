@@ -164,6 +164,40 @@ router.post('/inscripciones/:id/pago', (req, res) => {
   res.redirect('/admin/inscripciones/' + req.params.id);
 });
 
+router.post('/inscripciones/:id/nivel', (req, res) => {
+  const playerId = parseInt(req.body.player_id, 10);
+  const level = parseFloat(String(req.body.level || '').replace(',', '.'));
+  const p = db.prepare('SELECT * FROM pairs WHERE id = ?').get(req.params.id);
+  if (p && [p.player1_id, p.player2_id].includes(playerId) && level >= 0 && level <= 6) {
+    // El nivel es del jugador: se corrige en todas sus parejas (mismo teléfono)
+    // y se recalcula el nivel medio de cada una.
+    const me = db.prepare('SELECT phone FROM players WHERE id = ?').get(playerId);
+    const ids = L.personPlayerIds(db, me ? me.phone : '');
+    const targets = ids.length ? ids : [playerId];
+    db.exec('BEGIN');
+    try {
+      const u = db.prepare('UPDATE players SET level = ? WHERE id = ?');
+      for (const id of targets) u.run(level, id);
+      const pairOf = db.prepare(
+        `SELECT DISTINCT pa.id, pa.player1_id, pa.player2_id FROM pairs pa
+         WHERE pa.status IN ('pending', 'active') AND (pa.player1_id = ? OR pa.player2_id = ?)`);
+      const lv = db.prepare('SELECT level FROM players WHERE id = ?');
+      const setAvg = db.prepare('UPDATE pairs SET level_avg = ? WHERE id = ?');
+      const seen = new Set();
+      for (const id of targets) {
+        for (const pr of pairOf.all(id, id)) {
+          if (seen.has(pr.id)) continue;
+          seen.add(pr.id);
+          const avg = Math.round(((lv.get(pr.player1_id).level + lv.get(pr.player2_id).level) / 2) * 100) / 100;
+          setAvg.run(avg, pr.id);
+        }
+      }
+      db.exec('COMMIT');
+    } catch (e) { db.exec('ROLLBACK'); console.error('nivel', e); }
+  }
+  res.redirect('/admin/inscripciones/' + req.params.id);
+});
+
 router.get('/inscripciones.csv', (req, res) => {
   const rows = db.prepare(
     `SELECT p.id, p.code, p.category, p.status, p.created_at,
@@ -183,11 +217,21 @@ router.get('/inscripciones.csv', (req, res) => {
   };
   const esc = (v) => `"${csvSafe(v).replace(/"/g, '""')}"`;
   const lines = [head.map(esc).join(';')];
-  const expPrice = (phone) => L.priceForModalities(getSetting, L.personCategories(db, phone).length).toFixed(2).replace('.', ',');
+  // El precio de cada persona aparece solo en su primera pareja del CSV: en las
+  // siguientes líneas sale 0,00 para que no parezca que hay que pagarlo dos veces.
+  const seenPhones = new Set();
+  const expPrice = (r, side) => {
+    if (r.status === 'rejected') return '0,00';
+    const phone = side === 1 ? r.t1 : r.t2;
+    const ph = L.normPhone(phone);
+    if (seenPhones.has(ph)) return '0,00';
+    seenPhones.add(ph);
+    return L.priceForModalities(getSetting, L.personCategories(db, phone).length).toFixed(2).replace('.', ',');
+  };
   for (const r of rows) {
     const ans = Object.fromEntries(db.prepare('SELECT question_id, answer FROM registration_answers WHERE pair_id = ?').all(r.id).map(a => [a.question_id, a.answer]));
-    lines.push([r.id, r.code, r.category, r.status, r.created_at, r.n1, r.e1, r.t1, r.l1, r.paid1, expPrice(r.t1), r.s1, r.ts1,
-      r.n2, r.e2, r.t2, r.l2, r.paid2, expPrice(r.t2), r.s2, r.ts2, ...questions.map(q => ans[q.id] || '')].map(esc).join(';'));
+    lines.push([r.id, r.code, r.category, r.status, r.created_at, r.n1, r.e1, r.t1, r.l1, r.paid1, expPrice(r, 1), r.s1, r.ts1,
+      r.n2, r.e2, r.t2, r.l2, r.paid2, expPrice(r, 2), r.s2, r.ts2, ...questions.map(q => ans[q.id] || '')].map(esc).join(';'));
   }
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="inscripciones.csv"');

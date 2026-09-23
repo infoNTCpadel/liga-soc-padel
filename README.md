@@ -150,6 +150,12 @@ si quieres, elimina la de prueba.
   donde verás el precio esperado de cada jugador según sus modalidades.
   Como el pago es por persona, al marcarlo en una pareja se propaga
   automáticamente a sus demás parejas (mismo teléfono).
+- El **nivel Playtomic** lo puede corregir el admin en la ficha de cada
+  pareja (campo «Nivel Playtomic» con botón Guardar): se aplica a todas las
+  parejas del jugador y se recalcula el nivel medio de cada una.
+- En el CSV de inscripciones, el **precio esperado** de cada persona aparece
+  solo en su primera pareja; en las siguientes líneas sale 0,00 para que no
+  parezca que hay que pagarlo dos veces.
 - El **teléfono** identifica al jugador entre modalidades e inscripciones:
   se normaliza (+34, 0034, espacios y guiones dan igual) y se valida que
   parezca un móvil español (9 dígitos, empieza por 6 o 7).
