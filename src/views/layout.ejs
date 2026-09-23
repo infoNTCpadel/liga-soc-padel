@@ -56,6 +56,15 @@
   </nav>
 </div></div>
 <% } %>
+<% if (section === 'recepcion') { %>
+<div class="adminbar"><div class="wrap adminbar-in">
+  <span class="admin-tag">RECEPCIÓN</span>
+  <nav class="anav">
+    <a href="/recepcion">Verificación de socios</a>
+  </nav>
+  <form action="/recepcion/logout" method="post" style="display:inline;margin-left:auto"><button class="btn small ghost" type="submit">Salir</button></form>
+</div></div>
+<% } %>
 
 <main class="wrap"><%- body %></main>
 

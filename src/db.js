@@ -225,6 +225,9 @@ function seasonDb(id) {
          pair_id INTEGER NOT NULL REFERENCES pairs(id) ON DELETE CASCADE,
          PRIMARY KEY (category, pair_id)
        )`,
+      'ALTER TABLE players ADD COLUMN member_no TEXT',
+      'ALTER TABLE players ADD COLUMN member_verified INTEGER NOT NULL DEFAULT 0',
+      'ALTER TABLE pair_changes ADD COLUMN new_member_no TEXT',
     ]) {
       try { sdb.exec(sql); } catch (e) { /* ya existe */ }
     }
@@ -346,8 +349,13 @@ function setSetting(key, value) {
 function getAdminHash() { return metaGet('admin_password_hash'); }
 function setAdminHash(h) { metaSet('admin_password_hash', h); }
 
+// ---- contraseña de recepción: solo accede a la verificación de socios ----
+function getReceptionHash() { return metaGet('reception_password_hash'); }
+function setReceptionHash(h) { metaSet('reception_password_hash', h); }
+
 module.exports = {
   db, getSetting, setSetting, getAdminHash, setAdminHash,
+  getReceptionHash, setReceptionHash,
   listSeasons, getActiveSeason, getActiveSeasonId,
   createSeason, activateSeason, renameSeason, deleteSeason,
   seasonDb,

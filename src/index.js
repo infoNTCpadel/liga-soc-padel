@@ -108,6 +108,7 @@ app.use((req, res, next) => { res.renderPage = (v, d) => res_render(res, v, d); 
 app.use('/', require('./routes/public'));
 app.use('/pareja', require('./routes/pair'));
 app.use('/admin', require('./routes/admin'));
+app.use('/recepcion', require('./routes/recepcion'));
 
 // 404
 app.use((req, res) => res.status(404).renderPage('public/404', {}));

@@ -100,6 +100,7 @@ router.post('/inscripcion', (req, res) => {
       name: (b[`${pfx}_p${n}_name`] || '').trim(),
       email: (b[`${pfx}_p${n}_email`] || '').trim(),
       phone: (b[`${pfx}_p${n}_phone`] || '').trim(),
+      member_no: (b[`${pfx}_p${n}_member`] || '').trim(),
       level: parseFloat(b[`${pfx}_p${n}_level`]),
       gender: (b[`${pfx}_p${n}_gender`] || '').toUpperCase(),
       shirt: shirtActive && b[`${pfx}_p${n}_shirt`] ? 1 : 0,
@@ -109,6 +110,7 @@ router.post('/inscripcion', (req, res) => {
     const tag = `Pareja ${i + 1}`;
     if (!p1.name || !p2.name) return error(`${tag}: faltan los nombres de los dos jugadores.`);
     if (!p1.phone || !p2.phone) return error(`${tag}: faltan los teléfonos de contacto (los necesitaréis para organizar los partidos).`);
+    if (!p1.member_no || !p2.member_no) return error(`${tag}: falta el nº de socio del club de algún jugador (solo pueden jugar los socios).`);
     if (L.normPhone(p1.phone) === L.normPhone(p2.phone)) return error(`${tag}: los dos jugadores no pueden tener el mismo teléfono.`);
     if (p1.name.toLowerCase() === p2.name.toLowerCase()) return error(`${tag}: los dos jugadores no pueden tener el mismo nombre.`);
     for (const [p, n] of [[p1, 1], [p2, 2]]) {
@@ -158,6 +160,13 @@ router.post('/inscripcion', (req, res) => {
     if (q.required && !ans) return error(`Falta responder: "${q.label}".`);
   }
 
+  // Si el nº de socio ya está verificado en otra inscripción, se hereda.
+  const verifiedMembers = new Set(
+    db.prepare('SELECT member_no FROM players WHERE member_verified = 1').all()
+      .map(r => L.memberNoKey(r.member_no))
+  );
+  const memberVerified = (mn) => (verifiedMembers.has(L.memberNoKey(mn)) ? 1 : 0);
+
   // Las dos parejas de un mismo envío se crean en una transacción: o las dos o ninguna.
   const created = [];
   db.exec('BEGIN');
@@ -165,10 +174,10 @@ router.post('/inscripcion', (req, res) => {
     for (const bl of blocks) {
       const code = genCode();
       const ins = db.prepare(
-        'INSERT INTO players(name, email, phone, level, gender, shirt, shirt_size) VALUES(?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO players(name, email, phone, level, gender, shirt, shirt_size, member_no, member_verified) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)'
       );
-      const r1 = ins.run(bl.p1.name, bl.p1.email, bl.p1.phone, bl.p1.level, bl.p1.gender, bl.p1.shirt, bl.p1.shirt_size);
-      const r2 = ins.run(bl.p2.name, bl.p2.email, bl.p2.phone, bl.p2.level, bl.p2.gender, bl.p2.shirt, bl.p2.shirt_size);
+      const r1 = ins.run(bl.p1.name, bl.p1.email, bl.p1.phone, bl.p1.level, bl.p1.gender, bl.p1.shirt, bl.p1.shirt_size, bl.p1.member_no, memberVerified(bl.p1.member_no));
+      const r2 = ins.run(bl.p2.name, bl.p2.email, bl.p2.phone, bl.p2.level, bl.p2.gender, bl.p2.shirt, bl.p2.shirt_size, bl.p2.member_no, memberVerified(bl.p2.member_no));
       const levelAvg = Math.round(((bl.p1.level + bl.p2.level) / 2) * 100) / 100;
       const rp = db.prepare(
         `INSERT INTO pairs(code, category, player1_id, player2_id, captain_id, level_avg, status)

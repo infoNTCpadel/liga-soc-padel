@@ -228,6 +228,8 @@ router.post('/cambio', (req, res) => {
   const nl = parseFloat(b.new_level);
   if (!(nl >= 0 && nl <= 6)) return err('El nivel del nuevo jugador no es válido.');
   if (!(b.new_name || '').trim() || !(b.new_phone || '').trim()) return err('Faltan los datos del nuevo jugador.');
+  const newMember = (b.new_member || '').trim();
+  if (!newMember) return err('Falta el nº de socio del club del nuevo jugador (también el sustituto debe ser socio).');
   if (!L.validSpanishMobile(b.new_phone))
     return err('El teléfono del nuevo jugador no parece un móvil válido (9 dígitos, empieza por 6 o 7): revísalo por favor.');
   const ng = (b.new_gender || '').toUpperCase();
@@ -242,9 +244,9 @@ router.post('/cambio', (req, res) => {
       .get(pair.player1_id === oldId ? pair.player2_id : pair.player1_id);
     if (other && other.gender === ng) return err('En la categoría mixta la pareja debe estar formada por un hombre y una mujer.');
   }
-  db.prepare(`INSERT INTO pair_changes(pair_id, old_player_id, new_name, new_email, new_phone, new_level, new_gender)
-              VALUES(?, ?, ?, ?, ?, ?, ?)`)
-    .run(pair.id, oldId, b.new_name.trim(), (b.new_email || '').trim(), b.new_phone.trim(), nl, ng);
+  db.prepare(`INSERT INTO pair_changes(pair_id, old_player_id, new_name, new_email, new_phone, new_level, new_gender, new_member_no)
+              VALUES(?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(pair.id, oldId, b.new_name.trim(), (b.new_email || '').trim(), b.new_phone.trim(), nl, ng, newMember);
   res.redirect('/pareja');
 });
 

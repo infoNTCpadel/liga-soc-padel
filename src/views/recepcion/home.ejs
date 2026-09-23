@@ -1,0 +1,47 @@
+<h1>Verificación de socios</h1>
+<p class="mut">Comprueba el nº de socio en el listado del club y pulsa <strong>Verificar</strong>. Solo las parejas con los dos socios verificados se pueden activar.</p>
+
+<div class="card">
+  <form method="get" action="/recepcion" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:end">
+    <input type="hidden" name="f" value="<%= f %>">
+    <div class="field" style="margin:0"><label>Buscar por nombre o nº de socio</label><input type="text" name="q" value="<%= q %>" placeholder="p. ej. García o 1234"></div>
+    <button class="btn small" type="submit">Buscar</button>
+    <% if (q) { %><a class="btn small ghost" href="/recepcion?f=<%= f %>">Limpiar</a><% } %>
+  </form>
+</div>
+
+<p>
+  <a class="btn small <%= f==='pendientes'?'':'ghost' %>" href="/recepcion?f=pendientes<%= q ? '&q='+encodeURIComponent(q) : '' %>">Pendientes (<%= pendingCount %>)</a>
+  <a class="btn small <%= f==='verificados'?'':'ghost' %>" href="/recepcion?f=verificados<%= q ? '&q='+encodeURIComponent(q) : '' %>">Verificados</a>
+</p>
+
+<% if (!rows.length) { %>
+  <div class="card"><p class="mut">No hay jugadores en esta lista.</p></div>
+<% } else { %>
+<table>
+  <tr><th>Jugador</th><th>Teléfono</th><th>Nº socio</th><th>Pareja</th><th>Cat</th><th></th></tr>
+  <% for (const r of rows) { %>
+    <tr>
+      <td><strong><%= r.name %></strong></td>
+      <td><%= r.phone %></td>
+      <td><strong><%= r.member_no || '—' %></strong></td>
+      <td class="small mut"><%= r.code %></td>
+      <td><%= r.category %></td>
+      <td>
+        <form method="post" action="/recepcion/verificar" style="display:inline">
+          <input type="hidden" name="player_id" value="<%= r.id %>">
+          <input type="hidden" name="f" value="<%= f %>">
+          <input type="hidden" name="q" value="<%= q %>">
+          <% if (f === 'pendientes') { %>
+            <input type="hidden" name="verified" value="1">
+            <button class="btn small" type="submit">Verificar</button>
+          <% } else { %>
+            <input type="hidden" name="verified" value="0">
+            <button class="btn small ghost" type="submit">Quitar verificación</button>
+          <% } %>
+        </form>
+      </td>
+    </tr>
+  <% } %>
+</table>
+<% } %>

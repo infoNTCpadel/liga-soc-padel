@@ -138,6 +138,23 @@ si quieres, elimina la de prueba.
   puede inscribirlas juntas o en días distintos. No puede repetir modalidad
   ni jugar una tercera. La identidad entre inscripciones es el **teléfono**
   (normalizado: da igual que se escriba con +34, 0034, espacios o guiones).
+- **Solo pueden jugar los socios del club**: el formulario pide el
+  **nº de socio** de cada jugador (obligatorio; si alguien no lo sabe, que lo
+  pregunte en recepción). El **sustituto** en un cambio de pareja también
+  debe indicarlo.
+- La **verificación de socios** la hace recepción desde **/recepcion**, con
+  una contraseña propia que se crea en **/admin/ajustes** («Acceso de
+  recepción»). Recepción solo ve la lista de socios pendientes (con
+  buscador por nombre o nº) y puede marcarlos como verificados: no entra
+  al panel de administración ni ve nada más.
+- Una pareja **no se puede activar** hasta que sus dos jugadores tengan el
+  nº de socio verificado. Si un nº ya está verificado en otra inscripción,
+  se hereda automáticamente (no hay que verificar dos veces a la misma
+  persona). En la ficha de cada pareja el admin también puede corregir el
+  nº (al cambiarlo se desverifica) y verificar manualmente.
+- En **/admin/inscripciones** las parejas con socios sin verificar llevan el
+  distintivo «⚠ socio sin verificar», y el CSV incluye las columnas
+  `socio1`, `socio_verificado1`, `socio2` y `socio_verificado2`.
 - El formulario pide **sexo** (obligatorio): la mixta debe ser un hombre y
   una mujer; en las demás categorías, un sexo incoherente muestra un aviso
   «⚠ revisar sexo» en **/admin/inscripciones**.

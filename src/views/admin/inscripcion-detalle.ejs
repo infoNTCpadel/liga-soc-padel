@@ -1,5 +1,6 @@
 <h1>Inscripción <%= p.code %></h1>
 <p><a href="/admin/inscripciones">← Volver</a></p>
+<% if (query.err) { %><div class="alert error"><%= query.err %></div><% } %>
 
 <div class="grid c2">
   <div class="card">
@@ -18,6 +19,14 @@
         <button class="btn small ghost" type="submit">Guardar nivel</button>
       </form>
       <p class="small">Camiseta: <%= pl.shirt ? 'sí (' + (pl.shirt_size || '?') + ')' : 'no' %></p>
+      <p class="small">Nº socio: <strong><%= pl.member_no || '—' %></strong>
+        <span class="badge <%= pl.member_verified ? 'ok' : 'warn' %>"><%= pl.member_verified ? '✓ socio verificado' : 'socio sin verificar' %></span></p>
+      <form method="post" action="/admin/inscripciones/<%= p.id %>/socio" style="margin:.3rem 0">
+        <input type="hidden" name="player_id" value="<%= pl.id %>">
+        <input type="text" name="member_no" value="<%= pl.member_no || '' %>" placeholder="Nº de socio" style="width:7rem">
+        <button class="btn small ghost" type="submit" name="action" value="save">Guardar nº</button>
+        <button class="btn small <%= pl.member_verified ? 'ghost' : '' %>" type="submit" name="action" value="toggle"><%= pl.member_verified ? 'Quitar verificación' : 'Marcar verificado' %></button>
+      </form>
       <% if (pi) { %><p class="small">Modalidades de este jugador: <strong><%= pi.cats.join(' + ') || '—' %></strong> → <strong><%= pi.expected %>&nbsp;€</strong></p><% } %>
       <form method="post" action="/admin/inscripciones/<%= p.id %>/pago">
         <input type="hidden" name="player_id" value="<%= pl.id %>">

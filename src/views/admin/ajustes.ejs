@@ -36,3 +36,12 @@
     <button class="btn small" type="submit">Actualizar</button>
   </form>
 </div>
+
+<div class="card">
+  <h3>Acceso de recepción <span class="badge <%= receptionSet ? 'ok' : 'warn' %>"><%= receptionSet ? 'configurado' : 'sin configurar' %></span></h3>
+  <p class="small mut">Recepción entra en <strong>/recepcion</strong> con esta contraseña y solo puede verificar nº de socio: no ve ni toca nada más del panel.</p>
+  <form method="post" action="/admin/ajustes/recepcion-password">
+    <div class="field"><label><%= receptionSet ? 'Nueva contraseña de recepción' : 'Contraseña de recepción' %></label><input type="password" name="password" required minlength="6"></div>
+    <button class="btn small" type="submit"><%= receptionSet ? 'Actualizar' : 'Crear acceso' %></button>
+  </form>
+</div>

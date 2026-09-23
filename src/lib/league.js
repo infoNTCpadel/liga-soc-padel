@@ -505,7 +505,7 @@ module.exports = {
   PLAYTOMIC_BRACKETS, bracketOf,
   CATEGORIES, CATEGORY_CODES, catName, validCategory,
   normPhone, personCategories, personHasShirt, priceForModalities, validModalityCombo,
-  validSpanishMobile, personPlayerIds,
+  validSpanishMobile, personPlayerIds, memberNoKey,
 };
 
 // ---- Personas, modalidades y precios ----
@@ -535,6 +535,10 @@ function personCategories(db, phone) {
 // combinar masculina y femenina (solo M+X o F+X, además de una sola).
 function validModalityCombo(cats) {
   return !(cats.includes('M') && cats.includes('F'));
+}
+// Normaliza un nº de socio para compararlo (sin espacios, en mayúsculas).
+function memberNoKey(mn) {
+  return String(mn || '').trim().replace(/\s+/g, '').toUpperCase();
 }
 // ¿Parece un móvil español válido? (9 dígitos, empieza por 6 o 7)
 function validSpanishMobile(ph) {

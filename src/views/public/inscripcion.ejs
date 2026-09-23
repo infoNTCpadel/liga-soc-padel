@@ -29,6 +29,7 @@
         <div class="field"><label>Nombre y apellidos *</label><input type="text" name="<%= blk.pfx %>_p<%= n %>_name" <%= blk.pfx === 'a' ? 'required' : 'data-req' %> value="<%= f('name') %>"></div>
         <div class="field"><label>Teléfono * <span class="hint">para organizar los partidos con los rivales</span></label><input type="tel" name="<%= blk.pfx %>_p<%= n %>_phone" <%= blk.pfx === 'a' ? 'required' : 'data-req' %> value="<%= f('phone') %>"></div>
       </div>
+      <div class="field"><label>Nº de socio del club * <span class="hint">solo pueden jugar los socios; si no sabes el tuyo, pregúntalo en recepción</span></label><input type="text" name="<%= blk.pfx %>_p<%= n %>_member" <%= blk.pfx === 'a' ? 'required' : 'data-req' %> value="<%= f('member') %>"></div>
       <div class="row2">
         <div class="field"><label>Email</label><input type="email" name="<%= blk.pfx %>_p<%= n %>_email" value="<%= f('email') %>"></div>
         <div class="field"><label>Nivel Playtomic (0 – 6) *</label><input type="number" name="<%= blk.pfx %>_p<%= n %>_level" step="0.1" min="0" max="6" <%= blk.pfx === 'a' ? 'required' : 'data-req' %> value="<%= f('level') %>"></div>

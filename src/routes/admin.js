@@ -3,7 +3,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const router = express.Router();
-const { db, getSetting, setSetting, getAdminHash, setAdminHash,
+const { db, getSetting, setSetting, getAdminHash, setAdminHash, getReceptionHash, setReceptionHash,
   listSeasons, getActiveSeason, activateSeason, createSeason, renameSeason, deleteSeason } = require('../db');
 const L = require('../lib/league');
 const { advanceWinner } = require('./pair');
@@ -79,7 +79,8 @@ router.get('/', (req, res) => {
 // ================= INSCRIPCIONES =================
 router.get('/inscripciones', (req, res) => {
   const { status = '', paid = '', q = '' } = req.query;
-  let sql = `SELECT p.*, p1.name n1, p1.phone t1, p1.paid paid1, p1.gender g1, p2.name n2, p2.phone t2, p2.paid paid2, p2.gender g2
+  let sql = `SELECT p.*, p1.name n1, p1.phone t1, p1.paid paid1, p1.gender g1, p1.member_verified mv1,
+             p2.name n2, p2.phone t2, p2.paid paid2, p2.gender g2, p2.member_verified mv2
              FROM pairs p JOIN players p1 ON p1.id = p.player1_id JOIN players p2 ON p2.id = p.player2_id WHERE 1=1`;
   const params = [];
   if (status) { sql += ' AND p.status = ?'; params.push(status); }
@@ -113,8 +114,9 @@ router.get('/inscripciones', (req, res) => {
     if (r.category === 'M' && (r.g1 === 'F' || r.g2 === 'F')) xwarn.add(r.id);
     if (r.category === 'F' && (r.g1 === 'M' || r.g2 === 'M')) xwarn.add(r.id);
   }
+  const unverified = new Set(rows.filter(r => !r.mv1 || !r.mv2).map(r => r.id));
   res.renderPage('admin/inscripciones', { rows, status, paid, q,
-    dupes: [...dupes], multi: [...multi], xwarn: [...xwarn] });
+    dupes: [...dupes], multi: [...multi], xwarn: [...xwarn], unverified: [...unverified] });
 });
 
 router.get('/inscripciones/:id', (req, res) => {
@@ -137,7 +139,39 @@ router.get('/inscripciones/:id', (req, res) => {
 router.post('/inscripciones/:id/estado', (req, res) => {
   const st = req.body.status;
   if (!['pending', 'active', 'rejected'].includes(st)) return res.redirect('/admin/inscripciones');
+  if (st === 'active') {
+    const p = db.prepare('SELECT * FROM pairs WHERE id = ?').get(req.params.id);
+    if (p) {
+      const unv = db.prepare('SELECT COUNT(*) c FROM players WHERE id IN (?, ?) AND COALESCE(member_verified, 0) = 0')
+        .get(p.player1_id, p.player2_id).c;
+      if (unv > 0) {
+        return res.redirect('/admin/inscripciones/' + req.params.id + '?err=' +
+          encodeURIComponent('No se puede activar: hay jugadores con el nº de socio sin verificar.'));
+      }
+    }
+  }
   db.prepare('UPDATE pairs SET status = ? WHERE id = ?').run(st, req.params.id);
+  res.redirect('/admin/inscripciones/' + req.params.id);
+});
+
+// Verificación del nº de socio (también la usa recepción desde su página).
+router.post('/inscripciones/:id/socio', (req, res) => {
+  const playerId = parseInt(req.body.player_id, 10);
+  const p = db.prepare('SELECT * FROM pairs WHERE id = ?').get(req.params.id);
+  if (p && [p.player1_id, p.player2_id].includes(playerId)) {
+    if (req.body.action === 'save') {
+      const mn = (req.body.member_no || '').trim();
+      const known = new Set(
+        db.prepare('SELECT member_no FROM players WHERE member_verified = 1 AND id != ?').all(playerId)
+          .map(r => L.memberNoKey(r.member_no))
+      );
+      const v = mn && known.has(L.memberNoKey(mn)) ? 1 : 0;
+      db.prepare('UPDATE players SET member_no = ?, member_verified = ? WHERE id = ?').run(mn, v, playerId);
+    } else {
+      const cur = db.prepare('SELECT member_verified FROM players WHERE id = ?').get(playerId).member_verified;
+      db.prepare('UPDATE players SET member_verified = ? WHERE id = ?').run(cur ? 0 : 1, playerId);
+    }
+  }
   res.redirect('/admin/inscripciones/' + req.params.id);
 });
 
@@ -202,13 +236,15 @@ router.get('/inscripciones.csv', (req, res) => {
   const rows = db.prepare(
     `SELECT p.id, p.code, p.category, p.status, p.created_at,
             p1.name n1, p1.email e1, p1.phone t1, p1.level l1, p1.paid paid1, p1.shirt s1, p1.shirt_size ts1,
-            p2.name n2, p2.email e2, p2.phone t2, p2.level l2, p2.paid paid2, p2.shirt s2, p2.shirt_size ts2
+            p1.member_no m1, p1.member_verified mv1,
+            p2.name n2, p2.email e2, p2.phone t2, p2.level l2, p2.paid paid2, p2.shirt s2, p2.shirt_size ts2,
+            p2.member_no m2, p2.member_verified mv2
      FROM pairs p JOIN players p1 ON p1.id = p.player1_id JOIN players p2 ON p2.id = p.player2_id
      ORDER BY p.id`
   ).all();
   const questions = db.prepare('SELECT id, label FROM custom_questions ORDER BY position, id').all();
-  const head = ['id', 'codigo', 'categoria', 'estado', 'fecha', 'jugador1', 'email1', 'tlf1', 'nivel1', 'pagado1', 'precio_esperado1', 'camiseta1', 'talla1',
-    'jugador2', 'email2', 'tlf2', 'nivel2', 'pagado2', 'precio_esperado2', 'camiseta2', 'talla2', ...questions.map(q => q.label)];
+  const head = ['id', 'codigo', 'categoria', 'estado', 'fecha', 'jugador1', 'email1', 'tlf1', 'nivel1', 'pagado1', 'socio1', 'socio_verificado1', 'precio_esperado1', 'camiseta1', 'talla1',
+    'jugador2', 'email2', 'tlf2', 'nivel2', 'pagado2', 'socio2', 'socio_verificado2', 'precio_esperado2', 'camiseta2', 'talla2', ...questions.map(q => q.label)];
   // Evita inyección de fórmulas al abrir el CSV en Excel: las celdas que
   // empiezan por = + - @ se prefijan con una comilla simple.
   const csvSafe = (v) => {
@@ -230,8 +266,8 @@ router.get('/inscripciones.csv', (req, res) => {
   };
   for (const r of rows) {
     const ans = Object.fromEntries(db.prepare('SELECT question_id, answer FROM registration_answers WHERE pair_id = ?').all(r.id).map(a => [a.question_id, a.answer]));
-    lines.push([r.id, r.code, r.category, r.status, r.created_at, r.n1, r.e1, r.t1, r.l1, r.paid1, expPrice(r, 1), r.s1, r.ts1,
-      r.n2, r.e2, r.t2, r.l2, r.paid2, expPrice(r, 2), r.s2, r.ts2, ...questions.map(q => ans[q.id] || '')].map(esc).join(';'));
+    lines.push([r.id, r.code, r.category, r.status, r.created_at, r.n1, r.e1, r.t1, r.l1, r.paid1, r.m1, r.mv1 ? 'sí' : 'no', expPrice(r, 1), r.s1, r.ts1,
+      r.n2, r.e2, r.t2, r.l2, r.paid2, r.m2, r.mv2 ? 'sí' : 'no', expPrice(r, 2), r.s2, r.ts2, ...questions.map(q => ans[q.id] || '')].map(esc).join(';'));
   }
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="inscripciones.csv"');
@@ -331,10 +367,12 @@ router.post('/parejas/nueva', (req, res) => {
     name: (b[`p${n}_name`] || '').trim(), email: (b[`p${n}_email`] || '').trim(),
     phone: (b[`p${n}_phone`] || '').trim(), level: parseFloat(b[`p${n}_level`]),
     gender: (b[`p${n}_gender`] || '').toUpperCase(),
+    member_no: (b[`p${n}_member`] || '').trim(),
   });
   const p1 = mk(1), p2 = mk(2);
   if (!p1.name || !p2.name) return err('Faltan nombres.');
   if (!p1.phone || !p2.phone) return err('El teléfono es obligatorio (identifica al jugador entre modalidades).');
+  if (!p1.member_no || !p2.member_no) return err('El nº de socio del club es obligatorio (solo pueden jugar los socios).');
   if (!L.validSpanishMobile(p1.phone) || !L.validSpanishMobile(p2.phone))
     return err('Algún teléfono no parece un móvil válido (9 dígitos, empieza por 6 o 7): revísalo por favor.');
   if (L.normPhone(p1.phone) === L.normPhone(p2.phone)) return err('Los dos jugadores no pueden tener el mismo teléfono.');
@@ -351,14 +389,23 @@ router.post('/parejas/nueva', (req, res) => {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   let code; do { code = Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join(''); }
   while (db.prepare('SELECT 1 FROM pairs WHERE code = ?').get(code));
-  const ins = db.prepare('INSERT INTO players(name, email, phone, level, gender, paid) VALUES(?, ?, ?, ?, ?, ?)');
-  const r1 = ins.run(p1.name, p1.email, p1.phone, p1.level, p1.gender, b.p1_paid ? 1 : 0);
-  const r2 = ins.run(p2.name, p2.email, p2.phone, p2.level, p2.gender, b.p2_paid ? 1 : 0);
+  // Si el nº de socio ya está verificado, se hereda; si no, la pareja queda
+  // pendiente hasta que recepción lo verifique.
+  const verifiedMembers = new Set(
+    db.prepare('SELECT member_no FROM players WHERE member_verified = 1').all()
+      .map(r => L.memberNoKey(r.member_no))
+  );
+  const v1 = verifiedMembers.has(L.memberNoKey(p1.member_no)) ? 1 : 0;
+  const v2 = verifiedMembers.has(L.memberNoKey(p2.member_no)) ? 1 : 0;
+  const status = (v1 && v2) ? 'active' : 'pending';
+  const ins = db.prepare('INSERT INTO players(name, email, phone, level, gender, paid, member_no, member_verified) VALUES(?, ?, ?, ?, ?, ?, ?, ?)');
+  const r1 = ins.run(p1.name, p1.email, p1.phone, p1.level, p1.gender, b.p1_paid ? 1 : 0, p1.member_no, v1);
+  const r2 = ins.run(p2.name, p2.email, p2.phone, p2.level, p2.gender, b.p2_paid ? 1 : 0, p2.member_no, v2);
   const avg = Math.round(((p1.level + p2.level) / 2) * 100) / 100;
   db.prepare(`INSERT INTO pairs(code, category, player1_id, player2_id, captain_id, level_avg, status)
-              VALUES(?, ?, ?, ?, ?, ?, 'active')`)
+              VALUES(?, ?, ?, ?, ?, ?, ?)`)
     .run(code, category, Number(r1.lastInsertRowid), Number(r2.lastInsertRowid),
-      Number(r1.lastInsertRowid), avg);
+      Number(r1.lastInsertRowid), avg, status);
   res.redirect('/admin/parejas');
 });
 
@@ -920,8 +967,13 @@ router.post('/cambios/:id/aprobar', (req, res) => {
   const pair = db.prepare('SELECT * FROM pairs WHERE id = ?').get(c.pair_id);
   db.exec('BEGIN');
   try {
-    const r = db.prepare('INSERT INTO players(name, email, phone, level, gender) VALUES(?, ?, ?, ?, ?)')
-      .run(c.new_name, c.new_email, c.new_phone, c.new_level, c.new_gender || 'M');
+    const verifiedMembers = new Set(
+      db.prepare('SELECT member_no FROM players WHERE member_verified = 1').all()
+        .map(r => L.memberNoKey(r.member_no))
+    );
+    const mv = verifiedMembers.has(L.memberNoKey(c.new_member_no)) ? 1 : 0;
+    const r = db.prepare('INSERT INTO players(name, email, phone, level, gender, member_no, member_verified) VALUES(?, ?, ?, ?, ?, ?, ?)')
+      .run(c.new_name, c.new_email, c.new_phone, c.new_level, c.new_gender || 'M', c.new_member_no || '', mv);
     const newId = Number(r.lastInsertRowid);
     const col = pair.player1_id === c.old_player_id ? 'player1_id' : 'player2_id';
     const old = db.prepare('SELECT level FROM players WHERE id = ?').get(pair.player1_id === c.old_player_id ? pair.player2_id : pair.player1_id);
@@ -1049,7 +1101,7 @@ router.get('/ajustes', (req, res) => {
     'phase_r3_label', 'phase_r3_ini', 'phase_r3_fin', 'phase_po_label', 'phase_po_ini', 'phase_po_fin',
     'inscription_price', 'inscription_price_2', 'shirt_price', 'registration_closed'];
   const s = Object.fromEntries(keys.map(k => [k, getSetting(k, '')]));
-  res.renderPage('admin/ajustes', { s, msg: req.query.msg || null });
+  res.renderPage('admin/ajustes', { s, msg: req.query.msg || null, receptionSet: !!getReceptionHash() });
 });
 
 router.post('/ajustes', (req, res) => {
@@ -1068,6 +1120,13 @@ router.post('/ajustes/password', (req, res) => {
   if (pw.length < 6) return res.redirect('/admin/ajustes?msg=' + encodeURIComponent('La contraseña debe tener al menos 6 caracteres.'));
   setAdminHash(bcrypt.hashSync(pw, 10));
   res.redirect('/admin/ajustes?msg=' + encodeURIComponent('Contraseña actualizada.'));
+});
+
+router.post('/ajustes/recepcion-password', (req, res) => {
+  const pw = (req.body.password || '').trim();
+  if (pw.length < 6) return res.redirect('/admin/ajustes?msg=' + encodeURIComponent('La contraseña debe tener al menos 6 caracteres.'));
+  setReceptionHash(bcrypt.hashSync(pw, 10));
+  res.redirect('/admin/ajustes?msg=' + encodeURIComponent('Acceso de recepción configurado: entra en /recepcion.'));
 });
 
 module.exports = router;
