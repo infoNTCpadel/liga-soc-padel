@@ -133,7 +133,11 @@ router.get('/inscripciones/:id', (req, res) => {
     const expected = L.priceForModalities(getSetting, cats.length);
     return { id: pl.id, cats: cats.map(c => L.catName(c).toLowerCase()), expected: eur(expected) };
   });
-  res.renderPage('admin/inscripcion-detalle', { p, players, answers, priceInfo });
+  // La modalidad solo se puede cambiar si la pareja aún no tiene grupos ni partidos generados
+  const grouped = db.prepare('SELECT COUNT(*) c FROM group_members WHERE pair_id = ?').get(p.id).c;
+  const withMatches = db.prepare('SELECT COUNT(*) c FROM matches WHERE pair_a_id = ? OR pair_b_id = ?').get(p.id, p.id).c;
+  const canChangeCategory = grouped === 0 && withMatches === 0;
+  res.renderPage('admin/inscripcion-detalle', { p, players, answers, priceInfo, canChangeCategory });
 });
 
 router.post('/inscripciones/:id/estado', (req, res) => {
@@ -231,6 +235,49 @@ router.post('/inscripciones/:id/nivel', (req, res) => {
     } catch (e) { db.exec('ROLLBACK'); console.error('nivel', e); }
   }
   res.redirect('/admin/inscripciones/' + req.params.id);
+});
+
+// Cambiar la modalidad de una pareja (p. ej. inscrita por error en otra categoría).
+router.post('/inscripciones/:id/categoria', (req, res) => {
+  const id = req.params.id;
+  const err = (m) => res.redirect('/admin/inscripciones/' + id + '?err=' + encodeURIComponent(m));
+  const p = db.prepare('SELECT * FROM pairs WHERE id = ?').get(id);
+  if (!p) return res.redirect('/admin/inscripciones');
+  const newCat = (req.body.category || '').toUpperCase();
+  if (!['M', 'F', 'X'].includes(newCat)) return err('Modalidad no válida.');
+  if (newCat === p.category) return res.redirect('/admin/inscripciones/' + id);
+  const players = db.prepare('SELECT * FROM players WHERE id IN (?, ?)').all(p.player1_id, p.player2_id);
+  // 1. Sin grupos ni partidos generados (si los hay, primero hay que eliminarlos en Admin → Grupos).
+  const grouped = db.prepare('SELECT COUNT(*) c FROM group_members WHERE pair_id = ?').get(p.id).c;
+  const withMatches = db.prepare('SELECT COUNT(*) c FROM matches WHERE pair_a_id = ? OR pair_b_id = ?').get(p.id, p.id).c;
+  if (grouped > 0 || withMatches > 0)
+    return err('No se puede cambiar la modalidad: la pareja ya tiene grupos o partidos generados. Elimínalos primero en Admin → Grupos.');
+  // 2. El sexo de los jugadores debe ser compatible con la nueva modalidad.
+  const g = players.map(pl => (pl.gender || '').toUpperCase());
+  const genderOk = newCat === 'X' ? (g.includes('M') && g.includes('F')) : g.every(x => x === newCat);
+  if (!genderOk)
+    return err(`No se puede pasar a ${L.catName(newCat).toLowerCase()}: el sexo de los jugadores no es compatible.`);
+  // 3. Reglas de modalidades por jugador (las mismas que en la inscripción pública).
+  for (const pl of players) {
+    const ph = L.normPhone(pl.phone);
+    const others = new Set();
+    if (ph.length >= 6) {
+      const rows = db.prepare(
+        `SELECT p.category, pl.phone FROM pairs p
+         JOIN players pl ON pl.id = p.player1_id OR pl.id = p.player2_id
+         WHERE p.id != ? AND p.status IN ('pending', 'active')`).all(p.id);
+      for (const r of rows) if (L.normPhone(r.phone) === ph) others.add(r.category);
+    }
+    const combo = [...others, newCat];
+    if (others.has(newCat))
+      return err(`${pl.name} ya está inscrito en ${L.catName(newCat).toLowerCase()}: no puede repetir modalidad.`);
+    if (combo.length > 2)
+      return err(`${pl.name} ya está inscrito en dos modalidades: no puede apuntarse a una tercera.`);
+    if (!L.validModalityCombo(combo))
+      return err(`${pl.name} no puede combinar las modalidades masculina y femenina: solo se permite masculina + mixta o femenina + mixta.`);
+  }
+  db.prepare('UPDATE pairs SET category = ? WHERE id = ?').run(newCat, p.id);
+  res.redirect('/admin/inscripciones/' + id);
 });
 
 router.get('/inscripciones.csv', (req, res) => {

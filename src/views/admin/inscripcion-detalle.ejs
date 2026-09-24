@@ -7,6 +7,16 @@
     <h3>Pareja</h3>
     <p><span class="badge cat"><%= catName(p.category) %></span>
     <span class="badge <%= p.status==='active'?'ok':p.status==='pending'?'warn':'bad' %>"><%= p.status %></span></p>
+    <form method="post" action="/admin/inscripciones/<%= p.id %>/categoria" style="margin:.4rem 0">
+      <label class="small mut">Modalidad</label>
+      <select name="category" <%= canChangeCategory ? '' : 'disabled' %>>
+        <% for (const c of [['M','Masculina'],['F','Femenina'],['X','Mixta']]) { %>
+          <option value="<%= c[0] %>" <%= p.category===c[0]?'selected':'' %>><%= c[1] %></option>
+        <% } %>
+      </select>
+      <button class="btn small ghost" type="submit" <%= canChangeCategory ? '' : 'disabled' %>>Cambiar modalidad</button>
+    </form>
+    <% if (!canChangeCategory) { %><p class="small mut">No se puede cambiar: la pareja ya tiene grupos o partidos generados.</p><% } %>
     <p class="small">Nivel medio: <strong><%= p.level_avg %></strong> · Inscrita el <%= p.created_at.slice(0,10) %></p>
     <% for (const pl of players) { const pi = priceInfo.find(x => x.id === pl.id); %>
       <hr>

@@ -177,6 +177,11 @@ si quieres, elimina la de prueba.
 - El **nivel Playtomic** lo puede corregir el admin en la ficha de cada
   pareja (campo «Nivel Playtomic» con botón Guardar): se aplica a todas las
   parejas del jugador y se recalcula el nivel medio de cada una.
+- La **modalidad** también se puede corregir en la ficha de la pareja
+  (botón «Cambiar modalidad»): valida que el sexo de los jugadores sea
+  compatible, que nadie repita modalidad ni combine masculina+femenina, y
+  no permite el cambio si la pareja ya tiene grupos o partidos generados
+  (en ese caso hay que eliminarlos primero en Admin → Grupos).
 - En el CSV de inscripciones, el **precio esperado** de cada persona aparece
   solo en su primera pareja; en las siguientes líneas sale 0,00 para que no
   parezca que hay que pagarlo dos veces.
