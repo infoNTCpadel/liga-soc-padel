@@ -76,19 +76,20 @@ router.get('/cobros', (req, res) => {
   const q = (req.query.q || '').trim();
   const ql = q.toLowerCase();
   const rows = db.prepare(
-    `SELECT pl.id, pl.name, pl.phone, pl.member_no, pl.member_verified, pl.paid, p.category
+    `SELECT pl.id, pl.name, pl.phone, pl.member_no, pl.member_verified, pl.paid, p.category, p.code
      FROM players pl JOIN pairs p ON pl.id = p.player1_id OR pl.id = p.player2_id
      WHERE p.status IN ('pending', 'active')`).all();
   const byPhone = new Map();
   for (const r of rows) {
     const ph = L.normPhone(r.phone);
     if (ph.length < 6) continue;
-    if (!byPhone.has(ph)) byPhone.set(ph, { phone: r.phone, name: r.name, members: new Set(), cats: new Set(), paid: [], verified: [] });
+    if (!byPhone.has(ph)) byPhone.set(ph, { phone: r.phone, name: r.name, members: new Set(), cats: new Set(), paid: [], verified: [], codes: new Map() });
     const g = byPhone.get(ph);
     if (r.member_no && r.member_no.trim()) g.members.add(r.member_no.trim());
     g.cats.add(r.category);
     g.paid.push(r.paid);
     g.verified.push(r.member_verified);
+    if (r.code) g.codes.set(r.code, r.category);
   }
   const eur = (v) => Number(v || 0).toFixed(2).replace('.', ',') + ' €';
   let people = [...byPhone.values()].map(g => {
@@ -99,6 +100,7 @@ router.get('/cobros', (req, res) => {
       members: [...g.members].join(', ') || '—',
       verified: g.verified.length > 0 && g.verified.every(v => v),
       cats: cats.map(c => L.catName(c)).join(' + '),
+      codes: [...g.codes.entries()].map(([code, category]) => ({ code, cat: L.catName(category) })),
       expected: eur(L.priceForModalities(getSetting, cats.length)),
       paid: g.paid.length > 0 && g.paid.every(v => v),
     };

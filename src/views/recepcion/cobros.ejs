@@ -19,13 +19,14 @@
   <div class="card"><p class="mut">No hay nadie en esta lista. ¡Todo cobrado! 🎉</p></div>
 <% } else { %>
 <table>
-  <tr><th>Persona</th><th>Nº socio</th><th>Modalidades</th><th>A cobrar</th><th>Pagado</th><th></th></tr>
+  <tr><th>Persona</th><th>Nº socio</th><th>Modalidades</th><th>Códigos de pareja</th><th>A cobrar</th><th>Pagado</th><th></th></tr>
   <% for (const p of people) { %>
     <tr>
       <td><strong><%= p.name %></strong><br><span class="small mut"><%= p.phone %></span>
         <% if (!p.verified) { %> <span class="badge warn" title="Tiene el nº de socio sin verificar">⚠ socio sin verificar</span><% } %></td>
       <td><%= p.members %></td>
       <td class="small"><%= p.cats %></td>
+      <td class="small"><% for (const c of p.codes) { %><strong><%= c.code %></strong> <span class="mut">(<%= c.cat %>)</span><br><% } %></td>
       <td class="num"><strong><%= p.expected %></strong></td>
       <td><span class="badge <%= p.paid?'ok':'warn' %>"><%= p.paid ? 'Sí ✓' : 'No' %></span></td>
       <td>

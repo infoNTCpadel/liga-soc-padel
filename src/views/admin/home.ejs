@@ -15,7 +15,7 @@
 <h2>Estado de la competición</h2>
 <% for (const r of rounds) { %>
 <div class="card">
-  <h3>Ronda <%= r.n %> <%= r.closed ? '<span class="badge ok">cerrada</span>' : '<span class="badge warn">abierta</span>' %></h3>
+  <h3>Ronda <%= r.n %> <%- r.closed ? '<span class="badge ok">cerrada</span>' : '<span class="badge warn">abierta</span>' %></h3>
   <% for (const c of CATEGORIES) { const i = r.info[c.code]; %>
     <p class="small"><span class="badge cat"><%= c.name %></span>
       <%= i.groups %> grupos · <%= i.done %>/<%= i.total %> partidos con resultado
@@ -29,6 +29,6 @@
 <% } %>
 
 <div class="card">
-  <h3>Playoffs <%= playoffsGenerated ? '<span class="badge ok">generados</span>' : '' %></h3>
+  <h3>Playoffs <%- playoffsGenerated ? '<span class="badge ok">generados</span>' : '' %></h3>
   <p><a class="btn small" href="/admin/playoffs">Gestionar playoffs</a></p>
 </div>

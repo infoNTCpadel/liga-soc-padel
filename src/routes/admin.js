@@ -237,6 +237,23 @@ router.post('/inscripciones/:id/nivel', (req, res) => {
   res.redirect('/admin/inscripciones/' + req.params.id);
 });
 
+// Corregir el nombre de un jugador (p. ej. errata al inscribirse).
+// El nombre es de la persona: se corrige en todas sus parejas (mismo teléfono).
+router.post('/inscripciones/:id/jugador', (req, res) => {
+  const playerId = parseInt(req.body.player_id, 10);
+  const name = (req.body.name || '').trim();
+  const p = db.prepare('SELECT * FROM pairs WHERE id = ?').get(req.params.id);
+  const err = (m) => res.redirect('/admin/inscripciones/' + req.params.id + '?err=' + encodeURIComponent(m));
+  if (!p || ![p.player1_id, p.player2_id].includes(playerId)) return res.redirect('/admin/inscripciones');
+  if (!name) return err('El nombre no puede estar vacío.');
+  if (name.length > 80) return err('El nombre es demasiado largo (máx. 80 caracteres).');
+  const me = db.prepare('SELECT phone FROM players WHERE id = ?').get(playerId);
+  const ids = L.personPlayerIds(db, me ? me.phone : '');
+  const targets = ids.length ? ids : [playerId];
+  db.prepare(`UPDATE players SET name = ? WHERE id IN (${targets.map(() => '?').join(',')})`).run(name, ...targets);
+  res.redirect('/admin/inscripciones/' + req.params.id);
+});
+
 // Cambiar la modalidad de una pareja (p. ej. inscrita por error en otra categoría).
 router.post('/inscripciones/:id/categoria', (req, res) => {
   const id = req.params.id;

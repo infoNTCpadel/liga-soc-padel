@@ -20,8 +20,15 @@
     <p class="small">Nivel medio: <strong><%= p.level_avg %></strong> · Inscrita el <%= p.created_at.slice(0,10) %></p>
     <% for (const pl of players) { const pi = priceInfo.find(x => x.id === pl.id); %>
       <hr>
-      <p><strong><%= pl.name %></strong> <%= p.captain_id === pl.id ? '<span class="badge info">capitán</span>' : '' %></p>
+      <p><strong><%= pl.name %></strong> <%- p.captain_id === pl.id ? '<span class="badge info">capitán</span>' : '' %></p>
       <p class="small mut"><%= pl.phone %> · <%= pl.email || 'sin email' %> · Nivel <%= pl.level %> · <%= pl.gender === 'F' ? 'Mujer' : 'Hombre' %></p>
+      <form method="post" action="/admin/inscripciones/<%= p.id %>/jugador" style="margin:.3rem 0">
+        <input type="hidden" name="player_id" value="<%= pl.id %>">
+        <label class="small mut">Nombre</label>
+        <input type="text" name="name" value="<%= pl.name %>" maxlength="80" style="width:10rem">
+        <button class="btn small ghost" type="submit">Guardar nombre</button>
+      </form>
+      <p class="small mut">El nombre se corrige en todas sus parejas.</p>
       <form method="post" action="/admin/inscripciones/<%= p.id %>/nivel" style="margin:.3rem 0">
         <input type="hidden" name="player_id" value="<%= pl.id %>">
         <label class="small mut">Nivel Playtomic</label>
