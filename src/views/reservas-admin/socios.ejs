@@ -1,0 +1,37 @@
+<h1>Reservas · Socios</h1>
+<% if (ok) { %><div class="alert ok"><%= ok %></div><% } %>
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+
+<div class="card">
+  <h3>Añadir socio</h3>
+  <form method="post" action="/admin/reservas/socios" class="row2">
+    <div class="field"><label>Nº de socio</label><input type="text" name="member_no" required></div>
+    <div class="field"><label>Nombre</label><input type="text" name="name" required></div>
+    <div class="field"><label>Teléfono</label><input type="text" name="phone"></div>
+    <div class="field"><label>Email (recordatorios)</label><input type="email" name="email"></div>
+    <div class="field"><label>&nbsp;</label><button class="btn small" type="submit">Guardar</button></div>
+  </form>
+  <form method="post" action="/admin/reservas/socios/importar" style="margin-top:.6em">
+    <button class="btn small ghost" type="submit">Importar socios verificados de la liga</button>
+  </form>
+</div>
+
+<div class="card">
+  <h3>Socios (<%= members.length %>)</h3>
+  <table class="tbl">
+    <tr><th>Nº socio</th><th>Nombre</th><th>Teléfono</th><th>Email</th><th>Estado</th><th></th></tr>
+    <% for (const m of members) { %>
+    <tr>
+      <td><strong><%= m.member_no %></strong></td><td><%= m.name %></td><td><%= m.phone || '—' %></td>
+      <td><%= m.email || '—' %></td>
+      <td><%= m.active ? 'Activo' : 'Desactivado' %></td>
+      <td><form method="post" action="/admin/reservas/socios/toggle" style="display:inline">
+        <input type="hidden" name="member_no" value="<%= m.member_no %>">
+        <input type="hidden" name="active" value="<%= m.active ? '0' : '1' %>">
+        <button class="btn small ghost" type="submit"><%= m.active ? 'Desactivar' : 'Activar' %></button>
+      </form></td>
+    </tr>
+    <% } %>
+  </table>
+  <% if (!members.length) { %><p class="mut">Aún no hay socios. Añade el primero o impórtalos de la liga.</p><% } %>
+</div>

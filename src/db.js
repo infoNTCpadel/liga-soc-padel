@@ -358,5 +358,5 @@ module.exports = {
   getReceptionHash, setReceptionHash,
   listSeasons, getActiveSeason, getActiveSeasonId,
   createSeason, activateSeason, renameSeason, deleteSeason,
-  seasonDb,
+  seasonDb, metaDb: meta,
 };

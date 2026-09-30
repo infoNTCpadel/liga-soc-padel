@@ -1,0 +1,42 @@
+<h1>Nueva reserva</h1>
+
+<div class="card">
+  <p><strong><%= court.name %></strong> · <%= date.slice(8,10) %>/<%= date.slice(5,7) %>/<%= date.slice(0,4) %> · <%= minToStr(start_min) %>–<%= minToStr(start_min + config.slot_min) %></p>
+  <% if (offer) { %><p class="hint">Estás confirmando la plaza que se te ofreció de la lista de espera.</p><% } %>
+</div>
+
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+
+<div class="card">
+<form method="post" action="/reservar/nueva">
+  <input type="hidden" name="court_id" value="<%= court.id %>">
+  <input type="hidden" name="date" value="<%= date %>">
+  <input type="hidden" name="start_min" value="<%= start_min %>">
+  <% if (offer) { %><input type="hidden" name="offer_id" value="<%= offer.id %>"><% } %>
+
+  <div class="row2">
+    <div class="field"><label>Tu nº de socio (titular)</label><input type="text" name="titular" value="<%= titular %>" required <%= offer ? 'readonly' : '' %>></div>
+    <div class="field"><label>Email para recordatorios (opcional)</label><input type="email" name="titular_email" placeholder="te avisamos 3 h antes"></div>
+  </div>
+  <div class="row2">
+    <div class="field"><label>Franjas seguidas (<%= config.slot_min %> min cada una)</label>
+      <select name="nslots">
+        <% for (let n = 1; n <= maxN; n++) { %><option value="<%= n %>"><%= n %> (<%= minToStr(start_min) %>–<%= minToStr(start_min + n * config.slot_min) %>)</option><% } %>
+      </select>
+    </div>
+    <div class="field"></div>
+  </div>
+
+  <h3>Los 4 jugadores</h3>
+  <p class="hint">Si un jugador no es socio, deja su nº en blanco: se marcará como invitado y deberá pagar en recepción antes de jugar.</p>
+  <% for (let i = 1; i <= 4; i++) { %>
+  <div class="row2">
+    <div class="field"><label>Jugador <%= i %> — nombre</label><input type="text" name="p<%= i %>_name" required></div>
+    <div class="field"><label>Nº de socio (si lo es)</label><input type="text" name="p<%= i %>_member"></div>
+  </div>
+  <% } %>
+
+  <button class="btn" type="submit">Confirmar reserva</button>
+  <a class="btn ghost" href="/reservar?date=<%= date %>">Volver</a>
+</form>
+</div>

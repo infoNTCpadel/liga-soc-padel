@@ -1,0 +1,29 @@
+<h1>Reservas · Configuración</h1>
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+<% if (ok) { %><div class="alert ok"><%= ok %></div><% } %>
+<div class="card">
+<form method="post" action="/admin/reservas/config">
+  <div class="row2">
+    <div class="field"><label>Apertura</label><input type="time" name="open" value="<%= minToStr(config.open_min) %>" required></div>
+    <div class="field"><label>Cierre</label><input type="time" name="close" value="<%= minToStr(config.close_min) %>" required></div>
+  </div>
+  <div class="row2">
+    <div class="field"><label>Franja de reserva (minutos)</label><input type="number" name="slot_min" value="<%= config.slot_min %>" min="15" max="240" required></div>
+    <div class="field"><label>Días de antelación</label><input type="number" name="days_ahead" value="<%= config.days_ahead %>" min="1" max="90" required></div>
+  </div>
+  <div class="row2">
+    <div class="field"><label>La plaza de lista de espera se guarda (min)</label><input type="number" name="hold_min" value="<%= config.hold_min %>" min="5" max="120" required></div>
+    <div class="field"><label>Anulación online hasta (horas antes)</label><input type="number" name="cancel_limit_h" value="<%= config.cancel_limit_h %>" min="0" max="72" required></div>
+  </div>
+  <div class="row2">
+    <div class="field"><label>Precio de referencia del invitado (€, opcional)</label><input type="text" name="guest_price" value="<%= config.guest_price %>" placeholder="p. ej. 6"></div>
+    <div class="field"><label>Horas antes para el recordatorio</label><input type="number" name="reminder_hours" value="<%= config.reminder_hours %>" min="1" max="24"></div>
+  </div>
+  <div class="row2">
+    <div class="field"><label><input type="checkbox" name="reminders_enabled" value="1" <%= config.reminders_enabled === '1' ? 'checked' : '' %>> Enviar recordatorios por email</label>
+      <p class="hint">Requiere <code>BREVO_API_KEY</code> y <code>MAIL_FROM</code> en el servidor. Sin clave no se envía nada.</p></div>
+    <div class="field"><label>&nbsp;</label><button class="btn" type="submit">Guardar</button></div>
+  </div>
+</form>
+</div>
+<p class="hint">El horario debe ser múltiplo exacto de la franja: así las reservas encajan en la parrilla sin dejar huecos libres.</p>

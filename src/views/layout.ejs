@@ -18,6 +18,7 @@
       <a href="/normativa">Normativa</a>
       <a href="/inscripcion">Inscripción</a>
       <a href="/liga">Liga</a>
+      <a href="/reservar" class="<%= section==='public' && locals.sub==='reservar' ? 'on' : '' %>">Reservar pista</a>
       <a href="/ranking">Ranking</a>
       <a href="/playoffs">Playoffs</a>
     </nav>
@@ -49,6 +50,7 @@
     <a href="/admin/partidos">Partidos</a>
     <a href="/admin/pistas">Pistas</a>
     <a href="/admin/cuadrante">Cuadrante</a>
+    <a href="/admin/reservas">Reservas</a>
     <a href="/admin/playoffs">Playoffs</a>
     <a href="/admin/cambios">Cambios</a>
     <a href="/admin/ajustes">Ajustes</a>
@@ -62,6 +64,7 @@
   <nav class="anav">
     <a href="/recepcion">Verificación de socios</a>
     <a href="/recepcion/cobros">Cobros</a>
+    <a href="/recepcion/reservas">Reservas</a>
   </nav>
   <form action="/recepcion/logout" method="post" style="display:inline;margin-left:auto"><button class="btn small ghost" type="submit">Salir</button></form>
 </div></div>

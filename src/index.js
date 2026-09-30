@@ -105,13 +105,37 @@ function res_render(res, view, data = {}) {
 
 app.use((req, res, next) => { res.renderPage = (v, d) => res_render(res, v, d); next(); });
 
+// Dominio propio para las reservas: si BOOKING_HOST está configurado y la
+// petición llega por ese dominio, "/" muestra la parrilla de reservas.
+const BOOKING_HOST = (process.env.BOOKING_HOST || '').toLowerCase();
+if (BOOKING_HOST) {
+  app.use((req, res, next) => {
+    if (req.hostname.toLowerCase() === BOOKING_HOST && req.path === '/') req.url = '/reservar';
+    next();
+  });
+}
+
 app.use('/', require('./routes/public'));
 app.use('/pareja', require('./routes/pair'));
 app.use('/admin', require('./routes/admin'));
 app.use('/recepcion', require('./routes/recepcion'));
+app.use('/reservar', require('./routes/reservas'));
+app.use('/admin/reservas', require('./routes/reservas-admin'));
+app.use('/recepcion/reservas', require('./routes/reservas-recepcion'));
 
 // 404
 app.use((req, res) => res.status(404).renderPage('public/404', {}));
+
+// Recordatorios por email de reservas próximas (cada 10 min).
+// Requiere BREVO_API_KEY y MAIL_FROM; se activan en Admin → Reservas → Configuración.
+if (process.env.BREVO_API_KEY) {
+  try {
+    const B = require('./lib/bookings');
+    const runReminders = () => B.checkReminders().catch(e => console.error('reminders:', e.message));
+    setTimeout(runReminders, 30000);
+    setInterval(runReminders, 10 * 60 * 1000);
+  } catch (e) { console.error('reminders init:', e.message); }
+}
 
 app.listen(PORT, () => {
   console.log(`Liga padel escuchando en http://localhost:${PORT}`);

@@ -1,0 +1,55 @@
+<h1>Reservar pista</h1>
+<p class="mut">Solo para socios del club. Elige un día y una franja libre. Si algún jugador no es socio, deberá pagar en recepción antes de jugar.</p>
+
+<% if (typeof error !== 'undefined' && error) { %><div class="alert error"><%= error %></div><% } %>
+<% if (typeof info !== 'undefined' && info) { %><div class="alert ok"><%= info %></div><% } %>
+
+<div class="card">
+  <div class="row2" style="align-items:center">
+    <div>
+      <% if (prev) { %><a class="btn small ghost" href="/reservar?date=<%= prev %>">← <%= prev.slice(8,10) %>/<%= prev.slice(5,7) %></a><% } %>
+      <strong style="margin:0 .6em"><%= date.slice(8,10) %>/<%= date.slice(5,7) %>/<%= date.slice(0,4) %></strong>
+      <% if (next) { %><a class="btn small ghost" href="/reservar?date=<%= next %>"><%= next.slice(8,10) %>/<%= next.slice(5,7) %> →</a><% } %>
+    </div>
+    <div style="text-align:right"><a class="btn small ghost" href="/reservar/mis">Mis reservas</a></div>
+  </div>
+</div>
+
+<% if (noCourts) { %>
+  <div class="card"><p class="mut">Aún no hay pistas configuradas. El club las está preparando.</p></div>
+<% } else { %>
+<div class="card" style="overflow-x:auto">
+<table class="tbl">
+  <tr>
+    <th>Pista</th>
+    <% for (const s of grid[0].slots) { %><th><%= minToStr(s.start_min) %></th><% } %>
+  </tr>
+  <% for (const row of grid) { %>
+  <tr>
+    <td><strong><%= row.court.name %></strong></td>
+    <% for (const s of row.slots) { %>
+    <td>
+      <% if (s.status === 'free') { %>
+        <a class="btn small" href="/reservar/nueva?court=<%= row.court.id %>&date=<%= date %>&slot=<%= s.start_min %>">Libre</a>
+      <% } else if (s.status === 'booked') { %>
+        <span class="badge">Ocupado</span>
+        <form method="post" action="/reservar/espera" style="margin-top:.3em">
+          <input type="hidden" name="court_id" value="<%= row.court.id %>">
+          <input type="hidden" name="date" value="<%= date %>">
+          <input type="hidden" name="start_min" value="<%= s.start_min %>">
+          <input type="text" name="member_no" placeholder="Nº socio" size="8" required style="width:7em">
+          <button class="btn small ghost" type="submit" title="Avisadme si se libera">Avisadme</button>
+        </form>
+      <% } else if (s.status === 'blocked') { %>
+        <span class="mut" title="<%= s.block.reason %><%= s.block.notes ? ' · ' + s.block.notes : '' %>">Bloqueada</span>
+      <% } else { %>
+        <span class="mut">—</span>
+      <% } %>
+    </td>
+    <% } %>
+  </tr>
+  <% } %>
+</table>
+</div>
+<p class="hint">Las franjas son de <%= config.slot_min %> minutos y no se pueden partir: así no quedan huecos inservibles.</p>
+<% } %>

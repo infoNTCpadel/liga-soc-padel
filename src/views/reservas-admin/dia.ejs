@@ -1,0 +1,64 @@
+<h1>Reservas · <%= date.slice(8,10) %>/<%= date.slice(5,7) %>/<%= date.slice(0,4) %></h1>
+<% if (info) { %><div class="alert ok"><%= info %></div><% } %>
+
+<div class="card">
+  <a class="btn small ghost" href="/admin/reservas/dia?date=<%= prev %>">← Día anterior</a>
+  <a class="btn small ghost" href="/admin/reservas/dia?date=<%= next %>">Día siguiente →</a>
+  <span class="mut" style="margin-left:1em"><a href="/admin/reservas/config">Configuración</a> · <a href="/admin/reservas/socios">Socios</a> · <a href="/admin/reservas/bloqueos">Bloqueos</a></span>
+</div>
+
+<% if (blocks.length) { %>
+<div class="card"><h3>Bloqueos</h3>
+<table class="tbl"><tr><th>Pista</th><th>Tramo</th><th>Motivo</th></tr>
+<% for (const b of blocks) { %><tr><td><%= b.court_name %></td><td><%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %></td><td><%= b.reason %><%= b.notes ? ' · ' + b.notes : '' %></td></tr><% } %>
+</table></div>
+<% } %>
+
+<div class="card">
+  <h3>Reservas (<%= bookings.filter(b=>b.status==='active').length %>)</h3>
+  <table class="tbl">
+    <tr><th>Hora</th><th>Pista</th><th>Titular</th><th>Jugadores</th><th>Pago</th><th>Cargos</th><th></th></tr>
+    <% for (const b of bookings) { %>
+    <tr style="<%= b.status==='cancelled' ? 'opacity:.45' : '' %>">
+      <td><%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %></td>
+      <td><%= b.court_name %></td>
+      <td><%= b.titular_name %><br><span class="mut">socio <%= b.titular_member_no %></span></td>
+      <td><% for (const p of b.players) { %><%= p.name %><%= p.is_guest ? ' <span class="badge warn">inv.</span>' : '' %><br><% } %></td>
+      <td>
+        <% if (b.status === 'active') { %>
+          <%= b.payment_status === 'pending' ? '<span class="badge warn">Pendiente</span>' : '<span class="badge ok">OK</span>' %>
+          <form method="post" action="/admin/reservas/reservas/<%= b.id %>/pago" style="margin-top:.3em">
+            <input type="hidden" name="paid" value="<%= b.payment_status === 'pending' ? '1' : '0' %>">
+            <button class="btn small ghost" type="submit"><%= b.payment_status === 'pending' ? 'Marcar pagado' : 'Marcar pendiente' %></button>
+          </form>
+        <% } else { %><span class="mut">Anulada</span><% } %>
+      </td>
+      <td>
+        <% for (const ch of b.charges) { %>
+          <%= ch.label %> · <%= eur(ch.amount_cents) %> <%= ch.paid ? '<span class="badge ok">pagado</span>' : '<span class="badge warn">pdte.</span>' %><br>
+        <% } %>
+        <% if (b.status === 'active') { %>
+        <form method="post" action="/admin/reservas/reservas/<%= b.id %>/cargo" style="margin-top:.3em">
+          <input type="text" name="label" placeholder="Concepto (p. ej. luz)" size="12" required>
+          <input type="text" name="amount" placeholder="€" size="5" required>
+          <button class="btn small ghost" type="submit">+</button>
+        </form>
+        <% } %>
+      </td>
+      <td>
+        <% if (b.status === 'active') { %>
+        <form method="post" action="/admin/reservas/reservas/<%= b.id %>/anular" onsubmit="return confirm('¿Anular esta reserva?')" style="display:inline">
+          <button class="btn small danger" type="submit">Anular</button>
+        </form>
+        <% for (const ch of b.charges.filter(c=>!c.paid)) { %>
+        <form method="post" action="/admin/reservas/cargos/<%= ch.id %>/pagado" style="display:inline">
+          <input type="hidden" name="paid" value="1"><button class="btn small ghost" type="submit" title="Marcar pagado: <%= ch.label %>">Cobrar <%= eur(ch.amount_cents) %></button>
+        </form>
+        <% } %>
+        <% } %>
+      </td>
+    </tr>
+    <% } %>
+  </table>
+  <% if (!bookings.length) { %><p class="mut">No hay reservas este día.</p><% } %>
+</div>
