@@ -8,7 +8,7 @@
     <div class="field"><label>Cierre</label><input type="time" name="close" value="<%= minToStr(config.close_min) %>" required></div>
   </div>
   <div class="row2">
-    <div class="field"><label>Franja de reserva (minutos)</label><input type="number" name="slot_min" value="<%= config.slot_min %>" min="15" max="240" required></div>
+    <div class="field"><label>Duraciones de reserva (minutos, separadas por comas)</label><input type="text" name="slot_durations" value="<%= config.slot_durations %>" placeholder="60,75" required></div>
     <div class="field"><label>Días de antelación</label><input type="number" name="days_ahead" value="<%= config.days_ahead %>" min="1" max="90" required></div>
   </div>
   <div class="row2">
@@ -26,4 +26,4 @@
   </div>
 </form>
 </div>
-<p class="hint">El horario debe ser múltiplo exacto de la franja: así las reservas encajan en la parrilla sin dejar huecos libres.</p>
+<p class="hint">Las reservas se encajan sin dejar huecos: cada tramo libre se reserva desde su inicio o en horas alcanzables sumando las duraciones (p. ej. con 60 y 75 min, desde las 10:15 se puede a las 10:15, 11:15, 11:30…).</p>

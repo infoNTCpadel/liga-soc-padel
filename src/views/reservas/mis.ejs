@@ -1,63 +1,72 @@
 <h1>Mis reservas</h1>
+<p class="mut">Sesión de <strong><%= member.name %></strong> (socio <%= member.member_no %>) · <a href="/reservar/datos">Mis datos</a> · <a href="/reservar/salir">Salir</a></p>
 
 <% if (typeof info !== 'undefined' && info) { %><div class="alert ok"><%= info %></div><% } %>
 <% if (error) { %><div class="alert error"><%= error %></div><% } %>
 
-<% if (!area) { %>
+<% if (area.offers.length) { %>
 <div class="card">
-  <form method="post" action="/reservar/mis" class="row2">
-    <div class="field"><label>Tu nº de socio</label><input type="text" name="member_no" value="<%= member_no %>" required></div>
-    <div class="field"><label>&nbsp;</label><button class="btn" type="submit">Ver mis reservas</button></div>
-  </form>
+  <h3>Plazas liberadas para ti</h3>
+  <p class="mut">Se guardan <%= config.hold_min %> minutos desde que se ofrecieron.</p>
+  <table class="tbl">
+    <tr><th>Pista</th><th>Día</th><th>Hora</th><th>Duración</th><th></th></tr>
+    <% for (const w of area.offers) { %>
+    <tr>
+      <td><%= w.court_name %></td>
+      <td><%= w.date.slice(8,10) %>/<%= w.date.slice(5,7) %></td>
+      <td><%= minToStr(w.start_min) %></td>
+      <td><%= w.duration_min %> min</td>
+      <td><a class="btn small" href="/reservar/nueva?offer=<%= w.id %>">Reservar</a></td>
+    </tr>
+    <% } %>
+  </table>
 </div>
-<% } else { %>
+<% } %>
+
 <div class="card">
-  <h3><%= area.member.name %> <span class="mut">(socio <%= area.member.member_no %>)</span></h3>
-
-  <% if (area.offers.length) { %>
-  <h4>Plazas ofrecidas de la lista de espera</h4>
-  <% for (const o of area.offers) { %>
-  <div class="alert ok">
-    <strong><%= o.court_name %></strong> · <%= o.date.slice(8,10) %>/<%= o.date.slice(5,7) %> · <%= minToStr(o.start_min) %>–<%= minToStr(o.end_min) %>
-    — la plaza se guarda <%= config.hold_min %> minutos.
-    <a class="btn small" href="/reservar/nueva?offer=<%= o.id %>">Confirmar</a>
-    <form method="post" action="/reservar/espera/salir" style="display:inline">
-      <input type="hidden" name="wait_id" value="<%= o.id %>"><input type="hidden" name="member_no" value="<%= member_no %>">
-      <button class="btn small ghost" type="submit">Rechazar</button>
-    </form>
-  </div>
-  <% } %>
-  <% } %>
-
-  <h4>Próximas reservas</h4>
+  <h3>Próximas reservas</h3>
   <% if (!area.bookings.length) { %><p class="mut">No tienes reservas próximas.</p><% } %>
   <% for (const b of area.bookings) { %>
-  <div class="card">
-    <p><strong><%= b.court_name %></strong> · <%= b.date.slice(8,10) %>/<%= b.date.slice(5,7) %> · <%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %>
-    <%= b.payment_status === 'pending' ? '<span class="badge warn">Pago pendiente en recepción</span>' : '' %></p>
-    <p class="mut"><%= b.players.map(p => p.name + (p.is_guest ? ' (inv.)' : '')).join(' · ') %></p>
-    <form method="post" action="/reservar/anular" onsubmit="return confirm('¿Anular esta reserva?')">
-      <input type="hidden" name="booking_id" value="<%= b.id %>"><input type="hidden" name="member_no" value="<%= member_no %>">
+  <div style="border-top:1px solid #eee;padding:.7em 0">
+    <p><strong><%= b.court_name %></strong> · <%= b.date.slice(8,10) %>/<%= b.date.slice(5,7) %>/<%= b.date.slice(0,4) %> · <%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %>
+      <% if (b.payment_status === 'pending') { %><span class="badge warn">Invitados: pagar en recepción</span><% } else { %><span class="badge ok">Todo OK</span><% } %></p>
+    <p class="mut">Jugadores: <%= b.players.map(p => p.name + (p.is_guest ? ' (inv.)' : '')).join(' · ') %></p>
+    <details>
+      <summary class="mut" style="cursor:pointer">Añadir / cambiar jugadores</summary>
+      <form method="post" action="/reservar/jugadores" style="margin-top:.5em">
+        <input type="hidden" name="booking_id" value="<%= b.id %>">
+        <% for (let i = 0; i < 3; i++) { const p = b.players[i + 1]; %>
+        <div class="row2">
+          <div class="field"><label>Nombre</label><input type="text" name="p<%= i + 1 %>_name" value="<%= p ? p.name : '' %>"></div>
+          <div class="field"><label>Nº de socio</label><input type="text" name="p<%= i + 1 %>_member" value="<%= p ? p.member_no : '' %>" inputmode="numeric"></div>
+        </div>
+        <% } %>
+        <button class="btn small" type="submit">Guardar</button>
+      </form>
+    </details>
+    <form method="post" action="/reservar/anular" onsubmit="return confirm('¿Anular esta reserva?')" style="margin-top:.4em">
+      <input type="hidden" name="booking_id" value="<%= b.id %>">
       <button class="btn small danger" type="submit">Anular</button>
     </form>
   </div>
   <% } %>
+  <p style="margin-top:1em"><a class="btn" href="/reservar">Reservar pista</a></p>
+</div>
 
-  <% if (area.waiting.length) { %>
-  <h4>En lista de espera</h4>
+<% if (area.waiting.length) { %>
+<div class="card">
+  <h3>Lista de espera</h3>
   <table class="tbl">
-    <tr><th>Pista</th><th>Día</th><th>Hora</th><th></th></tr>
+    <tr><th>Pista</th><th>Día</th><th>Hora</th><th>Duración</th><th></th></tr>
     <% for (const w of area.waiting) { %>
     <tr>
-      <td><%= w.court_name %></td><td><%= w.date.slice(8,10) %>/<%= w.date.slice(5,7) %></td>
-      <td><%= minToStr(w.start_min) %>–<%= minToStr(w.end_min) %></td>
-      <td><form method="post" action="/reservar/espera/salir" style="display:inline">
-        <input type="hidden" name="wait_id" value="<%= w.id %>"><input type="hidden" name="member_no" value="<%= member_no %>">
-        <button class="btn small ghost" type="submit">Salir</button></form></td>
+      <td><%= w.court_name %></td>
+      <td><%= w.date.slice(8,10) %>/<%= w.date.slice(5,7) %></td>
+      <td><%= minToStr(w.start_min) %></td>
+      <td><%= w.duration_min %> min</td>
+      <td><form method="post" action="/reservar/espera/salir"><input type="hidden" name="wait_id" value="<%= w.id %>"><button class="btn small ghost" type="submit">Salir</button></form></td>
     </tr>
     <% } %>
   </table>
-  <% } %>
-  <p><a class="btn small ghost" href="/reservar">Volver a la parrilla</a></p>
 </div>
 <% } %>

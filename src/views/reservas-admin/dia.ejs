@@ -4,6 +4,7 @@
 <div class="card">
   <a class="btn small ghost" href="/admin/reservas/dia?date=<%= prev %>">← Día anterior</a>
   <a class="btn small ghost" href="/admin/reservas/dia?date=<%= next %>">Día siguiente →</a>
+  <a class="btn small" href="/admin/reservas/nueva?date=<%= date %>" style="margin-left:.6em">+ Nueva reserva</a>
   <span class="mut" style="margin-left:1em"><a href="/admin/reservas/config">Configuración</a> · <a href="/admin/reservas/socios">Socios</a> · <a href="/admin/reservas/bloqueos">Bloqueos</a></span>
 </div>
 
@@ -23,7 +24,20 @@
       <td><%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %></td>
       <td><%= b.court_name %></td>
       <td><%= b.titular_name %><br><span class="mut">socio <%= b.titular_member_no %></span></td>
-      <td><% for (const p of b.players) { %><%= p.name %><%= p.is_guest ? ' <span class="badge warn">inv.</span>' : '' %><br><% } %></td>
+      <td><% for (const p of b.players) { %><%= p.name %><%= p.is_guest ? ' <span class="badge warn">inv.</span>' : '' %><br><% } %>
+        <% if (b.status === 'active') { %>
+        <details style="margin-top:.3em">
+          <summary class="mut" style="cursor:pointer;font-size:.85em">Completar jugadores</summary>
+          <form method="post" action="/admin/reservas/reservas/<%= b.id %>/jugadores" style="margin-top:.3em">
+            <% for (let i = 0; i < 3; i++) { const p = b.players[i + 1]; %>
+            <input type="text" name="p<%= i + 1 %>_name" placeholder="Nombre" value="<%= p ? p.name : '' %>" size="10">
+            <input type="text" name="p<%= i + 1 %>_member" placeholder="nº socio" value="<%= p ? p.member_no : '' %>" size="6" inputmode="numeric"><br>
+            <% } %>
+            <button class="btn small ghost" type="submit">Guardar</button>
+          </form>
+        </details>
+        <% } %>
+      </td>
       <td>
         <% if (b.status === 'active') { %>
           <%= b.payment_status === 'pending' ? '<span class="badge warn">Pendiente</span>' : '<span class="badge ok">OK</span>' %>

@@ -1,5 +1,7 @@
-// Pruebas fase 1 reservas: config, parrilla, reserva con invitados,
-// lista de espera, recepción (pagos/cargos) y bloqueos.
+// Pruebas fase 1 reservas (rediseño 60/75): config por duraciones, activación
+// con PIN, reserva con titular de la sesión + 3 jugadores opcionales,
+// completar jugadores después, lista de espera con hora+duración,
+// bloqueos por rango de fechas, reservas del personal y recepción.
 const { spawn } = require('child_process');
 const http = require('http');
 const path = require('path');
@@ -26,126 +28,167 @@ function makeClient() {
   return { req };
 }
 const qdb = (f) => (sql, ...p) => { const { DatabaseSync } = require('node:sqlite'); const d = new DatabaseSync(DATA + '/' + f); try { return d.prepare(sql).all(...p); } finally { d.close(); } };
-const dbq = qdb('season-1.db'), bbq = qdb('meta.db');
+const bbq = qdb('meta.db');
 const qrun = (f) => (sql, ...p) => { const { DatabaseSync } = require('node:sqlite'); const d = new DatabaseSync(DATA + '/' + f); try { return d.prepare(sql).run(...p); } finally { d.close(); } };
 const dbrun = qrun('season-1.db');
 const srv = spawn('node', ['src/index.js'], { cwd: dir, env, stdio: 'ignore' });
-const TOM = (() => { const d = new Date(Date.now() + 86400000); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })();
+const dayStr = (off) => { const d = new Date(Date.now() + off * 86400000); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayStr(6);
 (async () => {
   await new Promise(r => setTimeout(r, 1500));
-  const admin = makeClient(), pub = makeClient(), recep = makeClient();
+  const admin = makeClient(), pub = makeClient(), recep = makeClient(), anon = makeClient();
   await admin.req('POST', '/admin/setup', { password: 'admin12345' });
   await admin.req('POST', '/admin/ajustes/recepcion-password', { password: 'recep123' });
   dbrun("INSERT INTO courts(name, active) VALUES('Pista 1', 1), ('Pista 2', 1)");
 
-  // 1. Config: parrilla inválida se rechaza, válida se guarda
-  let r = await admin.req('GET', '/admin/reservas/config');
-  ok(r.statusCode === 200 && r.text.includes('Franja de reserva'), 'config de reservas accesible');
-  r = await admin.req('POST', '/admin/reservas/config', { open: '08:00', close: '20:00', slot_min: '75', days_ahead: '14', hold_min: '10', cancel_limit_h: '3', guest_price: '' });
-  ok(r.statusCode === 200 && r.text.includes('múltiplo exacto'), 'parrilla con huecos se rechaza (75 min en 12 h)');
-  r = await admin.req('POST', '/admin/reservas/config', { open: '08:00', close: '20:00', slot_min: '60', days_ahead: '14', hold_min: '10', cancel_limit_h: '3', guest_price: '6' });
-  ok(r.statusCode === 200 && r.text.includes('Configuración guardada'), 'parrilla válida se guarda');
+  // 1. Config: duraciones inválidas se rechazan, "60,75" se guarda
+  let r = await admin.req('POST', '/admin/reservas/config', { open: '08:00', close: '20:00', slot_durations: '', days_ahead: '14', hold_min: '10', cancel_limit_h: '3', guest_price: '' });
+  ok(r.statusCode === 200 && r.text.includes('al menos una duración'), 'config sin duraciones se rechaza');
+  r = await admin.req('POST', '/admin/reservas/config', { open: '08:00', close: '08:00', slot_durations: '60,75', days_ahead: '14', hold_min: '10', cancel_limit_h: '3', guest_price: '' });
+  ok(r.statusCode === 200 && r.text.includes('anterior al cierre'), 'apertura = cierre se rechaza');
+  r = await admin.req('POST', '/admin/reservas/config', { open: '08:00', close: '20:00', slot_durations: '60,75', days_ahead: '14', hold_min: '10', cancel_limit_h: '3', guest_price: '6' });
+  ok(r.statusCode === 200 && r.text.includes('Configuración guardada'), 'config 60/75 se guarda');
+  ok(bbq("SELECT value FROM booking_config WHERE key = 'slot_durations'")[0].value === '60,75', 'duraciones en BD');
 
-  // 2. Socios: alta manual + importación de la liga
+  // 2. Socios + activación con PIN
   await admin.req('POST', '/admin/reservas/socios', { member_no: '1001', name: 'Socio Uno', phone: '600111222' });
   await admin.req('POST', '/admin/reservas/socios', { member_no: '1002', name: 'Socio Dos', phone: '600333444' });
-  dbrun("INSERT INTO players(name, phone, member_no, member_verified) VALUES('Liga Tres', '600555666', '1003', 1)");
-  r = await admin.req('POST', '/admin/reservas/socios/importar', {});
-  ok(r.location.includes('1%20socio'), 'importa 1 socio verificado de la liga');
-  ok(bbq("SELECT COUNT(*) c  FROM club_members")[0].c === 3, 'hay 3 socios en total');
+  await admin.req('POST', '/admin/reservas/socios', { member_no: '1003', name: 'Socio Tres', phone: '600777888' });
+  r = await pub.req('GET', '/reservar/mis');
+  ok(r.statusCode === 302 && r.location.startsWith('/reservar/entrar'), 'mis reservas sin login redirige a entrar');
+  r = await pub.req('GET', '/reservar/nueva?court=1&date=' + TOM + '&desde=480');
+  ok(r.statusCode === 302 && r.location.startsWith('/reservar/entrar'), 'nueva reserva sin login redirige a entrar');
+  r = await pub.req('POST', '/reservar/activar', { member_no: '1001', phone: '600000000', pin: '1234', pin2: '1234' });
+  ok(r.statusCode === 200 && r.text.includes('no coincide'), 'activación con teléfono erróneo se rechaza');
+  r = await pub.req('POST', '/reservar/activar', { member_no: '1001', phone: '600111222', pin: '123', pin2: '123' });
+  ok(r.statusCode === 200 && r.text.includes('4 y 8 dígitos'), 'PIN de 3 dígitos se rechaza');
+  r = await pub.req('POST', '/reservar/activar', { member_no: '1001', phone: '600111222', pin: '1234', pin2: '1234' });
+  ok(r.statusCode === 302 && r.location === '/reservar/mis', 'activación correcta entra en sesión');
+  r = await pub.req('GET', '/reservar/mis');
+  ok(r.statusCode === 200 && r.text.includes('Socio Uno'), 'mis reservas muestra al socio logueado');
+  await pub.req('GET', '/reservar/salir');
+  r = await pub.req('POST', '/reservar/entrar', { member_no: '1001', pin: '0000', next: '/reservar/mis' });
+  ok(r.statusCode === 200 && r.text.includes('PIN incorrecto'), 'login con PIN erróneo se rechaza');
+  r = await pub.req('POST', '/reservar/entrar', { member_no: '1001', pin: '1234', next: '/reservar/mis' });
+  ok(r.statusCode === 302 && r.location === '/reservar/mis', 'login con PIN correcto');
 
-  // 3. Parrilla pública
-  r = await pub.req('GET', '/reservar?date=' + TOM);
-  ok(r.statusCode === 200 && r.text.includes('Pista 1') && r.text.includes('Libre'), 'parrilla pública con franjas libres');
+  // 3. Parrilla pública por tramos
+  r = await anon.req('GET', '/reservar?date=' + TOM);
+  ok(r.statusCode === 200 && r.text.includes('Pista 1') && r.text.includes('Libre') && r.text.includes('08:00'), 'parrilla pública con tramos libres');
 
-  // 4. Reserva con un invitado (nº de socio inexistente cuenta como invitado)
-  const B1 = { court_id: '1', date: TOM, start_min: '600', nslots: '1', titular: '1001',
-    p1_name: 'Socio Uno', p1_member: '1001', p2_name: 'Socio Dos', p2_member: '1002',
-    p3_name: 'Liga Tres', p3_member: '1003', p4_name: 'Invitado X', p4_member: '9999' };
-  r = await pub.req('POST', '/reservar/nueva', B1);
-  ok(r.statusCode === 302 && r.location.startsWith('/reservar/ok?id='), 'reserva creada redirige a confirmación');
+  // 4. Reserva: el titular sale de la sesión, 3 jugadores opcionales
+  r = await pub.req('GET', '/reservar/nueva?court=1&date=' + TOM + '&desde=480');
+  ok(r.statusCode === 200 && r.text.includes('Socio Uno') && r.text.includes('value="480"'), 'formulario con titular de la sesión e inicios');
+  r = await pub.req('POST', '/reservar/nueva', { court_id: '1', date: TOM, start_min: '480', duration_min: '60',
+    p1_name: 'Socio Dos', p1_member: '1002', p2_name: 'Invitado X', p2_member: '9999', p3_name: '', p3_member: '', titular_email: 'uno@example.com' });
+  ok(r.statusCode === 302 && r.location.startsWith('/reservar/ok?id='), 'reserva creada (titular + 2 jugadores)');
   const bid = r.location.split('=')[1];
-  r = await pub.req('GET', '/reservar/ok?id=' + bid);
-  ok(r.text.includes('Invitado') && r.text.includes('recepción'), 'confirmación avisa del pago del invitado en recepción');
-  ok(bbq("SELECT payment_status FROM bookings WHERE id = ?", bid)[0].payment_status === 'pending', 'pago pendiente por el invitado');
+  const b1 = bbq('SELECT * FROM bookings WHERE id = ?', bid)[0];
+  ok(b1.start_min === 480 && b1.end_min === 540 && b1.titular_member_no === '1001', 'reserva 08:00–09:00 del socio 1001');
+  ok(bbq("SELECT COUNT(*) c FROM booking_players WHERE booking_id = ?", bid)[0].c === 3, '3 jugadores (titular + 2)');
+  ok(b1.payment_status === 'pending', 'pago pendiente por el invitado');
+  ok(bbq("SELECT email FROM club_members WHERE member_no = '1001'")[0].email === 'uno@example.com', 'email guardado en la ficha');
 
-  // 5. La franja ya no está libre y no se puede duplicar
-  r = await pub.req('GET', '/reservar?date=' + TOM);
-  ok(r.text.includes('Ocupado'), 'la parrilla marca la franja como ocupada');
-  r = await pub.req('POST', '/reservar/nueva', { ...B1, titular: '1002' });
-  ok(r.statusCode === 200 && r.text.includes('ya está reservada'), 'no se puede reservar dos veces la misma franja');
-
-  // 6. Mis reservas + anulación
-  r = await pub.req('POST', '/reservar/mis', { member_no: '1001' });
-  ok(r.text.includes('Pista 1') && r.text.includes('Anular'), 'mis reservas muestra la reserva');
-  r = await pub.req('POST', '/reservar/anular', { booking_id: bid, member_no: '1001' });
-  ok(r.text.includes('Reserva anulada'), 'el socio puede anular su reserva');
-  ok(bbq("SELECT status FROM bookings WHERE id = ?", bid)[0].status === 'cancelled', 'reserva anulada en BD');
-
-  // 7. Lista de espera: se ocupa, se apunta el 1002, se libera y se le ofrece
-  r = await pub.req('POST', '/reservar/nueva', B1);
+  // 5. El ejemplo de Mathius: reservada 09:00–10:15, desde 10:15 vale 10:15, 11:15, 11:30 pero no 10:30
+  r = await pub.req('POST', '/reservar/nueva', { court_id: '1', date: TOM, start_min: '540', duration_min: '75',
+    p1_name: '', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
+  ok(r.statusCode === 302, 'segunda reserva 09:00–10:15 (incompleta, solo el titular)');
   const bid2 = r.location.split('=')[1];
-  r = await pub.req('POST', '/reservar/espera', { court_id: '1', date: TOM, start_min: '600', member_no: '1002' });
-  ok(r.text.includes('lista de espera'), 'apuntado a la lista de espera');
-  await pub.req('POST', '/reservar/anular', { booking_id: bid2, member_no: '1001' });
-  const offer = bbq("SELECT id FROM waitlist WHERE member_no = '1002' AND status = 'offered'");
+  ok(bbq("SELECT COUNT(*) c FROM booking_players WHERE booking_id = ?", bid2)[0].c === 1, 'reserva incompleta: solo el titular');
+  ok(bbq("SELECT payment_status FROM bookings WHERE id = ?", bid2)[0].payment_status === 'ok', 'sin invitados no hay pago pendiente');
+  r = await pub.req('POST', '/reservar/nueva', { court_id: '1', date: TOM, start_min: '630', duration_min: '60',
+    p1_name: '', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
+  ok(r.statusCode === 200 && r.text.includes('no encaja sin dejar huecos'), '10:30 se rechaza (dejaría 10:15–10:30 inservible)');
+  r = await pub.req('POST', '/reservar/nueva', { court_id: '1', date: TOM, start_min: '675', duration_min: '60',
+    p1_name: '', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
+  ok(r.statusCode === 302, '11:15 sí se puede (queda 10:15–11:15 = 60 min, reservable)');
+
+  // 6. Completar jugadores después recalcula el pago
+  r = await pub.req('POST', '/reservar/jugadores', { booking_id: bid2, p1_name: 'Invitado Y', p1_member: '8888', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
+  ok(r.statusCode === 302, 'jugadores completados desde mis reservas');
+  ok(bbq("SELECT payment_status FROM bookings WHERE id = ?", bid2)[0].payment_status === 'pending', 'al añadir invitado el pago pasa a pendiente');
+  r = await pub.req('POST', '/reservar/jugadores', { booking_id: bid2, p1_name: 'Socio Dos', p1_member: '1002', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
+  ok(bbq("SELECT payment_status FROM bookings WHERE id = ?", bid2)[0].payment_status === 'ok', 'al poner socio el pago vuelve a OK');
+
+  // 7. Lista de espera con hora + duración (en la pista 2, sin interferencias)
+  const pub2 = makeClient(), pubW = makeClient();
+  await pub2.req('POST', '/reservar/activar', { member_no: '1002', phone: '600333444', pin: '5678', pin2: '5678' });
+  await pubW.req('POST', '/reservar/activar', { member_no: '1003', phone: '600777888', pin: '4321', pin2: '4321' });
+  r = await pub2.req('POST', '/reservar/nueva', { court_id: '2', date: TOM, start_min: '480', duration_min: '75',
+    p1_name: '', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
+  const bidW = r.location.split('=')[1];
+  r = await pubW.req('POST', '/reservar/espera', { court_id: '2', date: TOM, start_min: '480', duration_min: '75' });
+  ok(r.statusCode === 302 && r.location.includes('ok=1'), 'apuntado a la lista de espera (08:00, 75 min)');
+  await pub2.req('POST', '/reservar/anular', { booking_id: bidW });
+  const offer = bbq("SELECT id FROM waitlist WHERE member_no = '1003' AND status = 'offered'");
   ok(offer.length === 1, 'al liberarse, la plaza se ofrece al primero en espera');
-  r = await pub.req('GET', '/reservar/nueva?offer=' + offer[0].id);
-  ok(r.statusCode === 200 && r.text.includes('lista de espera'), 'formulario de confirmación de oferta');
-  r = await pub.req('POST', '/reservar/nueva', { offer_id: String(offer[0].id), court_id: '2', date: TOM, start_min: '700', titular: '1002',
-    p1_name: 'Socio Dos', p1_member: '1002', p2_name: 'A', p2_member: '', p3_name: 'B', p3_member: '', p4_name: 'C', p4_member: '' });
-  ok(r.statusCode === 302 && r.location.startsWith('/reservar/ok?id='), 'la oferta se confirma aunque el formulario venga manipulado (usa la franja ofrecida)');
+  r = await pubW.req('GET', '/reservar/nueva?offer=' + offer[0].id);
+  ok(r.statusCode === 200 && r.text.includes('lista de espera'), 'formulario de confirmación de la oferta');
+  r = await pubW.req('POST', '/reservar/nueva', { offer_id: String(offer[0].id), court_id: '1', date: D6, start_min: '700',
+    p1_name: '', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
+  ok(r.statusCode === 302 && r.location.startsWith('/reservar/ok?id='), 'la oferta se confirma aunque el formulario venga manipulado');
   const bid3 = r.location.split('=')[1];
-  const b3 = bbq("SELECT court_id, start_min FROM bookings WHERE id = ?", bid3)[0];
-  ok(b3.court_id === 1 && b3.start_min === 600, 'la reserva de la oferta es la franja ofrecida, no la manipulada');
+  const b3 = bbq('SELECT court_id, start_min, end_min FROM bookings WHERE id = ?', bid3)[0];
+  ok(b3.court_id === 2 && b3.start_min === 480 && b3.end_min === 555, 'la reserva usa la hora+duración ofrecidas, no las manipuladas');
 
-  // 8. Recepción: ve pendientes, marca pagado y añade cargo de luz
-  await recep.req('POST', '/recepcion/login', { password: 'recep123' });
-  r = await recep.req('GET', '/recepcion/reservas?date=' + TOM);
-  ok(r.statusCode === 200 && r.text.includes('Pendientes de pago'), 'recepción ve los pagos pendientes');
-  await recep.req('POST', `/recepcion/reservas/${bid3}/pago`, { paid: '1' });
-  ok(bbq("SELECT payment_status FROM bookings WHERE id = ?", bid3)[0].payment_status === 'ok', 'recepción marca la reserva como pagada');
-  await recep.req('POST', `/recepcion/reservas/${bid3}/cargo`, { label: 'Luz', amount: '4,50' });
-  ok(bbq("SELECT amount_cents FROM booking_charges WHERE booking_id = ?", bid3)[0].amount_cents === 450, 'cargo extra de luz de 4,50 €');
-  r = await recep.req('GET', '/recepcion/reservas?date=' + TOM);
-  ok(r.text.includes('Luz') && r.text.includes('Cobrado'), 'recepción ve el cargo pendiente de cobro');
-
-  // 9. Bloqueo con conflicto: avisa, y con force anula y bloquea
-  r = await pub.req('POST', '/reservar/nueva', { ...B1, court_id: '2', start_min: '660' });
+  // 8. Bloqueo por rango de fechas con conflicto
+  r = await pub.req('POST', '/reservar/nueva', { court_id: '2', date: D4, start_min: '600', duration_min: '75',
+    p1_name: '', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
   const bid4 = r.location.split('=')[1];
-  r = await admin.req('POST', '/admin/reservas/bloqueos', { court_id: '2', date: TOM, start: '11:00', end: '12:00', reason: 'torneo', notes: '' });
-  ok(r.statusCode === 200 && r.text.includes('afectadas'), 'el bloqueo con reservas muestra confirmación');
-  r = await admin.req('POST', '/admin/reservas/bloqueos', { court_id: '2', date: TOM, start: '11:00', end: '12:00', reason: 'torneo', notes: '', force: '1' });
+  r = await admin.req('POST', '/admin/reservas/bloqueos', { court_id: '2', date_from: D3, date_to: D5, start: '09:00', end: '14:00', reason: 'torneo', notes: 'prueba' });
+  ok(r.statusCode === 200 && r.text.includes('afectadas'), 'bloqueo 3–5 con reserva afectada pide confirmación');
+  r = await admin.req('POST', '/admin/reservas/bloqueos', { court_id: '2', date_from: D3, date_to: D5, start: '09:00', end: '14:00', reason: 'torneo', notes: 'prueba', force: '1' });
   ok(r.statusCode === 302, 'bloqueo forzado redirige');
-  ok(bbq("SELECT status FROM bookings WHERE id = ?", bid4)[0].status === 'cancelled', 'la reserva afectada queda anulada');
-  r = await pub.req('GET', '/reservar?date=' + TOM);
-  ok(r.text.includes('Bloqueada'), 'la parrilla muestra la pista bloqueada');
+  ok(bbq('SELECT status FROM bookings WHERE id = ?', bid4)[0].status === 'cancelled', 'la reserva afectada queda anulada');
+  ok(bbq("SELECT COUNT(*) c FROM court_blocks WHERE date_from = ? AND date_to = ?", D3, D5)[0].c === 1, 'bloqueo guardado con rango');
+  r = await anon.req('GET', '/reservar?date=' + D4);
+  ok(r.text.includes('Bloqueada'), 'la parrilla muestra la pista bloqueada en el rango');
+  r = await pub.req('POST', '/reservar/nueva', { court_id: '2', date: D4, start_min: '840', duration_min: '60',
+    p1_name: '', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
+  ok(r.statusCode === 302, 'a las 14:00 (fin del bloqueo) sí se puede reservar');
 
-  // 10. Recordatorios por email (lógica directa del lib; sin clave no se envía nada)
-  process.env.DATA_DIR = DATA;
-  const B2 = require('../src/lib/bookings');
-  B2.setCfg('reminders_enabled', '1');
-  B2.setCfg('reminder_hours', '3');
-  B2.upsertMember('MREM', 'Remi', '', 'remi@example.com');
-  const bbrun = qrun('meta.db');
-  const soon = new Date(Date.now() + 60 * 60000); // empieza dentro de 1 h
-  const sMin = soon.getHours() * 60 + soon.getMinutes();
-  const bidR = bbrun('INSERT INTO bookings(court_id, court_name, date, start_min, end_min, titular_member_no, titular_name) VALUES(1, ?, ?, ?, ?, ?, ?)',
-    'Pista 1', B2.todayStr(soon), sMin, sMin + 60, 'MREM', 'Remi').lastInsertRowid;
-  bbrun('INSERT INTO booking_players(booking_id, name, member_no, is_guest) VALUES(?, ?, ?, 0), (?, ?, ?, 1), (?, ?, ?, 1), (?, ?, ?, 1)', bidR, 'Remi', 'MREM', bidR, 'A', '', bidR, 'B', '', bidR, 'C', '');
-  const due1 = B2.dueReminders();
-  ok(due1.length === 1 && due1[0].titular_email === 'remi@example.com', 'dueReminders detecta la reserva próxima con email');
-  const past = new Date(Date.now() - 179 * 60000);
-  ok(B2.dueReminders(past).length === 0, 'fuera de la ventana (3 h) no hay recordatorio');
-  const nR = await B2.checkReminders();
-  ok(nR === 1, 'checkReminders procesa 1 recordatorio');
-  ok(bbq('SELECT reminded_at FROM bookings WHERE id = ?', bidR)[0].reminded_at == null, 'sin BREVO_API_KEY no marca como avisada (skipped)');
-  B2.upsertMember('MNO', 'Sin Email');
-  bbrun('INSERT INTO bookings(court_id, court_name, date, start_min, end_min, titular_member_no, titular_name) VALUES(1, ?, ?, ?, ?, ?, ?)',
-    'Pista 1', B2.todayStr(soon), sMin, sMin + 60, 'MNO', 'Sin Email');
-  ok(B2.dueReminders().length === 1, 'el titular sin email no genera recordatorio');
+  // 9. El personal crea reservas y completa jugadores
+  r = await admin.req('GET', '/admin/reservas/nueva?date=' + D5 + '&court=1');
+  ok(r.statusCode === 200 && r.text.includes('Elige el tramo libre'), 'admin: paso 1 de nueva reserva');
+  r = await admin.req('GET', '/admin/reservas/nueva?date=' + D5 + '&court=1&desde=480');
+  ok(r.statusCode === 200 && r.text.includes('Hora de inicio'), 'admin: paso 2 con inicios válidos');
+  r = await admin.req('POST', '/admin/reservas/nueva', { court_id: '1', date: D5, desde: '480', start_min: '480', duration_min: '60',
+    titular_member_no: '1002', p1_name: '', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
+  ok(r.statusCode === 302 && r.location.includes('/admin/reservas/dia'), 'admin crea la reserva');
+  const bidA = bbq("SELECT id FROM bookings WHERE date = ? AND titular_member_no = '1002' AND start_min = 480", D5)[0].id;
+  r = await admin.req('POST', '/admin/reservas/reservas/' + bidA + '/jugadores', { p1_name: 'Invitado Z', p1_member: '7777', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
+  ok(r.statusCode === 302, 'admin completa jugadores');
+  ok(bbq('SELECT payment_status FROM bookings WHERE id = ?', bidA)[0].payment_status === 'pending', 'admin: invitado añadido → pago pendiente');
+  await recep.req('POST', '/recepcion/login', { password: 'recep123' });
+  r = await recep.req('GET', '/recepcion/reservas/nueva?date=' + D6 + '&court=2&desde=480');
+  ok(r.statusCode === 200 && r.text.includes('Titular'), 'recepción: formulario de nueva reserva');
+  r = await recep.req('POST', '/recepcion/reservas/nueva', { court_id: '2', date: D6, desde: '480', start_min: '480', duration_min: '75',
+    titular_member_no: '1001', p1_name: '', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
+  ok(r.statusCode === 302 && r.location.includes('/recepcion/reservas'), 'recepción crea la reserva');
+  r = await recep.req('GET', '/recepcion/reservas?date=' + D6);
+  ok(r.statusCode === 200 && r.text.includes('Socio Uno'), 'recepción ve la reserva creada');
 
-  // 11. Dominio propio: la raíz del BOOKING_HOST muestra la parrilla
+  // 10. Restablecer PIN desde admin
+  r = await admin.req('POST', '/admin/reservas/socios/pin', { member_no: '1002' });
+  ok(r.statusCode === 302 && r.location.includes('&pin='), 'reset de PIN genera uno temporal');
+  const newPin = decodeURIComponent(r.location.split('&pin=')[1]);
+  const pub3 = makeClient();
+  r = await pub3.req('POST', '/reservar/entrar', { member_no: '1002', pin: newPin, next: '/reservar/mis' });
+  ok(r.statusCode === 302 && r.location === '/reservar/mis', 'el PIN temporal funciona');
+  r = await pub3.req('POST', '/reservar/datos/pin', { pin_actual: newPin, pin: '9999', pin2: '9999' });
+  ok(r.statusCode === 200 && r.text.includes('PIN cambiado'), 'el socio cambia su PIN desde mis datos');
+  r = await pub3.req('POST', '/reservar/datos/telefono', { phone: '600999888', email: 'dos@example.com' });
+  ok(r.statusCode === 200 && r.text.includes('Datos actualizados'), 'el socio cambia teléfono y email');
+
+  // 11. Recepción: pagos y cargos (con el flujo nuevo)
+  r = await recep.req('GET', '/recepcion/reservas?date=' + D5);
+  ok(r.statusCode === 200 && r.text.includes('Pendientes de pago'), 'recepción ve pendientes de pago');
+  await recep.req('POST', `/recepcion/reservas/${bidA}/pago`, { paid: '1' });
+  ok(bbq('SELECT payment_status FROM bookings WHERE id = ?', bidA)[0].payment_status === 'ok', 'recepción marca pagado');
+  await recep.req('POST', `/recepcion/reservas/${bidA}/cargo`, { label: 'Luz', amount: '4,50' });
+  ok(bbq('SELECT amount_cents FROM booking_charges WHERE booking_id = ?', bidA)[0].amount_cents === 450, 'cargo de luz 4,50 €');
+
+  // 12. Dominio propio: la raíz del BOOKING_HOST muestra la parrilla
   const hostGet = (host) => new Promise((res, rej) => {
     const rq = http.request({ port: PORT, path: '/', method: 'GET', headers: { Host: host } }, rs => {
       let t = ''; rs.on('data', c => t += c); rs.on('end', () => res({ statusCode: rs.statusCode, text: t }));
@@ -154,9 +197,13 @@ const TOM = (() => { const d = new Date(Date.now() + 86400000); return d.getFull
   });
   const domRes = await hostGet('reservas.test');
   ok(domRes.statusCode === 200 && domRes.text.includes('<h1>Reservar pista</h1>'), 'el dominio propio sirve la parrilla en /');
-  ok(domRes.text.includes('href="/reservar"'), 'el dominio propio muestra el enlace de reservas');
   const homeRes = await hostGet('localhost');
   ok(homeRes.statusCode === 200 && !homeRes.text.includes('href="/reservar"'), 'el dominio principal no muestra el enlace de reservas');
+
+  // 13. Fuerza bruta del PIN: 5 intentos fallidos bloquean 15 min
+  for (let i = 0; i < 5; i++) await pub.req('POST', '/reservar/entrar', { member_no: '1001', pin: '0000', next: '/reservar/mis' });
+  r = await pub.req('POST', '/reservar/entrar', { member_no: '1001', pin: '1234', next: '/reservar/mis' });
+  ok(r.statusCode === 200 && r.text.includes('15 minutos'), 'tras 5 fallos el PIN correcto también se bloquea');
 
   console.log(`\n${pass} OK, ${fail} FALLOS`);
   srv.kill();

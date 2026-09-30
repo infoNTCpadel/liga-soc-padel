@@ -1,0 +1,11 @@
+<h1>Entrar</h1>
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+<div class="card">
+  <form method="post" action="/reservar/entrar">
+    <input type="hidden" name="next" value="<%= next %>">
+    <div class="field"><label>Nº de socio</label><input type="text" name="member_no" value="<%= member_no %>" inputmode="numeric" required autofocus></div>
+    <div class="field"><label>PIN</label><input type="password" name="pin" inputmode="numeric" required></div>
+    <button class="btn" type="submit">Entrar</button>
+  </form>
+  <p class="mut">¿Primera vez? <a href="/reservar/activar">Activa tu acceso</a> con tu nº de socio y tu teléfono.</p>
+</div>

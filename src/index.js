@@ -108,6 +108,7 @@ const BOOKING_HOST = (process.env.BOOKING_HOST || '').toLowerCase();
 
 app.use((req, res, next) => {
   res.locals.isBookingHost = BOOKING_HOST !== '' && req.hostname.toLowerCase() === BOOKING_HOST;
+  res.locals.bookingMemberNo = req.session.bookingMemberNo || null;
   res.renderPage = (v, d) => res_render(res, v, d); next();
 });
 

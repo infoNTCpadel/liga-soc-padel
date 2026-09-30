@@ -31,6 +31,11 @@
       <% } else if (pairId) { %>
         <a class="btn small" href="/pareja">Mi pareja</a>
         <a class="btn small ghost" href="/salir">Salir</a>
+      <% } else if (locals.isBookingHost && locals.bookingMemberNo) { %>
+        <a class="btn small" href="/reservar/mis">Mis reservas</a>
+        <a class="btn small ghost" href="/reservar/salir">Salir</a>
+      <% } else if (locals.isBookingHost) { %>
+        <a class="btn small" href="/reservar/entrar">Entrar</a>
       <% } else { %>
         <a class="btn small" href="/acceso">Acceso parejas</a>
       <% } %>

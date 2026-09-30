@@ -1,7 +1,7 @@
 // Recepción: reservas del día, cobro a invitados y cargos extra (p. ej. luz).
 // Misma sesión que /recepcion.
 const express = require('express');
-const { getReceptionHash } = require('../db');
+const { db, getReceptionHash } = require('../db');
 const B = require('../lib/bookings');
 
 const router = express.Router();
@@ -14,6 +14,11 @@ function requireReception(req, res, next) {
 router.use(requireReception);
 
 const eur = (cents) => (Number(cents || 0) / 100).toFixed(2).replace('.', ',') + ' €';
+function activeCourts() {
+  try {
+    return db.prepare('SELECT id, name FROM courts WHERE active = 1 ORDER BY name').all();
+  } catch (e) { return []; }
+}
 
 router.get('/', (req, res) => {
   if (!getReceptionHash() && !req.session.admin) return res.redirect('/recepcion/login');
@@ -50,6 +55,67 @@ router.post('/:id/anular', (req, res) => {
   const b = B.getBooking(parseInt(req.params.id, 10));
   B.cancelBooking(parseInt(req.params.id, 10), true);
   res.redirect('/recepcion/reservas?date=' + (b ? b.date : B.todayStr()) + '&ok=' + encodeURIComponent('Reserva anulada.'));
+});
+// Completar jugadores de una reserva (el titular cuenta como 1).
+router.post('/:id/jugadores', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const b = B.getBooking(id);
+  if (b && b.status === 'active') {
+    const players = [1, 2, 3].map(i => ({
+      name: (req.body['p' + i + '_name'] || '').trim(),
+      member_no: (req.body['p' + i + '_member'] || '').trim(),
+    }));
+    B.setPlayers(id, b.titular_member_no, players);
+  }
+  res.redirect('/recepcion/reservas?date=' + (b ? b.date : B.todayStr()) + '&ok=' + encodeURIComponent('Jugadores actualizados.'));
+});
+
+// ---- nueva reserva (personal) ----
+router.get('/nueva', (req, res) => {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : B.todayStr();
+  const courts = activeCourts();
+  const court = courts.find(x => x.id === parseInt(req.query.court, 10)) || null;
+  const desde = parseInt(req.query.desde, 10);
+  const d = {
+    action: '/recepcion/reservas/nueva', backUrl: '/recepcion/reservas?date=' + date,
+    error: null, date, courts, court, config: B.getConfig(), minToStr: B.minToStr,
+    segs: court && !Number.isInteger(desde) ? B.freeSegments(court.id, date) : null,
+    seg: null, starts: null,
+  };
+  if (court && Number.isInteger(desde)) {
+    const seg = B.freeSegments(court.id, date).find(g => desde >= g.start && desde < g.end);
+    if (!seg) return res.redirect('/recepcion/reservas/nueva?date=' + date + '&court=' + court.id);
+    d.seg = seg; d.starts = B.validStarts(seg.start, seg.end);
+  }
+  res.renderPage('reservas/staff-nueva', d);
+});
+router.post('/nueva', (req, res) => {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(req.body.date || '') ? req.body.date : B.todayStr();
+  const courts = activeCourts();
+  const court = courts.find(x => x.id === parseInt(req.body.court_id, 10));
+  const desde = parseInt(req.body.desde, 10);
+  const render = (error) => {
+    const seg = court && Number.isInteger(desde) ? B.freeSegments(court.id, date).find(g => desde >= g.start && desde < g.end) : null;
+    res.renderPage('reservas/staff-nueva', {
+      action: '/recepcion/reservas/nueva', backUrl: '/recepcion/reservas?date=' + date,
+      error, date, courts, court: court || null, config: B.getConfig(), minToStr: B.minToStr,
+      segs: null, seg, starts: seg ? B.validStarts(seg.start, seg.end) : null,
+    });
+  };
+  const t = (req.body.titular_member_no || '').trim();
+  if (!court) return render('Elige una pista.');
+  if (!B.getMember(t)) return render('Nº de socio del titular no válido.');
+  const players = [1, 2, 3].map(i => ({
+    name: (req.body['p' + i + '_name'] || '').trim(),
+    member_no: (req.body['p' + i + '_member'] || '').trim(),
+  }));
+  const r = B.createBooking({
+    court_id: court.id, court_name: court.name, date,
+    start_min: parseInt(req.body.start_min, 10), duration_min: parseInt(req.body.duration_min, 10),
+    titular_member_no: t, players,
+  });
+  if (r.error) return render(r.error);
+  res.redirect('/recepcion/reservas?date=' + date + '&ok=' + encodeURIComponent('Reserva creada.'));
 });
 
 module.exports = router;

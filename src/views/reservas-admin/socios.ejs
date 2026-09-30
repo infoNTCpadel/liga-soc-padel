@@ -1,6 +1,7 @@
 <h1>Reservas · Socios</h1>
 <% if (ok) { %><div class="alert ok"><%= ok %></div><% } %>
 <% if (error) { %><div class="alert error"><%= error %></div><% } %>
+<% if (newPin) { %><div class="alert ok">PIN temporal: <strong><%= newPin %></strong> — comunícaselo al socio en persona; podrá cambiarlo desde «Mis datos».</div><% } %>
 
 <div class="card">
   <h3>Añadir socio</h3>
@@ -19,16 +20,22 @@
 <div class="card">
   <h3>Socios (<%= members.length %>)</h3>
   <table class="tbl">
-    <tr><th>Nº socio</th><th>Nombre</th><th>Teléfono</th><th>Email</th><th>Estado</th><th></th></tr>
+    <tr><th>Nº socio</th><th>Nombre</th><th>Teléfono</th><th>Email</th><th>PIN</th><th>Estado</th><th></th></tr>
     <% for (const m of members) { %>
     <tr>
       <td><strong><%= m.member_no %></strong></td><td><%= m.name %></td><td><%= m.phone || '—' %></td>
       <td><%= m.email || '—' %></td>
+      <td><%= m.pin_hash ? '<span class="badge ok">sí</span>' : '<span class="mut">no</span>' %></td>
       <td><%= m.active ? 'Activo' : 'Desactivado' %></td>
       <td><form method="post" action="/admin/reservas/socios/toggle" style="display:inline">
         <input type="hidden" name="member_no" value="<%= m.member_no %>">
         <input type="hidden" name="active" value="<%= m.active ? '0' : '1' %>">
         <button class="btn small ghost" type="submit"><%= m.active ? 'Desactivar' : 'Activar' %></button>
+      </form>
+      <form method="post" action="/admin/reservas/socios/pin" style="display:inline;margin-left:.3em"
+        onsubmit="return confirm('¿Generar un PIN temporal nuevo para el socio <%= m.member_no %>?')">
+        <input type="hidden" name="member_no" value="<%= m.member_no %>">
+        <button class="btn small ghost" type="submit" title="El socio deberá cambiarlo desde Mis datos">Restablecer PIN</button>
       </form></td>
     </tr>
     <% } %>

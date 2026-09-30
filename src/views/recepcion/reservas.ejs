@@ -4,6 +4,7 @@
 <div class="card">
   <a class="btn small ghost" href="/recepcion/reservas?date=<%= prev %>">← Día anterior</a>
   <a class="btn small ghost" href="/recepcion/reservas?date=<%= next %>">Día siguiente →</a>
+  <a class="btn small" href="/recepcion/reservas/nueva?date=<%= date %>" style="margin-left:.6em">+ Nueva reserva</a>
 </div>
 
 <% if (pending.length) { %>
@@ -49,7 +50,20 @@
       <td><%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %></td>
       <td><%= b.court_name %></td>
       <td><%= b.titular_name %></td>
-      <td class="mut"><%= b.players.map(p => p.name + (p.is_guest ? '*' : '')).join(', ') %><%= b.players.some(p=>p.is_guest) ? ' (* = invitado)' : '' %></td>
+      <td class="mut"><%= b.players.map(p => p.name + (p.is_guest ? '*' : '')).join(', ') %><%= b.players.some(p=>p.is_guest) ? ' (* = invitado)' : '' %>
+        <% if (b.status === 'active') { %>
+        <details style="margin-top:.3em">
+          <summary style="cursor:pointer;font-size:.85em">Completar jugadores</summary>
+          <form method="post" action="/recepcion/reservas/<%= b.id %>/jugadores" style="margin-top:.3em">
+            <% for (let i = 0; i < 3; i++) { const p = b.players[i + 1]; %>
+            <input type="text" name="p<%= i + 1 %>_name" placeholder="Nombre" value="<%= p ? p.name : '' %>" size="10">
+            <input type="text" name="p<%= i + 1 %>_member" placeholder="nº socio" value="<%= p ? p.member_no : '' %>" size="6" inputmode="numeric"><br>
+            <% } %>
+            <button class="btn small ghost" type="submit">Guardar</button>
+          </form>
+        </details>
+        <% } %>
+      </td>
       <td><%= b.status === 'cancelled' ? '<span class="mut">Anulada</span>' : (b.payment_status === 'pending' ? '<span class="badge warn">Pendiente</span>' : '<span class="badge ok">OK</span>') %></td>
       <td><% if (b.status === 'active') { %>
         <form method="post" action="/recepcion/reservas/<%= b.id %>/anular" style="display:inline" onsubmit="return confirm('¿Anular esta reserva?')">
