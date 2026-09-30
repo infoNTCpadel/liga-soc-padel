@@ -18,7 +18,9 @@
       <a href="/normativa">Normativa</a>
       <a href="/inscripcion">Inscripción</a>
       <a href="/liga">Liga</a>
+      <% if (locals.isBookingHost) { %>
       <a href="/reservar" class="<%= section==='public' && locals.sub==='reservar' ? 'on' : '' %>">Reservar pista</a>
+      <% } %>
       <a href="/ranking">Ranking</a>
       <a href="/playoffs">Playoffs</a>
     </nav>

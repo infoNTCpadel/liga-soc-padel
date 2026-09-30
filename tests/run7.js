@@ -152,11 +152,11 @@ const TOM = (() => { const d = new Date(Date.now() + 86400000); return d.getFull
     });
     rq.on('error', rej); rq.end();
   });
-  const gridRes = await pub.req('GET', '/reservar');
   const domRes = await hostGet('reservas.test');
-  ok(domRes.statusCode === 200 && domRes.text === gridRes.text, 'el dominio propio sirve la parrilla en /');
+  ok(domRes.statusCode === 200 && domRes.text.includes('<h1>Reservar pista</h1>'), 'el dominio propio sirve la parrilla en /');
+  ok(domRes.text.includes('href="/reservar"'), 'el dominio propio muestra el enlace de reservas');
   const homeRes = await hostGet('localhost');
-  ok(homeRes.statusCode === 200 && homeRes.text !== gridRes.text, 'el dominio principal sigue mostrando la liga');
+  ok(homeRes.statusCode === 200 && !homeRes.text.includes('href="/reservar"'), 'el dominio principal no muestra el enlace de reservas');
 
   console.log(`\n${pass} OK, ${fail} FALLOS`);
   srv.kill();

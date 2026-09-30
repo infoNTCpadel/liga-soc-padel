@@ -103,11 +103,16 @@ function res_render(res, view, data = {}) {
   });
 };
 
-app.use((req, res, next) => { res.renderPage = (v, d) => res_render(res, v, d); next(); });
-
-// Dominio propio para las reservas: si BOOKING_HOST está configurado y la
-// petición llega por ese dominio, "/" muestra la parrilla de reservas.
+// Dominio propio para las reservas (p. ej. kanbeplay.padelvalles.com).
 const BOOKING_HOST = (process.env.BOOKING_HOST || '').toLowerCase();
+
+app.use((req, res, next) => {
+  res.locals.isBookingHost = BOOKING_HOST !== '' && req.hostname.toLowerCase() === BOOKING_HOST;
+  res.renderPage = (v, d) => res_render(res, v, d); next();
+});
+
+// Si BOOKING_HOST está configurado y la petición llega por ese dominio,
+// "/" muestra la parrilla de reservas.
 if (BOOKING_HOST) {
   app.use((req, res, next) => {
     if (req.hostname.toLowerCase() === BOOKING_HOST && req.path === '/') req.url = '/reservar';
