@@ -20,6 +20,29 @@ function activeCourts() {
 }
 const eur = (cents) => (Number(cents || 0) / 100).toFixed(2).replace('.', ',') + ' €';
 
+// Estado del formulario de horarios por día: filas Lun–Dom y texto de fechas especiales.
+function hoursFormState(config) {
+  let h = {};
+  try { h = JSON.parse(config.hours_json || '{}'); } catch (e) { h = {}; }
+  const names = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  const rows = [1, 2, 3, 4, 5, 6, 0].map(wd => {
+    const ov = h.weekday ? h.weekday[String(wd)] : undefined;
+    const eff = ov === null ? null : (ov ? { o: ov[0], c: ov[1] } : { o: config.open_min, c: config.close_min });
+    return {
+      wd, name: names[wd], custom: ov !== undefined,
+      closed: eff === null,
+      open: B.minToStr(eff ? eff.o : config.open_min),
+      close: B.minToStr(eff ? eff.c : config.close_min),
+    };
+  });
+  const dates = (h.dates) || {};
+  const specialText = Object.keys(dates).sort().map(d => {
+    const v = dates[d];
+    return v ? `${d} ${B.minToStr(v[0])}-${B.minToStr(v[1])}` : d;
+  }).join('\n');
+  return { dayRows: rows, specialText };
+}
+
 router.get('/', (req, res) => res.redirect('/admin/reservas/dia'));
 
 // ---- reservas del día ----
@@ -93,7 +116,7 @@ router.get('/nueva', (req, res) => {
   if (court && Number.isInteger(desde)) {
     const seg = B.freeSegments(court.id, date).find(g => desde >= g.start && desde < g.end);
     if (!seg) return res.redirect('/admin/reservas/nueva?date=' + date + '&court=' + court.id);
-    d.seg = seg; d.starts = B.validStarts(seg.start, seg.end);
+    d.seg = seg; d.starts = B.bookableStarts(seg.start, seg.end, date);
   }
   res.renderPage('reservas/staff-nueva', d);
 });
@@ -107,7 +130,7 @@ router.post('/nueva', (req, res) => {
     res.renderPage('reservas/staff-nueva', {
       action: '/admin/reservas/nueva', backUrl: '/admin/reservas/dia?date=' + date,
       error, date, courts, court: court || null, config: B.getConfig(), minToStr: B.minToStr,
-      segs: null, seg, starts: seg ? B.validStarts(seg.start, seg.end) : null,
+      segs: null, seg, starts: seg ? B.bookableStarts(seg.start, seg.end, date) : null,
     });
   };
   const t = (req.body.titular_member_no || '').trim();
@@ -132,7 +155,8 @@ router.post('/nueva', (req, res) => {
 
 // ---- configuración ----
 router.get('/config', (req, res) => {
-  res.renderPage('reservas-admin/config', { error: null, ok: null, config: B.getConfig(), minToStr: B.minToStr });
+  const config = B.getConfig();
+  res.renderPage('reservas-admin/config', { error: null, ok: null, config, minToStr: B.minToStr, ...hoursFormState(config) });
 });
 router.post('/config', (req, res) => {
   const open_min = B.strToMin(req.body.open) ?? 480;
@@ -144,7 +168,36 @@ router.post('/config', (req, res) => {
   const _mab = parseInt(req.body.max_active_bookings, 10);
   const max_active_bookings = Number.isInteger(_mab) ? Math.min(20, Math.max(0, _mab)) : B.getConfig().max_active_bookings;
   const err = B.validateConfig(open_min, close_min, durationsStr);
-  if (err) return res.renderPage('reservas-admin/config', { error: err, ok: null, config: B.getConfig(), minToStr: B.minToStr });
+  const renderErr = (msg) => {
+    const config = B.getConfig();
+    return res.renderPage('reservas-admin/config', { error: msg, ok: null, config, minToStr: B.minToStr, ...hoursFormState(config) });
+  };
+  if (err) return renderErr(err);
+  // Horarios por día de la semana: solo se guarda lo que difiera del horario general.
+  // (Si el formulario no trae estos campos —p. ej. clientes antiguos—, no se tocan.)
+  const wdVals = {};
+  const hasWdFields = [0, 1, 2, 3, 4, 5, 6].some(wd => req.body['wd' + wd + '_open'] !== undefined || req.body['wd' + wd + '_closed'] !== undefined);
+  if (hasWdFields) for (const wd of [0, 1, 2, 3, 4, 5, 6]) {
+    if (req.body['wd' + wd + '_closed'] === '1') { wdVals[String(wd)] = null; continue; }
+    const o = B.strToMin(req.body['wd' + wd + '_open']);
+    const c = B.strToMin(req.body['wd' + wd + '_close']);
+    if (o === null || c === null) return renderErr('Revisa los horarios por día: hay horas no válidas.');
+    if (o >= c) return renderErr('Revisa los horarios por día: la apertura debe ser anterior al cierre.');
+    if (o !== open_min || c !== close_min) wdVals[String(wd)] = [o, c];
+  }
+  // Fechas especiales: "AAAA-MM-DD" (cerrado) o "AAAA-MM-DD HH:MM-HH:MM".
+  const datesVals = {};
+  for (const line of (req.body.special_dates || '').split('\n').map(l => l.trim()).filter(Boolean)) {
+    const m = /^(\d{4}-\d{2}-\d{2})(?:\s+(\d{1,2}:\d{2})-(\d{1,2}:\d{2}))?$/.exec(line);
+    if (!m) return renderErr(`Fecha especial no válida: "${line}". Usa AAAA-MM-DD o AAAA-MM-DD HH:MM-HH:MM.`);
+    if (m[2]) {
+      const o = B.strToMin(m[2]), c = B.strToMin(m[3]);
+      if (o === null || c === null || o >= c) return renderErr(`Horario no válido en: "${line}".`);
+      datesVals[m[1]] = [o, c];
+    } else datesVals[m[1]] = null;
+  }
+  const hv = B.validateHoursJson(JSON.stringify({ weekday: wdVals, dates: datesVals }));
+  if (hv.error) return renderErr(hv.error);
   B.setCfg('open_min', open_min); B.setCfg('close_min', close_min);
   B.setCfg('slot_durations', B.parseDurations(durationsStr).join(','));
   B.setCfg('days_ahead', days_ahead); B.setCfg('hold_min', hold_min); B.setCfg('cancel_limit_h', cancel_limit_h);
@@ -152,7 +205,15 @@ router.post('/config', (req, res) => {
   B.setCfg('guest_price', (req.body.guest_price || '').trim());
   B.setCfg('reminders_enabled', req.body.reminders_enabled === '1' ? '1' : '0');
   B.setCfg('reminder_hours', Math.min(24, Math.max(1, parseInt(req.body.reminder_hours, 10) || 3)));
-  res.renderPage('reservas-admin/config', { error: null, ok: 'Configuración guardada.', config: B.getConfig(), minToStr: B.minToStr });
+  // Solo se tocan los horarios por día si el formulario los traía (no borrar overrides con un POST antiguo).
+  if (hasWdFields || req.body.special_dates !== undefined) B.setCfg('hours_json', JSON.stringify(hv.value));
+  // Aviso si se cierra una fecha especial que ya tiene reservas activas.
+  const config = B.getConfig();
+  const bookedClosed = Object.keys(datesVals).filter(d => datesVals[d] === null && d >= B.todayStr() && B.dayBookings(d).length > 0);
+  const okMsg = bookedClosed.length
+    ? `Configuración guardada. Ojo: hay reservas activas en día cerrado (${bookedClosed.join(', ')}); anúlalas o avisa a los socios.`
+    : 'Configuración guardada.';
+  res.renderPage('reservas-admin/config', { error: null, ok: okMsg, config, minToStr: B.minToStr, ...hoursFormState(config) });
 });
 
 // ---- socios ----

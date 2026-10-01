@@ -154,7 +154,7 @@ router.get('/', (req, res) => {
   for (const court of courts) {
     const seen = new Set(), list = [];
     for (const g of B.freeSegments(court.id, date, { ignoreBookings: true })) {
-      for (const v of B.validStarts(g.start, g.end)) {
+      for (const v of B.bookableStarts(g.start, g.end, date)) {
         if (!seen.has(v.start_min)) { seen.add(v.start_min); list.push(v.start_min); }
       }
     }
@@ -165,6 +165,7 @@ router.get('/', (req, res) => {
     prev: date > today ? B.addDays(date, -1) : null,
     next: date < maxDate ? B.addDays(date, 1) : null,
     noCourts: courts.length === 0,
+    closed: !B.dayHours(date),
     minToStr: B.minToStr, member,
     chatEnabled: Chat.chatConfig().enabled,
     info: req.query.ok ? 'Te has apuntado a la lista de espera. Te guardamos la plaza ' + c.hold_min + ' minutos si se libera.' : null,
@@ -201,7 +202,7 @@ router.get('/nueva', requireMember, (req, res) => {
   if (!court || !Number.isInteger(desde)) return res.redirect('/reservar?date=' + date);
   const seg = B.freeSegments(court.id, date).find(g => desde >= g.start && desde < g.end);
   if (!seg) return res.redirect('/reservar?date=' + date);
-  const starts = B.validStarts(seg.start, seg.end);
+  const starts = B.bookableStarts(seg.start, seg.end, date);
   if (!starts.length) return res.redirect('/reservar?date=' + date);
   // Prefiere la franja pulsada si es válida; si no, la primera válida posterior.
   const chosen = starts.find(v => v.start_min === desde) || starts.find(v => v.start_min > desde);
@@ -243,7 +244,7 @@ router.post('/nueva', requireMember, (req, res) => {
   }));
   const render = (error) => {
     const seg = !offerRow && court ? B.freeSegments(court.id, date).find(g => start_min >= g.start && start_min < g.end) : null;
-    const rstarts = seg ? B.validStarts(seg.start, seg.end) : [];
+    const rstarts = seg ? B.bookableStarts(seg.start, seg.end, date) : [];
     const pick = offerRow ? null : (rstarts.find(v => v.start_min === start_min) || rstarts[0]);
     res.renderPage('reservas/nueva', {
       error, court: court || {}, date, offer: offerRow, segStart: seg ? seg.start : start_min,

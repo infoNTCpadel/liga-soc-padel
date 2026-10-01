@@ -133,6 +133,9 @@ const DEFAULTS = {
   guest_price: '',        // precio de referencia del invitado (texto libre, p. ej. "6")
   reminders_enabled: '0', // recordatorios por email (requiere BREVO_API_KEY y MAIL_FROM)
   reminder_hours: '3',    // horas antes del inicio para enviar el recordatorio
+  // Horarios por día (JSON): { weekday: {"0":[open,close]|null,...}, dates: {"AAAA-MM-DD":[open,close]|null} }
+  // null = cerrado. Lo no indicado usa open_min/close_min.
+  hours_json: '{}',
 };
 function cfg(key) {
   const r = bdb.prepare('SELECT value FROM booking_config WHERE key = ?').get(key);
@@ -163,6 +166,7 @@ function getConfig() {
     guest_price: cfg('guest_price'),
     reminders_enabled: cfg('reminders_enabled'),
     reminder_hours: parseInt(cfg('reminder_hours'), 10),
+    hours_json: cfg('hours_json'),
   };
 }
 // Valida la configuración: horarios coherentes y al menos una duración válida.
@@ -176,6 +180,52 @@ function validateConfig(open_min, close_min, durationsStr) {
   if (Math.min(...ds) > (close_min - open_min))
     return 'La duración mínima no cabe en el horario del club.';
   return null;
+}
+// Valida el JSON de horarios por día: { weekday: {"0":[open,close]|null,...}, dates: {"AAAA-MM-DD":[open,close]|null} }
+// Devuelve { value } normalizado o { error }.
+function validateHoursJson(str) {
+  let h;
+  try { h = JSON.parse(str || '{}'); } catch (e) { return { error: 'El horario por días no es un JSON válido.' }; }
+  if (typeof h !== 'object' || h === null || Array.isArray(h)) return { error: 'El horario por días no es válido.' };
+  const out = { weekday: {}, dates: {} };
+  const checkRange = (v, donde) => {
+    if (v === null) return null;
+    if (!Array.isArray(v) || v.length !== 2 || !v.every(n => Number.isInteger(n)))
+      return `En ${donde}: usa [apertura, cierre] en minutos o null para cerrado.`;
+    const [o, c] = v;
+    if (o < 0 || c > 1440 || o >= c) return `En ${donde}: la apertura debe ser anterior al cierre (00:00–24:00).`;
+    return null;
+  };
+  for (const [k, v] of Object.entries(h.weekday || {})) {
+    if (!/^[0-6]$/.test(k)) return { error: `Día de semana no válido: "${k}" (usa 0=domingo … 6=sábado).` };
+    const e = checkRange(v, `día ${k}`);
+    if (e) return { error: e };
+    out.weekday[k] = v;
+  }
+  for (const [k, v] of Object.entries(h.dates || {})) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(k)) return { error: `Fecha no válida: "${k}" (usa AAAA-MM-DD).` };
+    const e = checkRange(v, k);
+    if (e) return { error: e };
+    out.dates[k] = v;
+  }
+  return { value: out };
+}
+// Horario aplicable a una fecha: { open_min, close_min } o null si el club está cerrado.
+// Prioridad: fecha especial > día de la semana > horario general.
+function dayHours(date) {
+  const c = getConfig();
+  let h = {};
+  try { h = JSON.parse(c.hours_json || '{}'); } catch (e) { h = {}; }
+  if (h.dates && Object.prototype.hasOwnProperty.call(h.dates, date)) {
+    const v = h.dates[date];
+    return v ? { open_min: v[0], close_min: v[1] } : null;
+  }
+  const wd = String(new Date(date + 'T12:00:00').getDay());
+  if (h.weekday && Object.prototype.hasOwnProperty.call(h.weekday, wd)) {
+    const v = h.weekday[wd];
+    return v ? { open_min: v[0], close_min: v[1] } : null;
+  }
+  return { open_min: c.open_min, close_min: c.close_min };
 }
 
 // ------------------------------------------------------------ fechas/horas
@@ -301,7 +351,9 @@ function dayBlocks(date) {
 // Tramos libres de una pista y día: [apertura, cierre] menos reservas y bloqueos.
 function freeSegments(court_id, date, { ignoreBookings = false } = {}) {
   const c = getConfig();
-  let segs = [{ start: c.open_min, end: c.close_min }];
+  const hh = dayHours(date);
+  if (!hh) return []; // día con el club cerrado
+  let segs = [{ start: hh.open_min, end: hh.close_min }];
   const occ = [];
   if (!ignoreBookings) {
     for (const b of dayBookings(date)) if (b.court_id === court_id) occ.push([b.start_min, b.end_min]);
@@ -347,6 +399,29 @@ function validStarts(segStart, segEnd, durations = null) {
   }
   return out;
 }
+// Inicios ofrecibles en un tramo: los encadenados desde su inicio (validStarts)
+// más los alineados con la parrilla del día. Sin esto último, una reserva que
+// termina fuera de cadencia (p. ej. 17:30–18:30) "mata" las filas siguientes
+// de la parrilla (19:00, 20:15…) aunque haya hueco real.
+function bookableStarts(segStart, segEnd, date) {
+  const c = getConfig();
+  const map = new Map();
+  for (const v of validStarts(segStart, segEnd)) map.set(v.start_min, new Set(v.durations));
+  const hh = dayHours(date);
+  if (hh) {
+    const step = Math.max(...c.durations), minD = Math.min(...c.durations);
+    for (let s = hh.open_min; s + minD <= hh.close_min; s += step) {
+      if (s < segStart || s >= segEnd) continue;
+      const fits = c.durations.filter(d => s + d <= segEnd);
+      if (!fits.length) continue;
+      if (!map.has(s)) map.set(s, new Set());
+      for (const d of fits) map.get(s).add(d);
+    }
+  }
+  return [...map.entries()]
+    .map(([start_min, ds]) => ({ start_min, durations: [...ds].sort((a, b) => a - b) }))
+    .sort((a, b) => a.start_min - b.start_min);
+}
 // ¿Se puede reservar (start, duration) ahora mismo? (para validar y para la espera)
 function isBookable(court_id, date, start_min, duration_min) {
   const c = getConfig();
@@ -358,7 +433,7 @@ function isBookable(court_id, date, start_min, duration_min) {
   const end_min = start_min + d;
   return freeSegments(court_id, date).some(g =>
     start_min >= g.start && end_min <= g.end &&
-    validStarts(g.start, g.end).some(v => v.start_min === start_min && v.durations.includes(d)));
+    bookableStarts(g.start, g.end, date).some(v => v.start_min === start_min && v.durations.includes(d)));
 }
 // ¿Podría reservarse si no hubiera reservas? (para apuntarse a la lista de espera)
 function isPotentiallyValid(court_id, date, start_min, duration_min) {
@@ -371,7 +446,7 @@ function isPotentiallyValid(court_id, date, start_min, duration_min) {
   const end_min = start_min + d;
   return freeSegments(court_id, date, { ignoreBookings: true }).some(g =>
     start_min >= g.start && end_min <= g.end &&
-    validStarts(g.start, g.end).some(v => v.start_min === start_min && v.durations.includes(d)));
+    bookableStarts(g.start, g.end, date).some(v => v.start_min === start_min && v.durations.includes(d)));
 }
 
 // Parrilla de un día: por pista, segmentos libres/ocupados/bloqueados/pasados.
@@ -387,14 +462,17 @@ function gridFor(date, courts) {
     for (const b of blocks) if (b.court_id === court.id) occ.push({ s: b.start_min, e: b.end_min, kind: 'blocked', ref: b });
     occ.sort((a, b) => a.s - b.s);
     const items = [];
-    let cur = getConfig().open_min;
-    const close = getConfig().close_min;
-    for (const o of occ) {
-      if (o.s > cur) items.push(mkFree(court.id, date, cur, o.s, isToday, now));
-      items.push({ type: o.kind, start: o.s, end: o.e, booking: o.kind === 'booked' ? o.ref : null, block: o.kind === 'blocked' ? o.ref : null });
-      cur = Math.max(cur, o.e);
+    const hh = dayHours(date);
+    if (hh) {
+      let cur = hh.open_min;
+      const close = hh.close_min;
+      for (const o of occ) {
+        if (o.s > cur) items.push(mkFree(court.id, date, cur, o.s, isToday, now));
+        items.push({ type: o.kind, start: o.s, end: o.e, booking: o.kind === 'booked' ? o.ref : null, block: o.kind === 'blocked' ? o.ref : null });
+        cur = Math.max(cur, o.e);
+      }
+      if (cur < close) items.push(mkFree(court.id, date, cur, close, isToday, now));
     }
-    if (cur < close) items.push(mkFree(court.id, date, cur, close, isToday, now));
     out.push({ court, items: items.filter(Boolean) });
   }
   return out;
@@ -402,7 +480,7 @@ function gridFor(date, courts) {
 function mkFree(court_id, date, s, e, isToday, now) {
   const start = isToday ? Math.max(s, now) : s;
   if (start >= e) return { type: 'past', start: s, end: e };
-  return { type: 'free', start, end: e, starts: validStarts(start, e) };
+  return { type: 'free', start, end: e, starts: bookableStarts(start, e, date) };
 }
 
 // ------------------------------------------------------------ reservas
@@ -427,7 +505,9 @@ function validateNewBooking({ court_id, date, start_min, duration_min, titular_m
   if (!c.durations.includes(d)) return 'Duración no válida.';
   if (!Number.isInteger(start_min)) return 'Hora de inicio no válida.';
   const end_min = start_min + d;
-  if (start_min < c.open_min || end_min > c.close_min) return 'La reserva se sale del horario del club.';
+  const hh = dayHours(date);
+  if (!hh) return 'Ese día el club está cerrado.';
+  if (start_min < hh.open_min || end_min > hh.close_min) return 'La reserva se sale del horario del club.';
   const today = todayStr();
   const maxDate = addDays(today, c.days_ahead);
   if (date < today || date > maxDate) return 'Fecha fuera del periodo de reserva.';
@@ -620,9 +700,11 @@ function slotInterval() { return Math.max(...getConfig().durations); }
 // Inicios de franja del día: open, open+franja, ... mientras quepa la duración mínima.
 function slotStarts(date) {
   const c = getConfig();
+  const hh = dayHours(date);
+  if (!hh) return [];
   const step = slotInterval(), minD = Math.min(...c.durations);
   const out = [];
-  for (let s = c.open_min; s + minD <= c.close_min; s += step) out.push(s);
+  for (let s = hh.open_min; s + minD <= hh.close_min; s += step) out.push(s);
   return out;
 }
 // Primera duración (de mayor a menor) que encaja en ese inicio, o null.
@@ -751,10 +833,15 @@ function validateBlock({ court_id, date_from, date_to, start_min, end_min }) {
   const c = getConfig();
   if (!Number.isInteger(start_min) || !Number.isInteger(end_min) || start_min >= end_min)
     return 'Tramo no válido.';
-  if (start_min < c.open_min || end_min > c.close_min) return 'El bloqueo se sale del horario del club.';
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date_from || '') || !/^\d{4}-\d{2}-\d{2}$/.test(date_to || ''))
     return 'Fechas no válidas.';
   if (date_from > date_to) return 'La fecha de inicio debe ser anterior o igual a la de fin.';
+  // El tramo debe caber en el horario de cada día del rango (los días cerrados se ignoran).
+  for (let d = date_from; d <= date_to; d = addDays(d, 1)) {
+    const hh = dayHours(d);
+    if (hh && (start_min < hh.open_min || end_min > hh.close_min))
+      return `El bloqueo se sale del horario del club el ${d}.`;
+  }
   const today = todayStr();
   const maxDate = addDays(today, c.days_ahead);
   if (date_to < today || date_from > maxDate) return 'Fechas fuera del periodo de reserva.';
@@ -913,6 +1000,7 @@ module.exports = {
   addBlock, removeBlock, getBlocks, isBlockedBy, openVisibleTo,
   joinOpenMatch, syncOpenSpots, closeOpenMatch,
   slotInterval, slotStarts, slotCell, slotDay, fitDuration,
+  dayHours, validateHoursJson, bookableStarts,
   expireOffers, promoteWaitlist, joinWaitlist, confirmOffer, leaveWaitlist, memberArea,
   validateBlock, affectedBookings, createBlock, deleteBlock, listBlocks,
   setBookingPaid, addCharge, setChargePaid, deleteCharge, dayDetail, pendingPayments,

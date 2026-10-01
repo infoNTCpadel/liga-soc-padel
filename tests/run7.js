@@ -96,18 +96,23 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
   r = await pub.req('POST', '/reservar/anular', { booking_id: bid });
   ok(r.statusCode === 200 && r.text.includes('Reserva anulada'), 'el socio anula su 1ª reserva (hace hueco en el tope de 2)');
 
-  // 5. El ejemplo de Mathius: reservada 09:00–10:15, desde 10:15 vale 10:15, 11:15, 11:30 pero no 10:30
+  // 5. El ejemplo de Mathius: reservada 09:00–10:15, desde 10:15 vale 10:15, 11:15, 11:30.
+  // Las 10:30 son fila de la parrilla (apertura 08:00 + 75) y por tanto se aceptan;
+  // las 10:45 no son ni encadenadas ni de parrilla y se siguen rechazando.
   r = await pub.req('POST', '/reservar/nueva', { court_id: '1', date: TOM, start_min: '540', duration_min: '75',
     p1_name: '', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
   ok(r.statusCode === 200 && r.text.includes('¿Partido abierto?'), 'incompleta: pregunta si abrirla');
   r = await pub.req('POST', '/reservar/abrir/confirmar', { abrir: '0' });
-  ok(r.statusCode === 302, 'segunda reserva 09:00–10:15 (incompleta, solo el titular)');
+  ok(r.statusCode === 302, 'reserva 09:00–10:15 (incompleta, solo el titular)');
   const bid2 = r.location.split('=')[1];
   ok(bbq("SELECT COUNT(*) c FROM booking_players WHERE booking_id = ?", bid2)[0].c === 1, 'reserva incompleta: solo el titular');
   ok(bbq("SELECT payment_status FROM bookings WHERE id = ?", bid2)[0].payment_status === 'ok', 'sin invitados no hay pago pendiente');
+  r = await pub.req('POST', '/reservar/nueva', { court_id: '1', date: TOM, start_min: '645', duration_min: '60',
+    p1_name: '', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
+  ok(r.statusCode === 200 && r.text.includes('no encaja sin dejar huecos'), '10:45 se rechaza (ni encadena ni es parrilla)');
   r = await pub.req('POST', '/reservar/nueva', { court_id: '1', date: TOM, start_min: '630', duration_min: '60',
     p1_name: '', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
-  ok(r.statusCode === 200 && r.text.includes('no encaja sin dejar huecos'), '10:30 se rechaza (dejaría 10:15–10:30 inservible)');
+  ok(r.statusCode === 200 && r.text.includes('¿Partido abierto?'), '10:30 (fila de la parrilla) se acepta');
   r = await pub.req('POST', '/reservar/nueva', { court_id: '1', date: TOM, start_min: '675', duration_min: '60',
     p1_name: '', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
   ok(r.statusCode === 200 && r.text.includes('¿Partido abierto?'), '11:15 pregunta si abrirla');

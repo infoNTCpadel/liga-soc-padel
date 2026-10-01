@@ -24,7 +24,9 @@
   <% } %>
 </div>
 
-<% if (noCourts) { %>
+<% if (typeof closed !== 'undefined' && closed) { %>
+  <div class="card"><p class="mut">El club está cerrado este día.</p></div>
+<% } else if (noCourts) { %>
   <div class="card"><p class="mut">Aún no hay pistas configuradas. El club las está preparando.</p></div>
 <% } else { %>
 <style>

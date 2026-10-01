@@ -273,7 +273,7 @@ function dispatch(name, args, ctx) {
         const pistas = ctx.courts.map(court => {
           const huecos = [];
           for (const g of B.freeSegments(court.id, a.fecha)) {
-            for (const v of B.validStarts(g.start, g.end)) {
+            for (const v of B.bookableStarts(g.start, g.end, a.fecha)) {
               huecos.push({ inicio: B.minToStr(v.start_min), duraciones: v.durations });
             }
           }
@@ -442,7 +442,8 @@ function buildSystemPrompt(member) {
 Hoy es ${hoy} (zona Europe/Madrid). Resuelve expresiones como "mañana", "el viernes" o "este finde" a fechas AAAA-MM-DD a partir de hoy.
 
 Normas del club (úsalas siempre, no las inventes):
-- Horario: ${B.minToStr(c.open_min)}–${B.minToStr(c.close_min)}. Duraciones: ${durs.join(' y ')} min (se usa automáticamente la mayor que encaje en el hueco).
+- Horario general: ${B.minToStr(c.open_min)}–${B.minToStr(c.close_min)}. Puede variar según el día de la semana y hay fechas con horario especial o con el club cerrado: si ver_disponibilidad no devuelve huecos para una fecha, el club puede estar cerrado ese día (dilo así, sin inventar el motivo).
+- Duraciones: ${durs.join(' y ')} min (se usa automáticamente la mayor que encaje en el hueco).
 - Se puede reservar hasta el ${maxD.split('-').reverse().join('/')} (${c.days_ahead} días).
 - Anular online hasta ${c.cancel_limit_h} h antes; después, en recepción.
 ${c.guest_price ? `- Invitados (no socios): pagan ${c.guest_price} en recepción.` : `- Los invitados (no socios) pagan en recepción.`}

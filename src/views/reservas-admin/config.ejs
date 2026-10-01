@@ -22,6 +22,24 @@
   <div class="row2">
     <div class="field"><label>Horas antes para el recordatorio</label><input type="number" name="reminder_hours" value="<%= config.reminder_hours %>" min="1" max="24"></div>
   </div>
+  <h3 style="margin:1em 0 .3em">Horarios por día</h3>
+  <p class="hint">Si un día queda igual que el horario general no se guarda nada especial para él. Marca «Cerrado» para cerrar ese día de la semana. Los días con horario propio llevan *.</p>
+  <table class="tbl">
+    <tr><th>Día</th><th>Apertura</th><th>Cierre</th><th>Cerrado</th></tr>
+    <% for (const r of dayRows) { %>
+    <tr>
+      <td><%= r.name %><%= r.custom ? ' *' : '' %></td>
+      <td><input type="time" name="wd<%= r.wd %>_open" value="<%= r.open %>"></td>
+      <td><input type="time" name="wd<%= r.wd %>_close" value="<%= r.close %>"></td>
+      <td style="text-align:center"><input type="checkbox" name="wd<%= r.wd %>_closed" value="1" <%= r.closed ? 'checked' : '' %>></td>
+    </tr>
+    <% } %>
+  </table>
+  <div class="field" style="margin-top:.8em">
+    <label>Fechas especiales (una por línea)</label>
+    <textarea name="special_dates" rows="4" style="width:100%" placeholder="2026-12-25&#10;2026-12-24 09:00-13:00"><%= specialText %></textarea>
+    <p class="hint"><code>AAAA-MM-DD</code> cierra el día; <code>AAAA-MM-DD HH:MM-HH:MM</code> le pone horario especial. Tienen prioridad sobre el día de la semana.</p>
+  </div>
   <div class="row2">
     <div class="field"><label><input type="checkbox" name="reminders_enabled" value="1" <%= config.reminders_enabled === '1' ? 'checked' : '' %>> Enviar recordatorios por email</label>
       <p class="hint">Requiere <code>BREVO_API_KEY</code> y <code>MAIL_FROM</code> en el servidor. Sin clave no se envía nada.</p></div>
@@ -29,4 +47,4 @@
   </div>
 </form>
 </div>
-<p class="hint">Las reservas se encajan sin dejar huecos: cada tramo libre se reserva desde su inicio o en horas alcanzables sumando las duraciones (p. ej. con 60 y 75 min, desde las 10:15 se puede a las 10:15, 11:15, 11:30…).</p>
+<p class="hint">Las reservas se encajan sin dejar huecos: cada tramo libre se reserva desde su inicio, en horas alcanzables sumando las duraciones (p. ej. con 60 y 75 min, desde las 10:15 se puede a las 10:15, 11:15, 11:30…) o en las horas de la parrilla del día.</p>

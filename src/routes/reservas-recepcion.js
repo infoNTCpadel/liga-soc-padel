@@ -88,7 +88,7 @@ router.get('/nueva', (req, res) => {
   if (court && Number.isInteger(desde)) {
     const seg = B.freeSegments(court.id, date).find(g => desde >= g.start && desde < g.end);
     if (!seg) return res.redirect('/recepcion/reservas/nueva?date=' + date + '&court=' + court.id);
-    d.seg = seg; d.starts = B.validStarts(seg.start, seg.end);
+    d.seg = seg; d.starts = B.bookableStarts(seg.start, seg.end, date);
   }
   res.renderPage('reservas/staff-nueva', d);
 });
@@ -102,7 +102,7 @@ router.post('/nueva', (req, res) => {
     res.renderPage('reservas/staff-nueva', {
       action: '/recepcion/reservas/nueva', backUrl: '/recepcion/reservas?date=' + date,
       error, date, courts, court: court || null, config: B.getConfig(), minToStr: B.minToStr,
-      segs: null, seg, starts: seg ? B.validStarts(seg.start, seg.end) : null,
+      segs: null, seg, starts: seg ? B.bookableStarts(seg.start, seg.end, date) : null,
     });
   };
   const t = (req.body.titular_member_no || '').trim();
