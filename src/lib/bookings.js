@@ -236,16 +236,28 @@ function updateMemberContact(no, phone, email) {
   bdb.prepare('UPDATE club_members SET phone = ?, email = ? WHERE member_no = ?')
     .run((phone || '').trim(), (email || '').trim(), (no || '').trim());
 }
-// Importa socios verificados de la temporada activa (filas {member_no, name, phone, email}).
+// Importa socios de la temporada activa (filas {member_no, name, phone, email, level}).
+// El nivel de la liga solo rellena los vacíos: nunca sobrescribe uno ya existente.
 function importMembers(rows) {
-  let n = 0;
+  let n = 0, lvl = 0;
   for (const r of rows) {
     const no = (r.member_no || '').trim();
-    if (!no || getMember(no)) continue;
-    upsertMember(no, r.name || no, r.phone || '', r.email || '');
-    n++;
+    if (!no) continue;
+    const level = validLevel(r.level);
+    const m = getMember(no);
+    if (!m) {
+      upsertMember(no, r.name || no, r.phone || '', r.email || '');
+      if (level != null) {
+        bdb.prepare('UPDATE club_members SET level = ? WHERE member_no = ?').run(level, no);
+        lvl++;
+      }
+      n++;
+    } else if ((m.level === null || m.level === undefined || m.level === '') && level != null) {
+      bdb.prepare('UPDATE club_members SET level = ? WHERE member_no = ?').run(level, no);
+      lvl++;
+    }
   }
-  return n;
+  return { imported: n, levels: lvl };
 }
 // PIN de acceso para la reserva web (scrypt con sal). Independiente de la liga.
 function validPin(pin) { return /^\d{4,8}$/.test(String(pin || '')); }

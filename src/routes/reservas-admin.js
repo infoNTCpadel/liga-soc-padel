@@ -174,13 +174,21 @@ router.post('/socios/pin', (req, res) => {
 router.post('/socios/importar', (req, res) => {
   let rows = [];
   try {
+    // Todos los jugadores inscritos (parejas activas o pendientes) con nº de socio, con su nivel.
+    // El nivel solo rellena los vacíos, nunca sobrescribe.
     rows = db.prepare(
-      `SELECT member_no, MAX(name) AS name, MAX(phone) AS phone, MAX(email) AS email FROM players
-       WHERE member_no IS NOT NULL AND TRIM(member_no) != '' AND COALESCE(member_verified, 0) = 1
-       GROUP BY TRIM(member_no)`).all();
+      `SELECT TRIM(p.member_no) AS member_no, MAX(p.name) AS name, MAX(p.phone) AS phone,
+              MAX(p.email) AS email, MAX(p.level) AS level
+       FROM players p
+       JOIN pairs pa ON pa.player1_id = p.id OR pa.player2_id = p.id
+       WHERE p.member_no IS NOT NULL AND TRIM(p.member_no) != '' AND pa.status IN ('pending','active')
+       GROUP BY TRIM(p.member_no)`).all();
   } catch (e) { rows = []; }
-  const n = B.importMembers(rows);
-  res.redirect('/admin/reservas/socios?ok=' + encodeURIComponent(n ? `${n} socio(s) importados de la liga.` : 'No había socios verificados nuevos que importar.'));
+  const { imported, levels } = B.importMembers(rows);
+  const msg = (imported || levels)
+    ? `${imported} socio(s) importados, ${levels} nivel(es) sincronizados de la liga.`
+    : 'No había socios nuevos ni niveles que sincronizar.';
+  res.redirect('/admin/reservas/socios?ok=' + encodeURIComponent(msg));
 });
 
 // ---- bloqueos ----
