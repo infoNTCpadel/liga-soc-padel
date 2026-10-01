@@ -353,7 +353,21 @@ router.get('/socios/buscar', requireMember, (req, res) => {
 });
 
 // ---- chat conversacional de reservas ----
+// Anti-spam por IP (en memoria; un solo proceso). Sin esto, cualquiera podría
+// quemar el tope mensual de IA a base de peticiones.
+const chatHits = new Map(); // ip -> { n, reset }
+function chatRateOk(ip) {
+  const now = Date.now();
+  if (chatHits.size > 2000) for (const [k, v] of chatHits) if (v.reset < now) chatHits.delete(k);
+  let h = chatHits.get(ip);
+  if (!h || h.reset < now) h = { n: 0, reset: now + 60000 };
+  h.n++;
+  chatHits.set(ip, h);
+  return h.n <= 30;
+}
 router.post('/chat', async (req, res) => {
+  if (!chatRateOk(req.ip))
+    return res.status(429).json({ reply: 'Demasiadas peticiones seguidas. Espera un minuto y prueba de nuevo.' });
   const message = (req.body.message || '').toString().slice(0, 500);
   if (!message.trim()) return res.json({ reply: 'Escríbeme tu pregunta y te ayudo con la reserva.' });
   try {

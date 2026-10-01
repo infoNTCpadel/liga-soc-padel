@@ -225,6 +225,184 @@ process.env.LLM_API_KEY = 'test-key';
   ok(join.ok && B.getBooking(created.id).open_spots === 1, 'apuntarse_partido resta una plaza');
 }
 
+// ---- 12. el borrador sobrevive entre turnos: "sí" confirma sin repreparar ----
+{
+  const session = { bookingMemberNo: '8' };
+  const seg = B.freeSegments(2, D2).find(g => g.end - g.start >= 150) || B.freeSegments(2, D2)[0];
+  const inicio = hhmm(seg.start);
+  // Turno 1: el modelo prepara el borrador y pide confirmación
+  let r = await Chat.runChat({
+    message: `reserva pasado mañana a las ${inicio} en pista 2`, session,
+    llm: scripted([
+      call('preparar_reserva', { fecha: D2, inicio, pista: 'Pista 2' }),
+      say('Te preparo la reserva. ¿Confirmo?'),
+    ]),
+  });
+  ok(session.pendingDraft && session.pendingDraft.draft_id, 'tras preparar, la sesión guarda el borrador pendiente');
+  ok(r.reply.includes('¿Confirmo?'), 'el agente pide confirmación tras preparar');
+  const before = B.dayBookings(D2).filter(b => b.titular_member_no === '8').length;
+  // Turno 2: el "sí" del socio. El LLM simulado solo sabe lo que runChat le pasa,
+  // como un modelo real: extrae el draft_id de la nota del sistema.
+  r = await Chat.runChat({
+    message: 'sí', session,
+    llm: scripted([
+      (messages) => {
+        const note = messages.find(m => m.role === 'system' && m.content.includes('Borrador pendiente'));
+        ok(!!note, 'el segundo turno recibe la nota con el borrador pendiente');
+        const id = (note.content.match(/draft_id=([0-9a-f]+)/) || [])[1];
+        ok(id === session.pendingDraft.draft_id, 'la nota trae el draft_id del borrador');
+        return { content: null, toolCalls: [{ id: 't1', name: 'confirmar_reserva', args: { draft_id: id } }], usage: { in: 1, out: 1 } };
+      },
+      say('Reserva confirmada.'),
+    ]),
+  });
+  const after = B.dayBookings(D2).filter(b => b.titular_member_no === '8').length;
+  ok(after === before + 1, 'decir "sí" confirma el borrador sin repreparar');
+  ok(!session.pendingDraft, 'tras confirmar se limpia el borrador pendiente');
+  ok(r.reply.includes('confirmada'), 'el agente confirma la reserva al socio');
+}
+
+// ---- 13. preparar_anulacion: el ordinal de la lista se resuelve al id real ----
+{
+  const session = { bookingMemberNo: '7' };
+  const s1 = B.freeSegments(1, D2).find(g => g.end - g.start >= 60);
+  const b1 = B.createBooking({ court_id: 1, court_name: 'Pista 1', date: D2, start_min: s1.start, duration_min: 60, titular_member_no: '7', players: [], byStaff: true });
+  const s1b = B.freeSegments(1, D2).find(g => g.end - g.start >= 60); // tras crear b1
+  const b2 = B.createBooking({ court_id: 1, court_name: 'Pista 1', date: D2, start_min: s1b.start, duration_min: 60, titular_member_no: '7', players: [], byStaff: true });
+  ok(b1.id && b2.id && b1.id !== b2.id, 'reservas de prueba para anular creadas');
+  // Turno 1: el socio pide sus reservas (la sesión memoriza la lista con ids reales)
+  await Chat.runChat({
+    message: 'dime mis reservas', session,
+    llm: scripted([call('mis_reservas', {}), say('tienes varias reservas')]),
+  });
+  ok(session.lastBookings && session.lastBookings.length >= 3, 'mis_reservas memoriza la lista en sesión');
+  const realSecond = session.lastBookings[1].id;
+  // Turno 2: el modelo pasa el ordinal "2" en vez del id real (el fallo visto en producción)
+  await Chat.runChat({
+    message: 'anula la segunda', session,
+    llm: scripted([
+      () => ({ content: null, toolCalls: [{ id: 't9', name: 'preparar_anulacion', args: { reserva_id: 2 } }], usage: { in: 1, out: 1 } }),
+      say('¿confirmo la anulación?'),
+    ]),
+  });
+  const pend = session.pendingDraft;
+  const d = pend && Chat._drafts.get(pend.draft_id);
+  ok(d && d.kind === 'anulacion' && d.payload.booking_id === realSecond,
+    'el ordinal 2 se resolvió al id real de la segunda reserva listada');
+}
+
+// ---- 14. mis_reservas devuelve la fecha real y el flag anulable ----
+{
+  const session = { bookingMemberNo: '8' };
+  // Reserva en D2: lejos del límite -> anulable
+  const seg = B.freeSegments(1, D2).find(g => g.end - g.start >= 60);
+  const bk = B.createBooking({ court_id: 1, court_name: 'Pista 1', date: D2, start_min: seg.start, duration_min: 60, titular_member_no: '8', players: [] });
+  ok(bk.id, 'reserva futura de prueba creada');
+  let seen = null;
+  await Chat.runChat({
+    message: 'mis reservas', session,
+    llm: scripted([
+      call('mis_reservas', {}),
+      (messages) => {
+        seen = JSON.parse(messages[messages.length - 1].content).reservas;
+        return { content: 'listo', toolCalls: [], usage: { in: 1, out: 1 } };
+      },
+    ]),
+  });
+  const mine = (seen || []).find(b => b.id === bk.id);
+  ok(mine && mine.fecha === D2, 'mis_reservas devuelve la fecha real (AAAA-MM-DD)');
+  ok(mine && mine.anulable === true, 'una reserva a 2 días vista sale como anulable');
+  // Reserva dentro del límite de 6 h -> no anulable (inserción directa, hoy dentro de 2 h)
+  const tIn2h = B.nowMin() + 120;
+  const ins = B.bdb.prepare(
+    `INSERT INTO bookings(court_id, court_name, date, start_min, end_min, titular_member_no, titular_name, payment_status, open_spots)
+     VALUES(2, 'Pista 2', ?, ?, ?, '8', 'Ocho Pruebas', 'ok', 0)`).run(B.todayStr(), tIn2h, tIn2h + 60);
+  const nearId = Number(ins.lastInsertRowid);
+  const ctx = { memberNo: '8', courts: [] };
+  const prep = Chat.dispatch('preparar_anulacion', { reserva_id: nearId }, ctx);
+  ok(!prep.ok && prep.error.includes('6 h'), 'una reserva a 2 h vista no se puede anular online (límite 6 h)');
+  await Chat.runChat({
+    message: 'mis reservas otra vez', session,
+    llm: scripted([
+      call('mis_reservas', {}),
+      (messages) => {
+        seen = JSON.parse(messages[messages.length - 1].content).reservas;
+        return { content: 'listo', toolCalls: [], usage: { in: 1, out: 1 } };
+      },
+    ]),
+  });
+  const near = (seen || []).find(b => b.id === nearId);
+  ok(near && near.anulable === false, 'una reserva a 2 h vista sale como no anulable');
+}
+
+// ---- 15. el modelo recibe los ids reales entre turnos (nota del sistema) ----
+{
+  const session = { bookingMemberNo: '8' };
+  // Turno 1: lista las reservas (la sesión memoriza ids)
+  await Chat.runChat({
+    message: 'mis reservas', session,
+    llm: scripted([call('mis_reservas', {}), say('tienes reservas')]),
+  });
+  ok(session.lastBookings && session.lastBookings.length > 0, 'hay reservas memorizadas en sesión');
+  // Turno 2: el modelo extrae el id real de la nota (como haría uno real) y anula bien
+  const target = session.lastBookings.find(b => b.pista === 'Pista 1' && b.anulable);
+  await Chat.runChat({
+    message: 'anula la de pista 1', session,
+    llm: scripted([
+      (messages) => {
+        const note = messages.find(m => m.role === 'system' && m.content.includes('usa el id exacto en preparar_anulacion'));
+        ok(!!note, 'el turno recibe la nota con los ids reales de las reservas');
+        const m = note.content.match(/#(\d+): Pista 1, (\d{4}-\d{2}-\d{2})/);
+        ok(!!m && parseInt(m[1], 10) === target.id, 'la nota trae el id real de la reserva de pista 1');
+        return { content: null, toolCalls: [{ id: 't1', name: 'preparar_anulacion', args: { reserva_id: parseInt(m[1], 10) } }], usage: { in: 1, out: 1 } };
+      },
+      (messages) => {
+        const j = JSON.parse(messages[messages.length - 1].content);
+        ok(j.ok && j.draft_id, 'preparar_anulacion con el id de la nota crea el borrador');
+        return { content: '¿confirmo la anulación?', toolCalls: [], usage: { in: 1, out: 1 } };
+      },
+    ]),
+  });
+  const pend = session.pendingDraft;
+  const d = pend && Chat._drafts.get(pend.draft_id);
+  ok(d && d.kind === 'anulacion' && d.payload.booking_id === target.id, 'el borrador de anulación apunta a la reserva correcta');
+}
+
+// ---- 16. tope de 2 reservas activas también en el chat ----
+{
+  B.upsertMember('10', 'Diez Pruebas', '600000010');
+  B.setPin('10', '1010');
+  const D3 = dayStr(3);
+  const free60 = (date) => B.freeSegments(1, date).find(g => g.end - g.start >= 60);
+  const mk10 = (date) => { const g = free60(date); return g && B.createBooking({
+    court_id: 1, court_name: 'Pista 1', date, start_min: g.start, duration_min: 60,
+    titular_member_no: '10', players: [],
+  }); };
+  const m1 = mk10(D2), m2 = mk10(D3);
+  ok(m1 && m1.id && m2 && m2.id, 'el socio 10 ya tiene 2 reservas activas');
+  // Hueco libre mañana en pista 1 para que el único error posible sea el tope
+  const gT = B.freeSegments(1, TOM).find(g => g.end - g.start >= 60);
+  const horaT = gT ? B.minToStr(gT.start) : '12:00';
+  const session = {};
+  const r = await Chat.runChat({
+    message: 'hola, quiero reservar pista 1 mañana a las ' + horaT, session,
+    llm: scripted([
+      call('identificarse', { member_no: '10', pin: '1010' }),
+      (messages) => {
+        const j = JSON.parse(messages[messages.length - 1].content);
+        ok(j.ok, 'el socio 10 se identifica en el chat');
+        return { content: null, toolCalls: [{ id: 't2', name: 'preparar_reserva', args: { fecha: TOM, inicio: horaT, pista: 'Pista 1' } }], usage: { in: 1, out: 1 } };
+      },
+      (messages) => {
+        const j = JSON.parse(messages[messages.length - 1].content);
+        ok(!j.ok && j.error && j.error.includes('2 reservas activas'), 'preparar_reserva rechaza la 3ª por el tope');
+        return { content: 'Ya tienes 2 reservas activas, no puedes reservar más hasta que juegues o anules alguna.', toolCalls: [], usage: { in: 1, out: 1 } };
+      },
+    ]),
+  });
+  ok(r.reply && r.reply.includes('2 reservas activas'), 'el chat comunica el tope al socio');
+}
+
 console.log(`\n${pass}/${pass + fail} pruebas del chat superadas`);
 process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('ERROR:', e); process.exit(1); });

@@ -85,6 +85,66 @@ function takeDraft(id, member_no, kind) {
   drafts.delete(id);
   return { draft: d };
 }
+// Horas que faltan para el inicio de una reserva (negativo si ya empezó).
+function cancelHoursLeft(b) {
+  const start = new Date(b.date + 'T00:00:00');
+  start.setMinutes(b.start_min);
+  return (start - new Date()) / 3600000;
+}
+// El modelo a veces pasa el número de orden de la lista que mostró al socio
+// en vez del id real. Si el id no está entre los listados pero encaja como
+// posición (1..N), se interpreta como posición de la última lista mostrada.
+function resolveListedId(listed, rawId) {
+  const id = parseInt(rawId, 10);
+  if (!Array.isArray(listed) || !listed.length) return id;
+  if (listed.some(b => b.id === id)) return id;
+  if (Number.isInteger(id) && id >= 1 && id <= listed.length) return listed[id - 1].id;
+  return id;
+}
+// El borrador pendiente vive en la sesión para sobrevivir entre turnos (el
+// historial solo guarda texto). Si caduca o se consume, se limpia.
+function trackDraftCall(session, name, args, r) {
+  if (!session || typeof session !== 'object') return;
+  if (name === 'mis_reservas' && r && r.ok && Array.isArray(r.reservas))
+    session.lastBookings = r.reservas.map(b => ({ id: b.id, pista: b.pista, fecha: b.fecha, inicio: b.inicio, anulable: b.anulable }));
+  if (name === 'ver_partidos_abiertos' && r && r.ok && Array.isArray(r.partidos))
+    session.lastOpenMatches = r.partidos.map(p => ({ id: p.id, pista: p.pista, inicio: p.inicio }));
+  if ((name === 'preparar_reserva' || name === 'preparar_anulacion') && r && r.ok && r.draft_id) {
+    session.pendingDraft = {
+      kind: name === 'preparar_reserva' ? 'reserva' : 'anulacion',
+      draft_id: r.draft_id, resumen: r.resumen,
+    };
+  } else if ((name === 'confirmar_reserva' || name === 'confirmar_anulacion') &&
+             session.pendingDraft && (!args || args.draft_id === session.pendingDraft.draft_id)) {
+    session.pendingDraft = null;
+  }
+}
+function pendingDraftNote(session) {
+  const p = session && session.pendingDraft;
+  if (!p || !p.draft_id) return null;
+  const d = drafts.get(p.draft_id);
+  if (!d || Date.now() > d.expires) { session.pendingDraft = null; return null; }
+  const confirmTool = p.kind === 'reserva' ? 'confirmar_reserva' : 'confirmar_anulacion';
+  const prepareTool = p.kind === 'reserva' ? 'preparar_reserva' : 'preparar_anulacion';
+  return `Borrador pendiente de confirmación: "${p.resumen}" (draft_id=${p.draft_id}). ` +
+    `Si el socio lo confirma SIN cambios, llama a ${confirmTool} con ese draft_id, sin preparar nada de nuevo. ` +
+    `Si pide modificar algo, llama a ${prepareTool} con los cambios (sustituirá el borrador). ` +
+    `No vuelvas a pedir confirmación de un borrador que ya se confirmó en el turno anterior: actúa.`;
+}
+// Ids reales de las últimas listas mostradas, para que el modelo no tenga que
+// adivinarlos entre turnos (el historial solo guarda texto).
+function listedIdsNote(session) {
+  const parts = [];
+  const lb = session && session.lastBookings;
+  if (lb && lb.length)
+    parts.push('Reservas del socio (usa el id exacto en preparar_anulacion): ' +
+      lb.map(b => `#${b.id}: ${b.pista}, ${b.fecha} ${b.inicio}`).join(' | '));
+  const lm = session && session.lastOpenMatches;
+  if (lm && lm.length)
+    parts.push('Partidos abiertos mostrados (usa el id exacto en apuntarse_partido): ' +
+      lm.map(p => `#${p.id}: ${p.pista}, ${p.inicio}`).join(' | '));
+  return parts.length ? parts.join('\n') : null;
+}
 // Anti fuerza bruta del PIN en el chat (en memoria; un solo proceso).
 const pinFails = new Map();
 function pinLocked(no) {
@@ -137,7 +197,7 @@ const TOOLS = [
       required: ['fecha'] } } },
   { type: 'function', function: {
     name: 'mis_reservas',
-    description: 'Próximas reservas del socio identificado (con id para anular).',
+    description: 'Próximas reservas del socio identificado (con id para anular). Cada una trae fecha (AAAA-MM-DD) y "anulable" (true si aún se puede anular online). Muestra SIEMPRE la fecha al listarlas.',
     parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: {
     name: 'preparar_reserva',
@@ -158,7 +218,7 @@ const TOOLS = [
     name: 'preparar_anulacion',
     description: 'Prepara la anulación de una reserva SIN anularla: devuelve un borrador con resumen. Después pide confirmación explícita y llama a confirmar_anulacion.',
     parameters: { type: 'object', properties: {
-      reserva_id: { type: 'integer', description: 'Id de la reserva (ver mis_reservas)' } },
+      reserva_id: { type: 'integer', description: 'Id EXACTO del campo id devuelto por mis_reservas. NUNCA uses el número de orden de la lista que muestres al socio.' } },
       required: ['reserva_id'] } } },
   { type: 'function', function: {
     name: 'confirmar_anulacion',
@@ -175,7 +235,7 @@ const TOOLS = [
     name: 'apuntarse_partido',
     description: 'Apunta al socio identificado a un partido abierto. Úsala solo cuando el socio lo pida claramente.',
     parameters: { type: 'object', properties: {
-      partido_id: { type: 'integer', description: 'Id del partido (ver ver_partidos_abiertos)' } },
+      partido_id: { type: 'integer', description: 'Id EXACTO del campo id devuelto por ver_partidos_abiertos. NUNCA uses el número de orden de la lista que muestres al socio.' } },
       required: ['partido_id'] } } },
   { type: 'function', function: {
     name: 'apuntarse_lista_espera',
@@ -224,11 +284,13 @@ function dispatch(name, args, ctx) {
       case 'mis_reservas': {
         if (!ctx.memberNo) return toolResult(false, 'Necesito saber quién eres: dime tu nº de socio y tu PIN.');
         const area = B.memberArea(ctx.memberNo);
+        const cfg = B.getConfig();
         return toolResult(true, {
           reservas: area.bookings.map(b => ({
-            id: b.id, fecha: b.fecha, inicio: B.minToStr(b.start_min), fin: B.minToStr(b.end_min),
+            id: b.id, fecha: b.date, inicio: B.minToStr(b.start_min), fin: B.minToStr(b.end_min),
             pista: b.court_name, jugadores: b.players.map(p => p.name),
             plazas_libres: b.open_spots,
+            anulable: cancelHoursLeft(b) >= cfg.cancel_limit_h,
           })),
           ofertas_espera: area.offers.map(w => ({ id: w.id, fecha: w.date, inicio: B.minToStr(w.start_min), pista: w.court_name })),
         });
@@ -278,15 +340,17 @@ function dispatch(name, args, ctx) {
       }
       case 'preparar_anulacion': {
         if (!ctx.memberNo) return toolResult(false, 'Necesito saber quién eres: dime tu nº de socio y tu PIN.');
-        const b = B.getBooking(parseInt(a.reserva_id, 10));
-        if (!b || b.status !== 'active') return toolResult(false, 'No encuentro esa reserva activa.');
-        if (b.titular_member_no !== ctx.memberNo) return toolResult(false, 'Esa reserva no es tuya.');
+        const rid = resolveListedId(ctx.session && ctx.session.lastBookings, a.reserva_id);
+        const b = B.getBooking(rid);
+        if (!b || b.status !== 'active') return toolResult(false, `No encuentro esa reserva activa (id ${a.reserva_id}).`);
+        const ident = `${b.court_name} ${b.date.split('-').reverse().join('/')} ${B.minToStr(b.start_min)} (id ${b.id})`;
+        if (b.titular_member_no !== ctx.memberNo) return toolResult(false, `La reserva ${ident} no es tuya.`);
         const c = B.getConfig();
-        const start = new Date(b.date + 'T00:00:00');
-        start.setMinutes(b.start_min);
-        const hoursLeft = (start - new Date()) / 3600000;
+        const hoursLeft = cancelHoursLeft(b);
+        if (hoursLeft < 0)
+          return toolResult(false, `La reserva ${ident} ya ha empezado o ha terminado; no se puede anular.`);
         if (hoursLeft < c.cancel_limit_h)
-          return toolResult(false, `Ya no se puede anular online (límite: ${c.cancel_limit_h} h antes). Contacta con recepción.`);
+          return toolResult(false, `La reserva ${ident} ya no se puede anular online (límite: ${c.cancel_limit_h} h antes). Contacta con recepción.`);
         const resumen = `${b.court_name} · ${b.date.split('-').reverse().join('/')} · ${B.minToStr(b.start_min)}–${B.minToStr(b.end_min)}`;
         const id = newDraft('anulacion', ctx.memberNo, { booking_id: b.id }, resumen);
         return toolResult(true, { draft_id: id, resumen });
@@ -327,7 +391,8 @@ function dispatch(name, args, ctx) {
       case 'apuntarse_partido': {
         if (!ctx.memberNo) return toolResult(false, 'Necesito saber quién eres: dime tu nº de socio y tu PIN.');
         const member = B.getMember(ctx.memberNo);
-        const r = B.joinOpenMatch(parseInt(a.partido_id, 10), member);
+        const pid = resolveListedId(ctx.session && ctx.session.lastOpenMatches, a.partido_id);
+        const r = B.joinOpenMatch(pid, member);
         if (r.error) return toolResult(false, r.error);
         return toolResult(true, { apuntado: true });
       }
@@ -381,11 +446,13 @@ ${c.guest_price ? `- Invitados (no socios): pagan ${c.guest_price} en recepción
 
 Reglas de actuación:
 1. Para reservar, anular o apuntarte necesitas saber quién es el socio. Si no está identificado, pide su nº de socio y su PIN y usa "identificarse". El socio ${member ? `ya está identificado (${member.name})` : 'aún NO está identificado'}.
-2. Disponibilidad y precios: consúltalos SIEMPRE con las herramientas, nunca los inventes.
+2. Disponibilidad, reservas y precios: consúltalos SIEMPRE con las herramientas, nunca los inventes. Cuando muestres una lista al socio (sus reservas, partidos abiertos), usa viñetas sin numerarlas: el número de orden NO es el id.
 3. Para crear una reserva: primero "preparar_reserva", muestra el resumen al socio y pregúntale si lo confirma; solo cuando diga que sí (explícitamente), llama a "confirmar_reserva" con el draft_id.
 4. Para anular: primero "preparar_anulacion", muestra el resumen y pide confirmación explícita; luego "confirmar_anulacion".
 5. Si falta un dato (pista, hora), pregunta antes de llamar a la herramienta.
-6. Respuestas cortas, sin tecnicismos. Las horas en formato HH:MM y las fechas como "viernes 3/10".`;
+6. Para anular: si aún no has mostrado sus reservas en esta conversación, llama primero a mis_reservas para obtener los ids; si varias reservas encajan con lo que pide (misma pista, varias fechas), pregunta cuál antes de preparar nada. Después llama a "preparar_anulacion" y deja que la herramienta decida (su mensaje de error es el que vale). No rehúses una anulación por tu cuenta ni calcules tú el límite de horas. El campo "anulable" de mis_reservas te dice de un vistazo cuáles aún se pueden anular.
+7. Límite: cada socio puede tener como máximo 2 reservas activas (aún no jugadas) a la vez; si preparar_reserva lo rechaza por eso, explícaselo y sugiere anular alguna o esperar a que termine.
+7. Respuestas cortas, sin tecnicismos. Las horas en formato HH:MM y las fechas como "viernes 3/10".`;
 }
 
 // ------------------------------------------------------------ llamada al LLM
@@ -442,13 +509,20 @@ async function runChat({ message, session, llm }) {
   session.chatUsage.n++;
 
   const member = session.bookingMemberNo ? B.getMember(session.bookingMemberNo) : null;
-  const ctx = { memberNo: member ? member.member_no : null, courts: activeCourts() };
+  const ctx = { memberNo: member ? member.member_no : null, courts: activeCourts(), session };
   const history = (session.chatHistory || []).slice(-20);
   const messages = [
     { role: 'system', content: buildSystemPrompt(member) },
     ...history,
-    { role: 'user', content: message },
   ];
+  // El historial solo guarda texto (sin tool_calls), así que el draft_id de un
+  // borrador pendiente se perdería entre turnos. Se reinyecta aquí para que el
+  // modelo pueda confirmar con confirmar_reserva/confirmar_anulacion.
+  const pendNote = pendingDraftNote(session);
+  if (pendNote) messages.push({ role: 'system', content: pendNote });
+  const idsNote = listedIdsNote(session);
+  if (idsNote) messages.push({ role: 'system', content: idsNote });
+  messages.push({ role: 'user', content: message });
 
   let reply = 'Se me ha atragantado la respuesta. Prueba de nuevo o usa la parrilla.';
   let totalIn = 0, totalOut = 0;
@@ -473,6 +547,7 @@ async function runChat({ message, session, llm }) {
         });
         for (const t of out.toolCalls) {
           const r = dispatch(t.name, t.args, ctx);
+          trackDraftCall(session, t.name, t.args, r);
           messages.push({ role: 'tool', tool_call_id: t.id, content: JSON.stringify(r) });
         }
         continue;

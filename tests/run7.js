@@ -47,9 +47,10 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
   ok(r.statusCode === 200 && r.text.includes('al menos una duración'), 'config sin duraciones se rechaza');
   r = await admin.req('POST', '/admin/reservas/config', { open: '08:00', close: '08:00', slot_durations: '60,75', days_ahead: '14', hold_min: '10', cancel_limit_h: '3', guest_price: '' });
   ok(r.statusCode === 200 && r.text.includes('anterior al cierre'), 'apertura = cierre se rechaza');
-  r = await admin.req('POST', '/admin/reservas/config', { open: '08:00', close: '20:00', slot_durations: '60,75', days_ahead: '14', hold_min: '10', cancel_limit_h: '3', guest_price: '6' });
+  r = await admin.req('POST', '/admin/reservas/config', { open: '08:00', close: '20:00', slot_durations: '60,75', days_ahead: '14', hold_min: '10', cancel_limit_h: '3', guest_price: '6', max_active_bookings: '2' });
   ok(r.statusCode === 200 && r.text.includes('Configuración guardada'), 'config 60/75 se guarda');
   ok(bbq("SELECT value FROM booking_config WHERE key = 'slot_durations'")[0].value === '60,75', 'duraciones en BD');
+  ok(bbq("SELECT value FROM booking_config WHERE key = 'max_active_bookings'")[0].value === '2', 'tope de reservas activas en BD');
 
   // 2. Socios + activación con PIN
   await admin.req('POST', '/admin/reservas/socios', { member_no: '1001', name: 'Socio Uno', phone: '600111222' });
@@ -92,6 +93,8 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
   ok(bbq("SELECT COUNT(*) c FROM booking_players WHERE booking_id = ?", bid)[0].c === 3, '3 jugadores (titular + 2)');
   ok(b1.payment_status === 'pending', 'pago pendiente por el invitado');
   ok(bbq("SELECT email FROM club_members WHERE member_no = '1001'")[0].email === 'uno@example.com', 'email guardado en la ficha');
+  r = await pub.req('POST', '/reservar/anular', { booking_id: bid });
+  ok(r.statusCode === 200 && r.text.includes('Reserva anulada'), 'el socio anula su 1ª reserva (hace hueco en el tope de 2)');
 
   // 5. El ejemplo de Mathius: reservada 09:00–10:15, desde 10:15 vale 10:15, 11:15, 11:30 pero no 10:30
   r = await pub.req('POST', '/reservar/nueva', { court_id: '1', date: TOM, start_min: '540', duration_min: '75',
@@ -117,6 +120,12 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
   ok(bbq("SELECT payment_status FROM bookings WHERE id = ?", bid2)[0].payment_status === 'pending', 'al añadir invitado el pago pasa a pendiente');
   r = await pub.req('POST', '/reservar/jugadores', { booking_id: bid2, p1_name: 'Socio Dos', p1_member: '1002', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
   ok(bbq("SELECT payment_status FROM bookings WHERE id = ?", bid2)[0].payment_status === 'ok', 'al poner socio el pago vuelve a OK');
+  // El tope es 2 reservas activas: anulamos las de 1001 para no interferir con los siguientes tests
+  const bid1115 = bbq("SELECT id FROM bookings WHERE titular_member_no = '1001' AND date = ? AND start_min = 675 AND status = 'active'", TOM)[0].id;
+  r = await pub.req('POST', '/reservar/anular', { booking_id: bid2 });
+  ok(r.statusCode === 200 && r.text.includes('Reserva anulada'), 'anula la reserva incompleta');
+  r = await pub.req('POST', '/reservar/anular', { booking_id: bid1115 });
+  ok(r.statusCode === 200 && r.text.includes('Reserva anulada'), 'anula la de las 11:15');
 
   // 7. Lista de espera con hora + duración (en la pista 2, sin interferencias)
   const pub2 = makeClient(), pubW = makeClient();
@@ -178,6 +187,13 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
   ok(r.statusCode === 302 && r.location.includes('/recepcion/reservas'), 'recepción crea la reserva');
   r = await recep.req('GET', '/recepcion/reservas?date=' + D6);
   ok(r.statusCode === 200 && r.text.includes('Socio Uno'), 'recepción ve la reserva creada');
+  // El tope es 2 reservas activas: 1001 anula las suyas para los siguientes tests
+  const b1400 = bbq("SELECT id FROM bookings WHERE titular_member_no = '1001' AND date = ? AND start_min = 840 AND status = 'active'", D4)[0].id;
+  const bRecep = bbq("SELECT id FROM bookings WHERE titular_member_no = '1001' AND date = ? AND start_min = 480 AND status = 'active'", D6)[0].id;
+  r = await pub.req('POST', '/reservar/anular', { booking_id: b1400 });
+  ok(r.statusCode === 200 && r.text.includes('Reserva anulada'), '1001 anula la de las 14:00');
+  r = await pub.req('POST', '/reservar/anular', { booking_id: bRecep });
+  ok(r.statusCode === 200 && r.text.includes('Reserva anulada'), '1001 anula la creada por recepción');
 
   // 10. Restablecer PIN desde admin
   r = await admin.req('POST', '/admin/reservas/socios/pin', { member_no: '1002' });
@@ -265,6 +281,8 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
   ok(r.statusCode === 302 && decodeURIComponent(r.location).includes('No puedes ver'), '1002 (nivel 5.5) no puede apuntarse');
   r = await pub5.req('POST', '/reservar/abierto/' + bidO + '/unirse');
   ok(bbq('SELECT open_spots FROM bookings WHERE id = ?', bidO)[0].open_spots === 0, 'al completarse se cierra solo');
+  r = await pub.req('POST', '/reservar/anular', { booking_id: bidO });
+  ok(r.statusCode === 200 && r.text.includes('Reserva anulada'), '1001 anula el abierto completado (hace hueco en el tope)');
   r = await pubW.req('GET', '/reservar?date=' + D7);
   ok(!r.text.includes('plazas'), 'cerrado: la parrilla ya no lo muestra en verde');
 
@@ -330,6 +348,44 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
   for (let i = 0; i < 5; i++) await pub.req('POST', '/reservar/entrar', { member_no: '1001', pin: '0000', next: '/reservar/mis' });
   r = await pub.req('POST', '/reservar/entrar', { member_no: '1001', pin: '1234', next: '/reservar/mis' });
   ok(r.statusCode === 200 && r.text.includes('15 minutos'), 'tras 5 fallos el PIN correcto también se bloquea');
+
+  // 16. Tope de reservas activas por socio (2 por defecto)
+  process.env.DATA_DIR = DATA;
+  const B = require('../src/lib/bookings');
+  const nowHM = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
+  B.upsertMember('1004', 'Socio Cuatro', '600555666');
+  B.bdb.prepare(`INSERT INTO bookings(court_id, court_name, date, start_min, end_min, titular_member_no, titular_name, payment_status, open_spots)
+    VALUES(4, 'Pista 4', ?, ?, ?, '1004', 'Socio Cuatro', 'ok', 0)`)
+    .run(B.todayStr(), nowHM() - 120, nowHM() - 60);
+  ok(B.activeBookingCount('1004') === 0, 'una reserva de hoy ya terminada no cuenta como activa');
+  B.upsertMember('1005', 'Socio Cinco', '600666777');
+  const findStart = (court, date) => {
+    for (let s = 480; s <= 1200; s += 15) if (B.isBookable(court, date, s, 60)) return s;
+    return null;
+  };
+  const sA = findStart(1, D6), sB = findStart(1, D5);
+  ok(sA && sB, 'hay huecos libres en la parrilla para probar el tope');
+  const mk5 = (court, date, start, byStaff) => B.createBooking({
+    court_id: court, court_name: 'Pista ' + court, date, start_min: start, duration_min: 60,
+    titular_member_no: '1005', players: [], byStaff: !!byStaff,
+  });
+  const t1 = mk5(1, D6, sA); ok(t1.id, '1ª reserva activa del socio 1005');
+  const t2 = mk5(1, D5, sB); ok(t2.id, '2ª reserva activa del socio 1005');
+  ok(B.activeBookingCount('1005') === 2, 'activeBookingCount = 2');
+  // Tercer hueco el mismo día que t1 pero sin solaparse con ella
+  let sC = null;
+  for (let s = 480; s <= 1200; s += 15) {
+    if (B.overlaps(s, s + 60, sA, sA + 60)) continue;
+    if (B.isBookable(2, D6, s, 60)) { sC = s; break; }
+  }
+  ok(!!sC, 'hay un tercer hueco sin solape');
+  const t3 = mk5(2, D6, sC);
+  ok(!t3.id && t3.error && t3.error.includes('2 reservas activas'), 'la 3ª reserva se rechaza por el tope');
+  const t4 = mk5(2, D6, sC, true);
+  ok(t4.id, 'recepción/admin (byStaff) pueden saltarse el tope');
+  B.cancelBooking(t4.id, true); B.cancelBooking(t1.id, true);
+  const t5 = mk5(2, D6, sC);
+  ok(t5.id, 'tras anular una, el socio vuelve a poder reservar');
 
   console.log(`\n${pass} OK, ${fail} FALLOS`);
   srv.kill();

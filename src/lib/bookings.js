@@ -129,6 +129,7 @@ const DEFAULTS = {
   days_ahead: '7',        // cuántos días adelante se puede reservar
   hold_min: '10',         // minutos que se guarda una plaza ofrecida de la lista de espera
   cancel_limit_h: '6',    // hasta cuántas horas antes puede anular el socio
+  max_active_bookings: '2', // reservas activas (aún no jugadas) máximas por socio; 0 = sin límite
   guest_price: '',        // precio de referencia del invitado (texto libre, p. ej. "6")
   reminders_enabled: '0', // recordatorios por email (requiere BREVO_API_KEY y MAIL_FROM)
   reminder_hours: '3',    // horas antes del inicio para enviar el recordatorio
@@ -149,6 +150,7 @@ function parseDurations(s) {
 function getConfig() {
   let durations = parseDurations(cfg('slot_durations'));
   if (!durations.length) durations = parseDurations(DEFAULTS.slot_durations);
+  const maxAB = parseInt(cfg('max_active_bookings'), 10);
   return {
     open_min: parseInt(cfg('open_min'), 10),
     close_min: parseInt(cfg('close_min'), 10),
@@ -157,6 +159,7 @@ function getConfig() {
     days_ahead: parseInt(cfg('days_ahead'), 10),
     hold_min: parseInt(cfg('hold_min'), 10),
     cancel_limit_h: parseInt(cfg('cancel_limit_h'), 10),
+    max_active_bookings: Number.isInteger(maxAB) && maxAB >= 0 ? maxAB : 2,
     guest_price: cfg('guest_price'),
     reminders_enabled: cfg('reminders_enabled'),
     reminder_hours: parseInt(cfg('reminder_hours'), 10),
@@ -384,12 +387,23 @@ function mkFree(court_id, date, s, e, isToday, now) {
 }
 
 // ------------------------------------------------------------ reservas
-function validateNewBooking({ court_id, date, start_min, duration_min, titular_member_no, players }) {
+// Nº de reservas del socio aún no jugadas (activas y sin terminar).
+function activeBookingCount(member_no) {
+  const today = todayStr(), now = nowMin();
+  return bdb.prepare(
+    `SELECT COUNT(*) AS n FROM bookings
+     WHERE titular_member_no = ? AND status = 'active'
+     AND (date > ? OR (date = ? AND end_min > ?))`
+  ).get((member_no || '').trim(), today, today, now).n;
+}
+function validateNewBooking({ court_id, date, start_min, duration_min, titular_member_no, players, byStaff = false }) {
   const c = getConfig();
   const t = (titular_member_no || '').trim();
   const member = getMember(t);
   if (!member) return 'Indica un nº de socio válido para el titular.';
   if (!member.active) return 'Ese nº de socio está desactivado.';
+  if (!byStaff && c.max_active_bookings > 0 && activeBookingCount(t) >= c.max_active_bookings)
+    return `Solo puedes tener ${c.max_active_bookings} reservas activas a la vez. Anula alguna o espera a que termine para reservar otra.`;
   const d = parseInt(duration_min, 10);
   if (!c.durations.includes(d)) return 'Duración no válida.';
   if (!Number.isInteger(start_min)) return 'Hora de inicio no válida.';
@@ -440,8 +454,8 @@ function setPlayers(booking_id, titular_member_no, extras) {
   return { ok: true, payment_status, count: rows.length };
 }
 
-function createBooking({ court_id, court_name, date, start_min, duration_min, titular_member_no, players, open_spots = 0 }) {
-  const err = validateNewBooking({ court_id, date, start_min, duration_min, titular_member_no, players });
+function createBooking({ court_id, court_name, date, start_min, duration_min, titular_member_no, players, open_spots = 0, byStaff = false }) {
+  const err = validateNewBooking({ court_id, date, start_min, duration_min, titular_member_no, players, byStaff });
   if (err) return { error: err };
   const d = parseInt(duration_min, 10);
   const end_min = start_min + d;
@@ -683,7 +697,7 @@ function confirmOffer(waitlistId, member_no) {
   });
   if (err) {
     bdb.prepare("UPDATE waitlist SET status = 'expired' WHERE id = ?").run(w.id);
-    return { error: 'La hora ya no está libre.' };
+    return { error: err.startsWith('Solo puedes tener') ? err : 'La hora ya no está libre.' };
   }
   return { offer: { ...w, titular_name: member.name } };
 }
@@ -870,7 +884,7 @@ module.exports = {
   validPin, setPin, hasPin, checkPin, resetPin,
   dayBookings, dayBlocks, freeSegments, reachableSet, validStarts,
   isBookable, isPotentiallyValid, gridFor,
-  validateNewBooking, normalizePlayers, setPlayers, recomputePayment,
+  validateNewBooking, activeBookingCount, normalizePlayers, setPlayers, recomputePayment,
   createBooking, getBooking, cancelBooking,
   searchMembers, validLevel, setLevel, fmtLevel, levelRangeText,
   addBlock, removeBlock, getBlocks, isBlockedBy, openVisibleTo,
