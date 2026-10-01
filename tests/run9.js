@@ -266,9 +266,9 @@ process.env.LLM_API_KEY = 'test-key';
 {
   const session = { bookingMemberNo: '7' };
   const s1 = B.freeSegments(1, D2).find(g => g.end - g.start >= 60);
-  const b1 = B.createBooking({ court_id: 1, court_name: 'Pista 1', date: D2, start_min: s1.start, duration_min: 60, titular_member_no: '7', players: [] });
+  const b1 = B.createBooking({ court_id: 1, court_name: 'Pista 1', date: D2, start_min: s1.start, duration_min: 60, titular_member_no: '7', players: [], byStaff: true });
   const s1b = B.freeSegments(1, D2).find(g => g.end - g.start >= 60); // tras crear b1
-  const b2 = B.createBooking({ court_id: 1, court_name: 'Pista 1', date: D2, start_min: s1b.start, duration_min: 60, titular_member_no: '7', players: [] });
+  const b2 = B.createBooking({ court_id: 1, court_name: 'Pista 1', date: D2, start_min: s1b.start, duration_min: 60, titular_member_no: '7', players: [], byStaff: true });
   ok(b1.id && b2.id && b1.id !== b2.id, 'reservas de prueba para anular creadas');
   // Turno 1: el socio pide sus reservas (la sesión memoriza la lista con ids reales)
   await Chat.runChat({
@@ -366,6 +366,41 @@ process.env.LLM_API_KEY = 'test-key';
   const pend = session.pendingDraft;
   const d = pend && Chat._drafts.get(pend.draft_id);
   ok(d && d.kind === 'anulacion' && d.payload.booking_id === target.id, 'el borrador de anulación apunta a la reserva correcta');
+}
+
+// ---- 16. tope de 2 reservas activas también en el chat ----
+{
+  B.upsertMember('10', 'Diez Pruebas', '600000010');
+  B.setPin('10', '1010');
+  const D3 = dayStr(3);
+  const free60 = (date) => B.freeSegments(1, date).find(g => g.end - g.start >= 60);
+  const mk10 = (date) => { const g = free60(date); return g && B.createBooking({
+    court_id: 1, court_name: 'Pista 1', date, start_min: g.start, duration_min: 60,
+    titular_member_no: '10', players: [],
+  }); };
+  const m1 = mk10(D2), m2 = mk10(D3);
+  ok(m1 && m1.id && m2 && m2.id, 'el socio 10 ya tiene 2 reservas activas');
+  // Hueco libre mañana en pista 1 para que el único error posible sea el tope
+  const gT = B.freeSegments(1, TOM).find(g => g.end - g.start >= 60);
+  const horaT = gT ? B.minToStr(gT.start) : '12:00';
+  const session = {};
+  const r = await Chat.runChat({
+    message: 'hola, quiero reservar pista 1 mañana a las ' + horaT, session,
+    llm: scripted([
+      call('identificarse', { member_no: '10', pin: '1010' }),
+      (messages) => {
+        const j = JSON.parse(messages[messages.length - 1].content);
+        ok(j.ok, 'el socio 10 se identifica en el chat');
+        return { content: null, toolCalls: [{ id: 't2', name: 'preparar_reserva', args: { fecha: TOM, inicio: horaT, pista: 'Pista 1' } }], usage: { in: 1, out: 1 } };
+      },
+      (messages) => {
+        const j = JSON.parse(messages[messages.length - 1].content);
+        ok(!j.ok && j.error && j.error.includes('2 reservas activas'), 'preparar_reserva rechaza la 3ª por el tope');
+        return { content: 'Ya tienes 2 reservas activas, no puedes reservar más hasta que juegues o anules alguna.', toolCalls: [], usage: { in: 1, out: 1 } };
+      },
+    ]),
+  });
+  ok(r.reply && r.reply.includes('2 reservas activas'), 'el chat comunica el tope al socio');
 }
 
 console.log(`\n${pass}/${pass + fail} pruebas del chat superadas`);

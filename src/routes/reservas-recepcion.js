@@ -112,7 +112,7 @@ router.post('/nueva', (req, res) => {
   const r = B.createBooking({
     court_id: court.id, court_name: court.name, date,
     start_min: parseInt(req.body.start_min, 10), duration_min: parseInt(req.body.duration_min, 10),
-    titular_member_no: t, players, open_spots: parseInt(req.body.open_spots, 10) || 0,
+    titular_member_no: t, players, open_spots: parseInt(req.body.open_spots, 10) || 0, byStaff: true,
   });
   if (r.error) return render(r.error);
   res.redirect('/recepcion/reservas?date=' + date + '&ok=' + encodeURIComponent('Reserva creada.'));

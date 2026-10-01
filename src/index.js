@@ -9,6 +9,8 @@ const L = require('./lib/league');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+// Detrás de Traefik (un solo salto): req.ip es la IP real del visitante.
+app.set('trust proxy', 1);
 
 // Cabeceras básicas de seguridad.
 app.disable('x-powered-by');

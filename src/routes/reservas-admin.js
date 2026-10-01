@@ -120,7 +120,7 @@ router.post('/nueva', (req, res) => {
   const r = B.createBooking({
     court_id: court.id, court_name: court.name, date,
     start_min: parseInt(req.body.start_min, 10), duration_min: parseInt(req.body.duration_min, 10),
-    titular_member_no: t, players, open_spots: parseInt(req.body.open_spots, 10) || 0,
+    titular_member_no: t, players, open_spots: parseInt(req.body.open_spots, 10) || 0, byStaff: true,
   });
   if (r.error) return render(r.error);
   res.redirect('/admin/reservas/dia?date=' + date + '&ok=' + encodeURIComponent('Reserva creada.'));
@@ -137,11 +137,14 @@ router.post('/config', (req, res) => {
   const days_ahead = Math.min(90, Math.max(1, parseInt(req.body.days_ahead, 10) || 14));
   const hold_min = Math.min(120, Math.max(5, parseInt(req.body.hold_min, 10) || 10));
   const cancel_limit_h = Math.min(72, Math.max(0, parseInt(req.body.cancel_limit_h, 10) || 0));
+  const _mab = parseInt(req.body.max_active_bookings, 10);
+  const max_active_bookings = Number.isInteger(_mab) ? Math.min(20, Math.max(0, _mab)) : B.getConfig().max_active_bookings;
   const err = B.validateConfig(open_min, close_min, durationsStr);
   if (err) return res.renderPage('reservas-admin/config', { error: err, ok: null, config: B.getConfig(), minToStr: B.minToStr });
   B.setCfg('open_min', open_min); B.setCfg('close_min', close_min);
   B.setCfg('slot_durations', B.parseDurations(durationsStr).join(','));
   B.setCfg('days_ahead', days_ahead); B.setCfg('hold_min', hold_min); B.setCfg('cancel_limit_h', cancel_limit_h);
+  B.setCfg('max_active_bookings', max_active_bookings);
   B.setCfg('guest_price', (req.body.guest_price || '').trim());
   B.setCfg('reminders_enabled', req.body.reminders_enabled === '1' ? '1' : '0');
   B.setCfg('reminder_hours', Math.min(24, Math.max(1, parseInt(req.body.reminder_hours, 10) || 3)));
