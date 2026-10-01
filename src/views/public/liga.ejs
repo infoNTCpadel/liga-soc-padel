@@ -1,0 +1,54 @@
+<h1>Fase de grupos</h1>
+
+<div class="tabs">
+  <% for (const c of CATEGORIES) { %><a href="/liga/<%= c.code %>/<%= round %>" class="<%= category===c.code?'on':'' %>"><%= c.name %></a><% } %>
+  <span style="flex:1"></span>
+  <% for (const r of [1,2,3]) { %><a href="/liga/<%= category %>/<%= r %>" class="<%= round===r?'on':'' %>">Ronda <%= r %></a><% } %>
+</div>
+
+<% if (closed) { %><div class="alert info">Ronda cerrada: clasificación y puntos definitivos.</div><% } %>
+
+<% if (!groups.length) { %>
+  <div class="card"><p class="mut">Aún no hay grupos publicados para esta ronda y categoría.</p></div>
+<% } %>
+
+<% for (const g of groups) { %>
+<div class="card">
+  <h3>Grupo <%= g.group_no %></h3>
+  <div class="tblwrap"><table class="tbl">
+    <tr><th>#</th><th>Pareja</th><th class="num">PJ</th><th class="num">PG</th><th class="num">PP</th><th class="num">Pts</th><th class="num">Sets</th><th class="num">Juegos</th><% if (showMov) { %><th>Mov.</th><% } %><th></th></tr>
+    <% for (const s of g.standings) { %>
+      <tr>
+        <td class="<%= s.position<=2?'pos1':'' %>"><strong><%= s.position %>º</strong></td>
+        <td><%= pairName(s.pairId) %></td>
+        <td class="num"><%= s.pj %></td><td class="num"><%= s.pg %></td><td class="num"><%= s.pp %></td>
+        <td class="num"><strong><%= s.pts %></strong></td>
+        <td class="num"><%= s.setsW %>–<%= s.setsL %></td>
+        <td class="num"><%= s.gamesW %>–<%= s.gamesL %></td>
+        <% if (showMov) { %>
+          <td><% if (s.movementDir > 0) { %><span class="badge mov-up">▲ Sube al G<%= s.movementTarget %></span><% } else if (s.movementDir < 0) { %><span class="badge mov-down">▼ Baja al G<%= s.movementTarget %></span><% } else { %><span class="badge mov-same">= Permanece</span><% } %></td>
+        <% } %>
+        <td class="small mut"><%= s.tieNote || '' %></td>
+      </tr>
+    <% } %>
+  </table></div>
+
+  <h4 style="margin-top:16px">Partidos</h4>
+  <% for (const m of g.matches) { %>
+    <div class="match">
+      <span class="teams"><%= pairName(m.pair_a_id) %> <span class="mut">vs</span> <%= pairName(m.pair_b_id) %>
+        <% const slg = slotStr(m); if (slg) { %><br><span class="small mut">📍 <%= slg %></span><% } %>
+      </span>
+      <span class="score"><%= scoreStr(m) %>
+        <% const vb = valBadge(m); if (vb === 'pending') { %><span class="badge pending">pendiente validación</span><% } %>
+        <% if (vb === 'disputado') { %><span class="badge disputado">disputado</span><% } %>
+      </span>
+    </div>
+  <% } %>
+</div>
+<% } %>
+
+<p class="mut small">Puntos por partido: victoria 3 · derrota ganando un set 2 · derrota sin ganar sets 1 · no jugado 0. Solo cuentan los sets terminados; los juegos cuentan siempre.</p>
+<% if (showMov) { %>
+<p class="mut small">Movimientos <%= closed ? 'aplicados al cerrar la ronda' : 'previstos si la ronda terminara hoy' %> según la normativa: 1º sube 2 grupos, 2º sube 1, 3º baja 1, 4º baja 2 (con excepciones en el primer, segundo, penúltimo y último grupo).</p>
+<% } %>

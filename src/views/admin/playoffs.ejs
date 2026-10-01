@@ -1,0 +1,143 @@
+<h1>Playoffs</h1>
+
+<% if (typeof error !== 'undefined' && error) { %><div class="alert error"><%= error %></div><% } %>
+<% if (typeof ok !== 'undefined' && ok) { %><div class="alert ok"><%= ok %></div><% } %>
+
+<% const anyClosed = data.some(d => d.round3closed); %>
+<% if (!anyClosed) { %>
+  <div class="alert info">Para generar los cuadros primero hay que cerrar la Ronda 3.</div>
+<% } else { %>
+  <% const anyGen = data.some(d => d.generated); %>
+  <% if (!anyGen) { %>
+    <div class="alert info">Ronda 3 cerrada. Revisa el orden de cabezas de serie por categoría (puedes mover parejas con ↑ ↓), marca las parejas que no vayan a jugar el playoff y genera los cuadros. Las parejas marcadas se retiran <strong>antes</strong> de dividir el ranking en categorías de 16; si el resto final tiene menos de 8, esas parejas no juegan.</div>
+  <% } %>
+<% } %>
+
+<div class="card">
+  <h3>Cierre de playoffs</h3>
+  <% if (playoffsClosed) { %>
+    <p><span class="badge bad">Cerrados</span> <span class="mut small">No se admiten resultados (ni de parejas ni del admin).</span></p>
+    <form method="post" action="/admin/playoffs/cierre"><button class="btn small" type="submit">Reabrir playoffs</button></form>
+  <% } else { %>
+    <p class="mut small">Al terminar los playoffs, ciérralos para bloquear la entrada de resultados.</p>
+    <form method="post" action="/admin/playoffs/cierre" onsubmit="return confirm('¿Cerrar los playoffs? Ya no se podrán subir ni corregir resultados.')"><button class="btn small danger" type="submit">Cerrar playoffs</button></form>
+  <% } %>
+</div>
+
+<% for (const d of data) { %>
+<div class="card">
+  <h3>Categoría <%= catName(d.category).toLowerCase() %></h3>
+  <% const editable = d.round3closed && !d.hasResults; %>
+  <% for (const s of d.stages) { %>
+    <h4>Playoff de <%= s.ordinal %> categoría <span class="mut small">· <%= s.seeds %> cabezas de serie</span></h4>
+    <% if (!s.ids.length) { %>
+      <p class="mut small">Sin parejas.</p>
+    <% } else { %>
+      <ol class="seedlist">
+      <% s.ids.forEach((id, i) => { %>
+        <li>
+          <span class="seed"><%= i + 1 %></span>
+          <span class="<%= i < s.seeds ? 'seedhead' : '' %>"><%= d.pairName(id) %></span>
+          <% if (i < s.seeds) { %><span class="badge validado">cabeza de serie</span><% } %>
+          <% if (editable) { %>
+            <span class="seedmove">
+              <form method="post" action="/admin/playoffs/orden" style="display:inline">
+                <input type="hidden" name="category" value="<%= d.category %>">
+                <input type="hidden" name="stage" value="<%= s.stage %>">
+                <input type="hidden" name="pair_id" value="<%= id %>">
+                <input type="hidden" name="dir" value="up">
+                <button class="btn small ghost" type="submit" <%= i === 0 ? 'disabled' : '' %> title="Subir">↑</button>
+              </form>
+              <form method="post" action="/admin/playoffs/orden" style="display:inline">
+                <input type="hidden" name="category" value="<%= d.category %>">
+                <input type="hidden" name="stage" value="<%= s.stage %>">
+                <input type="hidden" name="pair_id" value="<%= id %>">
+                <input type="hidden" name="dir" value="down">
+                <button class="btn small ghost" type="submit" <%= i === s.ids.length - 1 ? 'disabled' : '' %> title="Bajar">↓</button>
+              </form>
+              <form method="post" action="/admin/playoffs/excluir" style="display:inline" title="Marcar como que no juega el playoff">
+                <input type="hidden" name="category" value="<%= d.category %>">
+                <input type="hidden" name="pair_id" value="<%= id %>">
+                <label class="small" style="cursor:pointer"><input type="checkbox" onchange="this.form.submit()"> no juega</label>
+              </form>
+            </span>
+          <% } %>
+        </li>
+      <% }) %>
+      </ol>
+    <% } %>
+    <% if (d.generated && s.firstRound.length && !s.hasRealResults) { %>
+      <details>
+        <summary class="small" style="cursor:pointer; color: var(--lime)">Intercambiar parejas dentro del cuadro</summary>
+        <form method="post" action="/admin/playoffs/intercambiar" style="margin-top:10px">
+          <input type="hidden" name="category" value="<%= d.category %>">
+          <input type="hidden" name="stage" value="<%= s.stage %>">
+          <p class="small mut">Cambia las parejas de sitio dentro de la primera ronda. Debe mantenerse el mismo conjunto de parejas, sin duplicar.</p>
+          <% const plist = s.ids; %>
+          <% for (const m of s.firstRound) { %>
+            <div class="row2" style="margin-bottom:6px">
+              <div class="field"><label>Hueco A</label>
+                <select name="a_<%= m.id %>">
+                  <option value="">— BYE —</option>
+                  <% for (const pid of plist) { %><option value="<%= pid %>" <%= m.pair_a_id === pid ? 'selected' : '' %>><%= d.pairName(pid) %></option><% } %>
+                </select>
+              </div>
+              <div class="field"><label>Hueco B</label>
+                <select name="b_<%= m.id %>">
+                  <option value="">— BYE —</option>
+                  <% for (const pid of plist) { %><option value="<%= pid %>" <%= m.pair_b_id === pid ? 'selected' : '' %>><%= d.pairName(pid) %></option><% } %>
+                </select>
+              </div>
+            </div>
+          <% } %>
+          <button class="btn small" type="submit">Aplicar intercambio</button>
+        </form>
+      </details>
+    <% } %>
+  <% } %>
+  <% if (d.unused.length) { %>
+    <p class="small mut">Sin playoff (resto de menos de 8 parejas): <%= d.unused.map(id => d.pairName(id)).join(', ') %></p>
+  <% } %>
+  <% if (d.excluded.length) { %>
+    <h4>No juegan el playoff <span class="mut small">· excluidas antes de formar las categorías</span></h4>
+    <ul class="seedlist">
+      <% for (const id of d.excluded) { %>
+        <li class="out">
+          <span><%= d.pairName(id) %></span>
+          <span class="badge pendiente">no juega</span>
+          <% if (editable) { %>
+            <span class="seedmove">
+              <form method="post" action="/admin/playoffs/excluir" style="display:inline" title="Volver a incluir en el playoff">
+                <input type="hidden" name="category" value="<%= d.category %>">
+                <input type="hidden" name="pair_id" value="<%= id %>">
+                <label class="small" style="cursor:pointer"><input type="checkbox" checked onchange="this.form.submit()"> no juega</label>
+              </form>
+            </span>
+          <% } %>
+        </li>
+      <% } %>
+    </ul>
+  <% } %>
+  <% if (editable && d.stages.some(s => s.ids.length >= 2)) { %>
+    <form method="post" action="/admin/playoffs/generar" onsubmit="return confirm('¿Generar los cuadros de esta categoría con este orden?')">
+      <input type="hidden" name="category" value="<%= d.category %>">
+      <button class="btn small" type="submit"><%= d.generated ? 'Regenerar cuadros' : 'Generar cuadros' %></button>
+    </form>
+  <% } %>
+</div>
+<% } %>
+
+<% if (data.some(d => d.generated)) { %>
+  <p class="mut">Los cuadros ya están generados. Los resultados se introducen desde <a href="/admin/partidos?stage=po">Partidos</a> o los suben las propias parejas. Los ganadores avanzan automáticamente de ronda. Los huecos vacíos de la primera ronda figuran como BYE y la pareja exenta pasa de ronda automáticamente.</p>
+  <p><a class="btn small ghost" href="/playoffs/M">Ver cuadros públicos</a></p>
+<% } %>
+
+<style>
+.seedlist { list-style: none; padding: 0; margin: 8px 0 16px; }
+.seedlist li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: .92rem; }
+.seedlist li.out { opacity: .55; }
+.seedlist li.out .seedhead { color: inherit; }
+.seedlist .seedhead { font-weight: 700; color: var(--lime); }
+.seedlist .seedmove { margin-left: auto; display: flex; gap: 4px; align-items: center; }
+.seedlist .seedmove .btn { padding: 4px 9px; }
+</style>

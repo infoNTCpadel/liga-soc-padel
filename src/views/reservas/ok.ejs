@@ -1,0 +1,20 @@
+<h1>Reserva confirmada</h1>
+<div class="card">
+  <p><strong><%= b.court_name %></strong> · <%= b.date.slice(8,10) %>/<%= b.date.slice(5,7) %>/<%= b.date.slice(0,4) %> · <%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %></p>
+  <p class="mut">Titular: <%= b.titular_name %> (socio <%= b.titular_member_no %>)</p>
+  <table class="tbl">
+    <tr><th>Jugador</th><th>Socio</th><th></th></tr>
+    <% for (const p of b.players) { %>
+    <tr><td><%= p.name %></td><td><%= p.member_no || '—' %></td><td><%= p.is_guest ? '<span class="badge warn">Invitado</span>' : '' %></td></tr>
+    <% } %>
+  </table>
+  <% if (b.payment_status === 'pending') { %>
+    <div class="alert error">Hay invitados en esta reserva: deberán <strong>pagar en recepción antes de jugar</strong><%= config.guest_price ? ' (' + config.guest_price + ' € por invitado)' : '' %>.</div>
+  <% } else { %>
+    <div class="alert ok">Todos los jugadores son socios: no hay nada que pagar.</div>
+  <% } %>
+  <% if (config.reminders_enabled === '1') { %>
+    <p class="mut">Te enviaremos un recordatorio por email unas horas antes, si dejaste tu email.</p>
+  <% } %>
+  <p><a class="btn small ghost" href="/reservar/mis">Mis reservas</a> <a class="btn small ghost" href="/reservar">Volver a la parrilla</a></p>
+</div>

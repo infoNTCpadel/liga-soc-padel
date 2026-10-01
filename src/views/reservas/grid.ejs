@@ -1,0 +1,108 @@
+<h1>Reservar pista</h1>
+<p class="mut">Solo para socios del club. Para reservar o apuntarte a un partido abierto necesitas entrar con tu nº de socio y PIN. Si algún jugador no es socio, deberá pagar en recepción antes de jugar.</p>
+
+<% if (typeof error !== 'undefined' && error) { %><div class="alert error"><%= error %></div><% } %>
+<% if (typeof info !== 'undefined' && info) { %><div class="alert ok"><%= info %></div><% } %>
+
+<div class="card">
+  <div class="row2" style="align-items:center">
+    <div>
+      <% if (prev) { %><a class="btn small ghost" href="/reservar?date=<%= prev %>">← <%= prev.slice(8,10) %>/<%= prev.slice(5,7) %></a><% } %>
+      <strong style="margin:0 .6em"><%= date.slice(8,10) %>/<%= date.slice(5,7) %>/<%= date.slice(0,4) %></strong>
+      <% if (next) { %><a class="btn small ghost" href="/reservar?date=<%= next %>"><%= next.slice(8,10) %>/<%= next.slice(5,7) %> →</a><% } %>
+    </div>
+    <div style="text-align:right">
+      <% if (member) { %><a class="btn small ghost" href="/reservar/mis">Mis reservas</a> <a class="btn small ghost" href="/reservar/datos">Mis datos</a>
+      <% } else { %><a class="btn small" href="/reservar/entrar?next=<%= encodeURIComponent('/reservar?date=' + date) %>">Entrar para reservar</a><% } %>
+    </div>
+  </div>
+</div>
+
+<div class="daytabs">
+  <% for (const t of tabs) { %>
+    <a class="daytab<%= t === date ? ' on' : '' %>" href="/reservar?date=<%= t %>"><%= tabLabel(t) %></a>
+  <% } %>
+</div>
+
+<% if (noCourts) { %>
+  <div class="card"><p class="mut">Aún no hay pistas configuradas. El club las está preparando.</p></div>
+<% } else { %>
+<style>
+.daytabs{display:flex;gap:.4em;overflow-x:auto;margin:.8em 0}
+.daytab{flex:0 0 auto;padding:.5em .9em;border:1px solid #d8d3e8;border-radius:999px;background:#fff;color:#4b3d8f;text-decoration:none;font-weight:600}
+.daytab.on{background:#5b3df0;color:#fff;border-color:#5b3df0}
+.slotwrap{overflow-x:auto;border:1px solid #e5e1f2;border-radius:12px;background:#fff}
+table.slots{border-collapse:separate;border-spacing:0;min-width:100%}
+table.slots th, table.slots td{padding:.45em .5em;border-bottom:1px solid #f0edf8;text-align:center;white-space:nowrap}
+table.slots thead th{background:#faf8ff;color:#4b3d8f;position:sticky;top:0}
+table.slots tbody th{color:#6b6884;font-weight:600;background:#fff;position:sticky;left:0}
+.chip{display:inline-block;padding:.45em .8em;border-radius:999px;font-size:.85em;font-weight:700;text-decoration:none;min-width:7.5em}
+.chip.free{border:1.5px solid #5b3df0;color:#4b3d8f;background:#f4f1ff}
+a.chip.free:hover{background:#e9e3ff}
+.chip.busy{background:#f1f0f6;color:#b9b6c9}
+.chip.open{border:1.5px solid #1e8e4d;color:#146c39;background:#e9f7ef}
+a.chip.open:hover{background:#d9f0e3}
+.chip.na{background:#faf9fd;color:#d5d2e2}
+.legend{display:flex;gap:1em;flex-wrap:wrap;margin:.7em 0;font-size:.85em;color:#6b6884}
+.legend i{display:inline-block;width:.9em;height:.9em;border-radius:3px;margin-right:.3em;vertical-align:-1px}
+</style>
+<div class="slotwrap"><table class="slots">
+  <thead><tr><th></th><% for (const court of courts) { %><th><%= court.name %></th><% } %></tr></thead>
+  <tbody>
+  <% for (const row of rows) { %>
+    <tr>
+      <th><%= minToStr(row.slot) %></th>
+      <% for (const { court, cell } of row.cells) {
+        if (cell.st === 'free') {
+          const url = '/reservar/nueva?court=' + court.id + '&date=' + date + '&desde=' + row.slot + '&duracion=' + cell.duration;
+          const href = member ? url : '/reservar/entrar?next=' + encodeURIComponent(url);
+      %><td><a class="chip free" href="<%= href %>" title="<%= cell.duration %> minutos"><%= court.name %> · libre</a></td><%
+        } else if (cell.st === 'open') {
+      %><td><a class="chip open" href="/reservar/abierto/<%= cell.booking.id %>"><%= court.name %> · <%= cell.booking.open_spots %> <%= cell.booking.open_spots === 1 ? 'plaza' : 'plazas' %><%= cell.range ? ' · ' + cell.range : '' %></a></td><%
+        } else if (cell.st === 'busy') {
+      %><td><span class="chip busy"><%= court.name %> · ocupada</span></td><%
+        } else if (cell.st === 'past') {
+      %><td><span class="chip na" title="Franja pasada"><%= minToStr(row.slot) %></span></td><%
+        } else {
+      %><td><span class="chip na" title="No encaja sin dejar huecos">—</span></td><%
+        }
+      } %>
+    </tr>
+  <% } %>
+  </tbody>
+</table></div>
+<div class="legend">
+  <span><i style="background:#f4f1ff;border:1.5px solid #5b3df0"></i>Libre (pulsa para reservar)</span>
+  <span><i style="background:#e9f7ef;border:1.5px solid #1e8e4d"></i>Partido abierto (faltan jugadores)</span>
+  <span><i style="background:#f1f0f6"></i>Ocupada</span>
+</div>
+<p class="hint">Franjas de <%= config.durations.slice().sort((a,b) => b-a)[0] %> minutos. Al pulsar una franja libre se reserva esa duración sin preguntar (si no cabe, se ofrece la siguiente).</p>
+<% } %>
+
+<details class="card" style="margin-top:1em">
+  <summary class="mut" style="cursor:pointer">Avisadme si se libera una hora (lista de espera)</summary>
+  <% if (member) { %>
+  <form method="post" action="/reservar/espera" class="row2" style="margin-top:.5em">
+    <input type="hidden" name="date" value="<%= date %>">
+    <div class="field"><label>Pista</label><select name="court_id" id="w_court" required>
+      <% for (const court of courts) { %><option value="<%= court.id %>"><%= court.name %></option><% } %>
+    </select></div>
+    <div class="field"><label>Hora deseada</label><select name="start_min" id="w_start" required></select></div>
+    <div class="field"><label>Duración</label><select name="duration_min" required>
+      <% for (const d of config.durations) { %><option value="<%= d %>" <%= d === 75 ? 'selected' : '' %>><%= d %> min</option><% } %>
+    </select></div>
+    <div class="field"><label>&nbsp;</label><button class="btn small" type="submit">Avisadme</button></div>
+  </form>
+  <script>
+  const WS = <%- JSON.stringify(waitStarts) %>;
+  const M2S = m => String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0');
+  const wc = document.getElementById('w_court'), ws = document.getElementById('w_start');
+  function fillW(){ ws.innerHTML = (WS[wc.value] || []).map(s => '<option value="'+s+'">'+M2S(s)+'</option>').join(''); }
+  wc.addEventListener('change', fillW); fillW();
+  </script>
+  <% } else { %>
+  <p class="mut"><a href="/reservar/entrar">Entra</a> para apuntarte a la lista de espera.</p>
+  <% } %>
+</details>
+
+<% if (typeof chatEnabled !== 'undefined' && chatEnabled) { %><%- include('chat-widget') %><% } %>

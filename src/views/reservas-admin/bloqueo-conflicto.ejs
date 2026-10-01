@@ -1,0 +1,24 @@
+<h1>Bloqueo con reservas afectadas</h1>
+<div class="card">
+  <p>Quieres bloquear <strong><%= court.name %></strong> del <%= date_from.slice(8,10) %>/<%= date_from.slice(5,7) %> al <%= date_to.slice(8,10) %>/<%= date_to.slice(5,7) %> de <%= minToStr(start_min) %> a <%= minToStr(end_min) %> cada día (<%= reason %>).</p>
+  <p>Estas reservas se verían afectadas:</p>
+  <table class="tbl">
+    <tr><th>Día</th><th>Hora</th><th>Titular</th><th>Jugadores</th></tr>
+    <% for (const b of affected) { %>
+    <tr><td><%= b.date.slice(8,10) %>/<%= b.date.slice(5,7) %></td><td><%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %></td><td><%= b.titular_name %></td><td class="mut">reserva #<%= b.id %></td></tr>
+    <% } %>
+  </table>
+  <form method="post" action="/admin/reservas/bloqueos">
+    <input type="hidden" name="court_id" value="<%= court.id %>">
+    <input type="hidden" name="date_from" value="<%= date_from %>">
+    <input type="hidden" name="date_to" value="<%= date_to %>">
+    <input type="hidden" name="start" value="<%= minToStr(start_min) %>">
+    <input type="hidden" name="end" value="<%= minToStr(end_min) %>">
+    <input type="hidden" name="reason" value="<%= reason %>">
+    <input type="hidden" name="notes" value="<%= notes %>">
+    <input type="hidden" name="force" value="1">
+    <button class="btn danger" type="submit">Bloquear y anular esas reservas</button>
+    <a class="btn ghost" href="/admin/reservas/bloqueos">Cancelar</a>
+  </form>
+  <p class="hint">Al anularlas, la lista de espera se activa automáticamente para esas franjas.</p>
+</div>

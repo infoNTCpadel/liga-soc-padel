@@ -1,0 +1,12 @@
+<h1>Activar mi acceso</h1>
+<p class="mut">La primera vez comprobamos tu nº de socio con el <strong>teléfono que el club tiene en tu ficha</strong> y eliges un PIN de 4 a 8 dígitos. A partir de ahí entrarás con tu nº de socio + PIN.</p>
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+<div class="card">
+  <form method="post" action="/reservar/activar">
+    <div class="field"><label>Nº de socio</label><input type="text" name="member_no" value="<%= member_no %>" inputmode="numeric" required autofocus></div>
+    <div class="field"><label>Teléfono registrado</label><input type="tel" name="phone" value="<%= phone %>" required></div>
+    <div class="field"><label>Elige tu PIN</label><input type="password" name="pin" inputmode="numeric" required></div>
+    <div class="field"><label>Repite el PIN</label><input type="password" name="pin2" inputmode="numeric" required></div>
+    <button class="btn" type="submit">Activar y entrar</button>
+  </form>
+</div>

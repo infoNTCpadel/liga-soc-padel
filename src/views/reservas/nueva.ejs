@@ -1,0 +1,113 @@
+<h1>Nueva reserva</h1>
+<p class="mut"><strong><%= court.name %></strong> · <%= date.slice(8,10) %>/<%= date.slice(5,7) %>/<%= date.slice(0,4) %></p>
+<% if (offer) { %><div class="alert ok">Estás confirmando la plaza que se te ofreció de la lista de espera.</div><% } %>
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+
+<form method="post" action="/reservar/nueva" id="bookForm">
+  <% if (offer) { %><input type="hidden" name="offer_id" value="<%= offer.id %>"><% } %>
+  <input type="hidden" name="court_id" value="<%= court.id %>">
+  <input type="hidden" name="date" value="<%= date %>">
+  <div class="card">
+    <div class="field"><label>Titular</label>
+      <input type="text" value="<%= member.name %> (socio <%= member.member_no %>)" disabled>
+    </div>
+    <div class="field"><label>Hora de inicio</label>
+      <select name="start_min" id="startSel" required>
+        <% for (const v of starts) { %>
+          <option value="<%= v.start_min %>" data-d="<%= v.durations.join(',') %>" <%= v.start_min === chosenStart ? 'selected' : '' %>><%= minToStr(v.start_min) %></option>
+        <% } %>
+      </select>
+    </div>
+    <div class="field"><label>Duración</label>
+      <p style="margin:.2em 0"><strong id="durText"><%= chosenDur %> minutos</strong>
+      <span class="mut" style="font-size:.85em">(automática: <%= config.durations.slice().sort((a,b) => b-a).join(' min o ') %> min, sin preguntar)</span></p>
+      <input type="hidden" name="duration_min" id="durInput" value="<%= chosenDur %>">
+    </div>
+  </div>
+  <div class="card">
+    <h3>Jugadores (tú ya cuentas como 1)</h3>
+    <p class="mut">Busca por nombre, nº de socio o móvil y se rellenan los datos. Si pones un nombre que no es socio, contará como invitado (<%= config.guest_price > 0 ? config.guest_price + ' € a pagar en recepción' : 'pago en recepción' %>). Puedes dejar huecos: al confirmar te preguntaremos si quieres publicar el partido como abierto.</p>
+    <% for (let i = 1; i <= 3; i++) { %>
+    <div class="field prow" data-i="<%= i %>">
+      <label>Jugador <%= i + 1 %></label>
+      <input type="text" class="psearch" placeholder="Nombre, nº de socio o móvil…" autocomplete="off">
+      <input type="hidden" name="p<%= i %>_name" class="pname">
+      <input type="hidden" name="p<%= i %>_member" class="pmember">
+      <div class="plist" style="display:none"></div>
+      <div class="pinfo mut" style="font-size:.85em;margin-top:.2em"></div>
+    </div>
+    <% } %>
+    <div class="field"><label>Tu email (para el recordatorio)</label><input type="email" name="titular_email" value="<%= titularEmail %>"></div>
+    <button class="btn" type="submit">Confirmar reserva</button>
+    <a class="btn ghost" href="/reservar?date=<%= date %>" style="margin-left:.5em">Cancelar</a>
+  </div>
+</form>
+<style>
+.prow{position:relative;margin-bottom:.7em}
+.plist{position:absolute;z-index:5;left:0;right:0;background:#fff;border:1px solid #d8d3e8;border-radius:8px;box-shadow:0 4px 14px rgba(60,40,120,.12);max-height:180px;overflow:auto}
+.plist div{padding:.5em .7em;cursor:pointer}
+.plist div:hover{background:#f4f1ff}
+.pill{display:inline-block;padding:.1em .6em;border-radius:999px;font-size:.8em;font-weight:700}
+.pill.socio{background:#e7f6ee;color:#146c39}
+.pill.inv{background:#fdf3e3;color:#9a6b1a}
+</style>
+<script>
+(function () {
+  const sel = document.getElementById('startSel');
+  const durInput = document.getElementById('durInput'), durText = document.getElementById('durText');
+  function upd() {
+    // Duración automática: la mayor que encaje en la hora elegida, sin preguntar.
+    const allowed = (sel.selectedOptions[0].dataset.d || '').split(',').map(Number).sort((a, b) => b - a);
+    const d = allowed[0] || Number(durInput.value);
+    durInput.value = d; durText.textContent = d + ' minutos';
+  }
+  sel.addEventListener('change', upd); upd();
+
+  const guestPrice = <%= config.guest_price || 0 %>;
+  let timer = null;
+  document.querySelectorAll('.prow').forEach(row => {
+    const input = row.querySelector('.psearch'), list = row.querySelector('.plist'),
+      hname = row.querySelector('.pname'), hmem = row.querySelector('.pmember'),
+      info = row.querySelector('.pinfo');
+    function paint() {
+      const n = hname.value.trim(), m = hmem.value.trim();
+      if (!n) { info.innerHTML = ''; return; }
+      info.innerHTML = m
+        ? '<span class="pill socio">Socio' + (m ? ' ' + m : '') + '</span>'
+        : '<span class="pill inv">Invitado · ' + guestPrice + ' € en recepción</span>';
+    }
+    function pick(s) {
+      hname.value = s.name; hmem.value = s.member_no;
+      input.value = s.name + ' (' + s.member_no + ')';
+      list.style.display = 'none'; paint();
+    }
+    input.addEventListener('input', () => {
+      hname.value = input.value.trim(); hmem.value = ''; paint();
+      clearTimeout(timer);
+      const q = input.value.trim();
+      if (q.length < 2) { list.style.display = 'none'; return; }
+      timer = setTimeout(() => {
+        fetch('/reservar/socios/buscar?q=' + encodeURIComponent(q))
+          .then(r => r.json()).then(arr => {
+            if (!arr.length) { list.style.display = 'none'; return; }
+            list.innerHTML = '';
+            arr.forEach(s => {
+              const d = document.createElement('div');
+              d.textContent = s.name + ' · socio ' + s.member_no + (s.phone ? ' · ' + s.phone : '');
+              d.addEventListener('mousedown', () => pick(s));
+              list.appendChild(d);
+            });
+            list.style.display = '';
+          });
+      }, 250);
+    });
+    input.addEventListener('blur', () => setTimeout(() => list.style.display = 'none', 200));
+    input.addEventListener('focus', () => { if (list.children.length) list.style.display = ''; });
+    document.getElementById('bookForm').addEventListener('submit', () => {
+      // Si escribió texto libre sin elegir socio: queda como invitado con ese nombre.
+      if (!hname.value.trim()) { hname.value = ''; hmem.value = ''; }
+    });
+    paint();
+  });
+})();
+</script>

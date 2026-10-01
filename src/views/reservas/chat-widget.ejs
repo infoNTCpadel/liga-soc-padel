@@ -1,0 +1,63 @@
+<%# Widget del chat de reservas: burbuja flotante con conversación en lenguaje natural. %>
+<div id="chatFab" style="position:fixed;right:18px;bottom:18px;z-index:60">
+  <button id="chatToggle" aria-label="Abrir chat de reservas"
+    style="width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;font-size:26px;color:#fff;background:#5b2d8e;box-shadow:0 4px 14px rgba(0,0,0,.25)">💬</button>
+</div>
+<div id="chatPanel" style="display:none;position:fixed;right:18px;bottom:88px;z-index:60;width:min(360px,calc(100vw - 36px));height:min(520px,calc(100vh - 120px));background:#fff;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.25);flex-direction:column;overflow:hidden">
+  <div style="background:#5b2d8e;color:#fff;padding:.7em 1em;font-weight:600">Asistente de reservas
+    <span id="chatClose" style="float:right;cursor:pointer;font-weight:400">✕</span></div>
+  <div id="chatLog" style="flex:1;overflow-y:auto;padding:.8em;display:flex;flex-direction:column;gap:.5em"></div>
+  <div style="padding:.6em;border-top:1px solid #eee">
+    <form id="chatForm" style="display:flex;gap:.5em">
+      <input id="chatInput" autocomplete="off" placeholder="¿Hay pista libre mañana a las 19:00?"
+        style="flex:1;border:1px solid #ddd;border-radius:20px;padding:.55em .9em;font-size:15px">
+      <button class="btn small" type="submit">Enviar</button>
+    </form>
+    <p class="mut" style="font-size:11px;margin:.4em 0 0">Conversación procesada por un proveedor de IA externo. Nunca te pediremos datos bancarios.</p>
+  </div>
+</div>
+<script>
+(function(){
+  const fab = document.getElementById('chatToggle'), panel = document.getElementById('chatPanel'),
+        close = document.getElementById('chatClose'), log = document.getElementById('chatLog'),
+        form = document.getElementById('chatForm'), input = document.getElementById('chatInput');
+  let greeted = false;
+  function bubble(text, mine){
+    const d = document.createElement('div');
+    d.style.cssText = 'max-width:85%;padding:.55em .8em;border-radius:14px;font-size:14px;line-height:1.4;white-space:pre-wrap;'
+      + (mine ? 'align-self:flex-end;background:#5b2d8e;color:#fff'
+              : 'align-self:flex-start;background:#f1f0f6;color:#222');
+    d.textContent = text;
+    log.appendChild(d); log.scrollTop = log.scrollHeight;
+    return d;
+  }
+  function open(){
+    panel.style.display = 'flex';
+    if (!greeted) { greeted = true;
+      bubble('Hola 👋 Soy el asistente de reservas. Pregúntame por huecos libres, tus reservas o apúntate a un partido abierto. ¿En qué te ayudo?'); }
+    input.focus();
+  }
+  fab.addEventListener('click', () => panel.style.display === 'flex' ? panel.style.display = 'none' : open());
+  close.addEventListener('click', () => panel.style.display = 'none');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    bubble(text, true);
+    const typing = bubble('…');
+    try {
+      const res = await fetch('/reservar/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ message: text }),
+      });
+      const data = await res.json();
+      typing.textContent = data.reply || 'Se me ha atragantado la respuesta. Prueba de nuevo.';
+    } catch (err) {
+      typing.textContent = 'No he podido conectar. Prueba de nuevo en un momento.';
+    }
+    log.scrollTop = log.scrollHeight;
+  });
+})();
+</script>

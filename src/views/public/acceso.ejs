@@ -1,0 +1,9 @@
+<h1>Acceso de parejas</h1>
+<p class="mut">Introduce el código de 6 caracteres que recibiste al inscribiros.</p>
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+<div class="card" style="max-width: 420px">
+  <form method="post" action="/acceso">
+    <div class="field"><label>Código de la pareja</label><input type="text" name="code" maxlength="6" required style="text-transform: uppercase; letter-spacing: .2em; text-align: center; font-size: 1.3rem"></div>
+    <button class="btn" type="submit">Entrar</button>
+  </form>
+</div>

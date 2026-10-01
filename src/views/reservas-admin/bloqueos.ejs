@@ -1,0 +1,46 @@
+<h1>Reservas · Bloqueos de pista</h1>
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+
+<div class="card">
+  <h3>Bloquear pista (torneo, clase, mantenimiento…)</h3>
+  <form method="post" action="/admin/reservas/bloqueos">
+    <div class="row2">
+      <div class="field"><label>Pista</label><select name="court_id" required>
+        <% for (const c of courts) { %><option value="<%= c.id %>"><%= c.name %></option><% } %>
+      </select></div>
+      <div class="field"><label>Desde el día</label><input type="date" name="date_from" value="<%= today %>" min="<%= today %>" required></div>
+      <div class="field"><label>Hasta el día</label><input type="date" name="date_to" value="<%= today %>" min="<%= today %>" required></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Desde</label><input type="time" name="start" value="<%= minToStr(config.open_min) %>" required></div>
+      <div class="field"><label>Hasta</label><input type="time" name="end" value="<%= minToStr(Math.min(config.open_min + 75, config.close_min)) %>" required></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Motivo</label><select name="reason">
+        <option value="torneo">Torneo</option><option value="clase">Clase</option>
+        <option value="mantenimiento">Mantenimiento</option><option value="otro">Otro</option>
+      </select></div>
+      <div class="field"><label>Notas</label><input type="text" name="notes"></div>
+    </div>
+    <p class="hint">El bloqueo se aplica cada día del rango, en el mismo horario (p. ej. torneo del 5 al 7 de octubre, de 09:00 a 14:00). Si pisa reservas existentes, se pedirá confirmación antes de anularlas.</p>
+    <button class="btn small" type="submit">Bloquear</button>
+  </form>
+</div>
+
+<div class="card">
+  <h3>Próximos bloqueos</h3>
+  <table class="tbl">
+    <tr><th>Fechas</th><th>Pista</th><th>Tramo diario</th><th>Motivo</th><th></th></tr>
+    <% for (const b of blocks) { %>
+    <tr>
+      <td><%= b.date_from.slice(8,10) %>/<%= b.date_from.slice(5,7) %><% if (b.date_to !== b.date_from) { %>–<%= b.date_to.slice(8,10) %>/<%= b.date_to.slice(5,7) %><% } %></td><td><%= b.court_name %></td>
+      <td><%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %></td>
+      <td><%= b.reason %><%= b.notes ? ' · ' + b.notes : '' %></td>
+      <td><form method="post" action="/admin/reservas/bloqueos/<%= b.id %>/eliminar" style="display:inline"
+          onsubmit="return confirm('¿Eliminar este bloqueo?')">
+        <button class="btn small danger" type="submit">Eliminar</button></form></td>
+    </tr>
+    <% } %>
+  </table>
+  <% if (!blocks.length) { %><p class="mut">No hay bloqueos próximos.</p><% } %>
+</div>

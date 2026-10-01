@@ -1,0 +1,120 @@
+<h1>Partidos</h1>
+
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+
+<div class="tabs">
+  <% for (const c of CATEGORIES) { %><a href="/admin/partidos?stage=groups&category=<%= c.code %>" class="<%= stage==='groups'&&category===c.code?'on':'' %>">Grupos <%= c.code %></a><% } %>
+  <% for (const c of CATEGORIES) { %><a href="/admin/partidos?stage=po&category=<%= c.code %>" class="<%= stage==='po'&&category===c.code?'on':'' %>">Playoffs <%= c.code %></a><% } %>
+  <% if (stage === 'groups') { %><span style="flex:1"></span>
+    <% for (const r of [1,2,3]) { %><a href="/admin/partidos?stage=groups&category=<%= category %>&round=<%= r %>" class="<%= round===r?'on':'' %>">R<%= r %></a><% } %>
+  <% } else if (blocks.length > 1) { %><span style="flex:1"></span>
+    <a href="/admin/partidos?stage=po&category=<%= category %>" class="<%= block==='all'?'on':'' %>">Todos</a>
+    <% for (const b of blocks) { %><a href="/admin/partidos?stage=po&category=<%= category %>&block=<%= b %>" class="<%= block===b?'on':'' %>"><%= playoffOrdinal(b) %></a><% } %>
+  <% } %>
+</div>
+
+<% if (unscheduled > 0) { %><p><span class="badge pending"><%= unscheduled %> sin programar</span> <span class="mut small">sin pista u horario asignado</span></p><% } %>
+
+<% for (const m of matches) { %>
+<div class="card">
+  <p><strong><%= pairName(m.pair_a_id) %></strong> <span class="mut">vs</span> <strong><%= pairName(m.pair_b_id) %></strong>
+    <% if (m.group_no) { %><span class="small mut">· R<%= m.round_no %> · Grupo <%= m.group_no %></span><% } %>
+    <% if (m.bracket_round) { %><span class="small mut">· <%= playoffOrdinal(m.stage) %> · <%= bracketName(m.bracket_round) %></span><% } %>
+    <% if (m.avail_a || m.avail_b) { %><button type="button" class="btn small ghost" data-avail data-aa="<%= m.avail_a || '' %>" data-ab="<%= m.avail_b || '' %>" data-na="<%= pairName(m.pair_a_id) %>" data-nb="<%= pairName(m.pair_b_id) %>" title="Ver los días que no pueden jugar">📝 disponibilidad</button><% } %>
+  </p>
+  <p class="small">Resultado actual: <strong><%= scoreStr(m) %></strong>
+    <% const vb = valBadge(m); %>
+    <% if (vb === 'pending') { %><span class="badge pending">pendiente de validación (subido por <%= pairName(m.submitted_by) %>)</span><% } %>
+    <% if (vb === 'disputado') { %><span class="badge disputado">disputado</span>
+      <form method="post" action="/admin/partidos/<%= m.id %>/resolver" style="display:inline"><button class="btn small" type="submit">Dar por válido</button></form>
+    <% } %>
+    <% if (vb === 'auto') { %><span class="badge auto">validado automáticamente (24h)</span><% } %>
+    <% if (vb === 'validado') { %><span class="badge validado">validado</span><% } %>
+  </p>
+  <p class="small">📍 <strong><%= slotStr(m) || 'Sin programar' %></strong></p>
+  <details data-sched <% if (m.avail_a || m.avail_b) { %>data-avail data-aa="<%= m.avail_a || '' %>" data-ab="<%= m.avail_b || '' %>" data-na="<%= pairName(m.pair_a_id) %>" data-nb="<%= pairName(m.pair_b_id) %>"<% } %>>
+    <summary class="small" style="cursor:pointer; color: var(--lime)">Pista y horario</summary>
+    <form method="post" action="/admin/partidos/<%= m.id %>/horario" style="margin-top:10px">
+      <div class="row2">
+        <div class="field"><label>Pista</label>
+          <select name="court_id">
+            <option value="">—</option>
+            <% for (const c of courts) { %><option value="<%= c.id %>" <%= m.court_id === c.id ? 'selected' : '' %>><%= c.name %></option><% } %>
+          </select>
+        </div>
+        <div class="field"><label>Día</label><input type="date" name="day" value="<%= m.scheduled_at ? m.scheduled_at.slice(0, 10) : '' %>"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Hora</label><input type="time" name="time" value="<%= m.scheduled_at ? m.scheduled_at.slice(11, 16) : '' %>"></div>
+        <div class="field"><label>&nbsp;</label><button class="btn small" type="submit">Guardar horario</button></div>
+      </div>
+      <input type="hidden" name="back" value="<%= '/admin/partidos?stage=' + stage + '&category=' + category + (round ? '&round=' + round : '') %>">
+      <p class="small mut">Deja todo vacío y guarda para quitar la programación. El sistema avisa si la pista ya está ocupada en ese tramo.</p>
+    </form>
+  </details>
+  <details>
+    <summary class="small" style="cursor:pointer; color: var(--lime)">Introducir / corregir resultado</summary>
+    <form method="post" action="/admin/partidos/<%= m.id %>/resultado" style="margin-top:10px">
+      <div class="field"><label>Ganador</label>
+        <select name="winner_id">
+          <% if (m.pair_a_id) { %><option value="<%= m.pair_a_id %>"><%= pairName(m.pair_a_id) %></option><% } %>
+          <% if (m.pair_b_id) { %><option value="<%= m.pair_b_id %>"><%= pairName(m.pair_b_id) %></option><% } %>
+        </select>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Set 1</label><div class="scorein"><input type="number" name="s1a" min="0" max="7" value="<%= m.s1a ?? '' %>">–<input type="number" name="s1b" min="0" max="7" value="<%= m.s1b ?? '' %>"></div></div>
+        <div class="field"><label>Set 2</label><div class="scorein"><input type="number" name="s2a" min="0" max="7" value="<%= m.s2a ?? '' %>">–<input type="number" name="s2b" min="0" max="7" value="<%= m.s2b ?? '' %>"></div></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Súper tie-break</label><div class="scorein"><input type="number" name="stb_a" min="0" max="30" value="<%= m.stb_a ?? '' %>">–<input type="number" name="stb_b" min="0" max="30" value="<%= m.stb_b ?? '' %>"></div></div>
+      </div>
+      <div class="field">
+        <label><input type="checkbox" name="wo" value="1" <%= m.wo_winner_id ? 'checked' : '' %>> W.O. (el ganador se lleva el partido 6-4 / 6-4)</label><br>
+        <label><input type="checkbox" name="unplayed" value="1" <%= m.unplayed ? 'checked' : '' %>> Partido no jugado</label>
+      </div>
+      <div class="field"><label>Notas</label><input type="text" name="notes" value="<%= m.notes %>"></div>
+      <input type="hidden" name="back" value="<%= '/admin/partidos?stage=' + stage + '&category=' + category + (round ? '&round=' + round : '') %>">
+      <button class="btn small" type="submit">Guardar resultado</button>
+    </form>
+  </details>
+</div>
+<% } %>
+<% if (!matches.length) { %><p class="mut">No hay partidos.</p><% } %>
+
+<div id="availModal" class="modal" hidden>
+  <div class="modal-box">
+    <h3>📝 Disponibilidad de las parejas</h3>
+    <div id="availBody"></div>
+    <p style="margin-top:12px"><button class="btn small" type="button" id="availClose">Cerrar</button></p>
+  </div>
+</div>
+<style>
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+.modal[hidden] { display: none; }
+.modal-box { background: var(--card, #1c1f26); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; max-width: 440px; width: 100%; }
+.modal-box p { margin: 8px 0; }
+</style>
+<script>
+(function () {
+  var modal = document.getElementById('availModal');
+  var body = document.getElementById('availBody');
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function show(el) {
+    var h = '';
+    if (el.dataset.aa) h += '<p><strong>' + esc(el.dataset.na) + '</strong><br>' + esc(el.dataset.aa) + '</p>';
+    if (el.dataset.ab) h += '<p><strong>' + esc(el.dataset.nb) + '</strong><br>' + esc(el.dataset.ab) + '</p>';
+    if (!h) return;
+    body.innerHTML = h;
+    modal.hidden = false;
+  }
+  document.getElementById('availClose').addEventListener('click', function () { modal.hidden = true; });
+  modal.addEventListener('click', function (e) { if (e.target === modal) modal.hidden = true; });
+  document.querySelectorAll('[data-avail]').forEach(function (el) {
+    if (el.tagName === 'BUTTON') {
+      el.addEventListener('click', function () { show(el); });
+    } else if (el.tagName === 'DETAILS') {
+      el.addEventListener('toggle', function () { if (el.open) show(el); });
+    }
+  });
+})();
+</script>

@@ -1,0 +1,17 @@
+<h1>Playoffs</h1>
+<p class="mut">El ranking se divide en categorías de 16 parejas: los mejores juegan el playoff de 1ª categoría, los siguientes el de 2ª, y así sucesivamente. Eliminatorias a partido único.</p>
+
+<div class="tabs">
+  <% for (const c of CATEGORIES) { %><a href="/playoffs/<%= c.code %>" class="<%= category===c.code?'on':'' %>"><%= c.name %></a><% } %>
+</div>
+
+<% if (!generated) { %>
+  <div class="card"><p class="mut">Los cuadros se publicarán al finalizar la fase de grupos.</p></div>
+<% } else if (!brackets.length) { %>
+  <div class="card"><p class="mut">Aún no hay cuadros publicados para esta categoría.</p></div>
+<% } else { %>
+  <% for (const b of brackets) { %>
+    <h2>Playoff de <%= b.ordinal %> categoría</h2>
+    <%- include('../partials/bracket', { rounds: b.rounds }) %>
+  <% } %>
+<% } %>

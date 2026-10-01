@@ -1,0 +1,77 @@
+<h1>Reservas · <%= date.slice(8,10) %>/<%= date.slice(5,7) %>/<%= date.slice(0,4) %></h1>
+<% if (info) { %><div class="alert ok"><%= info %></div><% } %>
+
+<div class="card">
+  <a class="btn small ghost" href="/recepcion/reservas?date=<%= prev %>">← Día anterior</a>
+  <a class="btn small ghost" href="/recepcion/reservas?date=<%= next %>">Día siguiente →</a>
+  <a class="btn small" href="/recepcion/reservas/nueva?date=<%= date %>" style="margin-left:.6em">+ Nueva reserva</a>
+</div>
+
+<% if (pending.length) { %>
+<div class="card">
+  <h3 style="color:#a33">Pendientes de pago en recepción (<%= pending.length %>)</h3>
+  <% for (const b of pending) { %>
+  <div class="card">
+    <p><strong><%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %></strong> · <%= b.court_name %> · Titular: <%= b.titular_name %> (socio <%= b.titular_member_no %>)</p>
+    <p class="mut">Jugadores: <%= b.players.map(p => p.name + (p.is_guest ? ' (invitado)' : ' (socio ' + p.member_no + ')')).join(' · ') %></p>
+    <form method="post" action="/recepcion/reservas/<%= b.id %>/pago" style="display:inline">
+      <input type="hidden" name="paid" value="1"><button class="btn small" type="submit">Marcar pagado</button>
+    </form>
+    <form method="post" action="/recepcion/reservas/<%= b.id %>/cargo" style="display:inline;margin-left:.5em">
+      <input type="text" name="label" placeholder="Cargo extra (p. ej. luz)" size="18" required>
+      <input type="text" name="amount" placeholder="€" size="5" required>
+      <button class="btn small ghost" type="submit">Añadir cargo</button>
+    </form>
+  </div>
+  <% } %>
+</div>
+<% } %>
+
+<% if (unpaidCharges.length) { %>
+<div class="card">
+  <h3>Cargos extra sin cobrar</h3>
+  <table class="tbl"><tr><th>Hora</th><th>Pista</th><th>Concepto</th><th>Importe</th><th></th></tr>
+  <% for (const ch of unpaidCharges) { %>
+  <tr><td><%= minToStr(ch.booking.start_min) %></td><td><%= ch.booking.court_name %></td>
+    <td><%= ch.label %></td><td><%= eur(ch.amount_cents) %></td>
+    <td><form method="post" action="/recepcion/reservas/cargos/<%= ch.id %>/pagado" style="display:inline">
+      <input type="hidden" name="paid" value="1"><button class="btn small" type="submit">Cobrado</button></form></td></tr>
+  <% } %>
+  </table>
+</div>
+<% } %>
+
+<div class="card">
+  <h3>Todas las reservas del día</h3>
+  <table class="tbl">
+    <tr><th>Hora</th><th>Pista</th><th>Titular</th><th>Jugadores</th><th>Pago</th><th></th></tr>
+    <% for (const b of bookings) { %>
+    <tr style="<%= b.status==='cancelled' ? 'opacity:.45' : '' %>">
+      <td><%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %></td>
+      <td><%= b.court_name %></td>
+      <td><%= b.titular_name %></td>
+      <td class="mut"><%= b.players.map(p => p.name + (p.is_guest ? '*' : '')).join(', ') %><%= b.players.some(p=>p.is_guest) ? ' (* = invitado)' : '' %>
+        <% if (b.status === 'active') { %>
+        <details style="margin-top:.3em">
+          <summary style="cursor:pointer;font-size:.85em">Completar jugadores</summary>
+          <form method="post" action="/recepcion/reservas/<%= b.id %>/jugadores" style="margin-top:.3em">
+            <% for (let i = 0; i < 3; i++) { const p = b.players[i + 1]; %>
+            <input type="text" name="p<%= i + 1 %>_name" placeholder="Nombre" value="<%= p ? p.name : '' %>" size="10">
+            <input type="text" name="p<%= i + 1 %>_member" placeholder="nº socio" value="<%= p ? p.member_no : '' %>" size="6" inputmode="numeric"><br>
+            <% } %>
+            <button class="btn small ghost" type="submit">Guardar</button>
+          </form>
+        </details>
+        <% } %>
+      </td>
+      <td><%= b.status === 'cancelled' ? '<span class="mut">Anulada</span>' : (b.payment_status === 'pending' ? '<span class="badge warn">Pendiente</span>' : '<span class="badge ok">OK</span>') %><% if (b.open_spots > 0) { %><br><span class="badge" style="background:#e9f7ef;color:#146c39">Abierto · <%= b.open_spots %></span><% } %></td>
+      <td><% if (b.status === 'active') { %>
+        <form method="post" action="/recepcion/reservas/<%= b.id %>/anular" style="display:inline" onsubmit="return confirm('¿Anular esta reserva?')">
+          <button class="btn small danger" type="submit">Anular</button></form>
+      <% } %></td>
+    </tr>
+    <% } %>
+  </table>
+  <% if (!bookings.length) { %><p class="mut">No hay reservas este día.</p><% } %>
+  <% if (blocks.length) { %><p class="hint">Bloqueos: <%= blocks.map(b => b.court_name + ' ' + minToStr(b.start_min) + '–' + minToStr(b.end_min) + ' (' + b.reason + ')').join(' · ') %></p><% } %>
+</div>
