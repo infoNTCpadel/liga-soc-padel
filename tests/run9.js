@@ -262,6 +262,35 @@ process.env.LLM_API_KEY = 'test-key';
   ok(r.reply.includes('confirmada'), 'el agente confirma la reserva al socio');
 }
 
+// ---- 13. preparar_anulacion: el ordinal de la lista se resuelve al id real ----
+{
+  const session = { bookingMemberNo: '7' };
+  const s1 = B.freeSegments(1, D2).find(g => g.end - g.start >= 60);
+  const b1 = B.createBooking({ court_id: 1, court_name: 'Pista 1', date: D2, start_min: s1.start, duration_min: 60, titular_member_no: '7', players: [] });
+  const s1b = B.freeSegments(1, D2).find(g => g.end - g.start >= 60); // tras crear b1
+  const b2 = B.createBooking({ court_id: 1, court_name: 'Pista 1', date: D2, start_min: s1b.start, duration_min: 60, titular_member_no: '7', players: [] });
+  ok(b1.id && b2.id && b1.id !== b2.id, 'reservas de prueba para anular creadas');
+  // Turno 1: el socio pide sus reservas (la sesión memoriza la lista con ids reales)
+  await Chat.runChat({
+    message: 'dime mis reservas', session,
+    llm: scripted([call('mis_reservas', {}), say('tienes varias reservas')]),
+  });
+  ok(session.lastBookings && session.lastBookings.length >= 3, 'mis_reservas memoriza la lista en sesión');
+  const realSecond = session.lastBookings[1].id;
+  // Turno 2: el modelo pasa el ordinal "2" en vez del id real (el fallo visto en producción)
+  await Chat.runChat({
+    message: 'anula la segunda', session,
+    llm: scripted([
+      () => ({ content: null, toolCalls: [{ id: 't9', name: 'preparar_anulacion', args: { reserva_id: 2 } }], usage: { in: 1, out: 1 } }),
+      say('¿confirmo la anulación?'),
+    ]),
+  });
+  const pend = session.pendingDraft;
+  const d = pend && Chat._drafts.get(pend.draft_id);
+  ok(d && d.kind === 'anulacion' && d.payload.booking_id === realSecond,
+    'el ordinal 2 se resolvió al id real de la segunda reserva listada');
+}
+
 console.log(`\n${pass}/${pass + fail} pruebas del chat superadas`);
 process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('ERROR:', e); process.exit(1); });

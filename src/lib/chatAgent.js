@@ -85,10 +85,24 @@ function takeDraft(id, member_no, kind) {
   drafts.delete(id);
   return { draft: d };
 }
+// El modelo a veces pasa el número de orden de la lista que mostró al socio
+// en vez del id real. Si el id no está entre los listados pero encaja como
+// posición (1..N), se interpreta como posición de la última lista mostrada.
+function resolveListedId(listed, rawId) {
+  const id = parseInt(rawId, 10);
+  if (!Array.isArray(listed) || !listed.length) return id;
+  if (listed.some(b => b.id === id)) return id;
+  if (Number.isInteger(id) && id >= 1 && id <= listed.length) return listed[id - 1].id;
+  return id;
+}
 // El borrador pendiente vive en la sesión para sobrevivir entre turnos (el
 // historial solo guarda texto). Si caduca o se consume, se limpia.
 function trackDraftCall(session, name, args, r) {
   if (!session || typeof session !== 'object') return;
+  if (name === 'mis_reservas' && r && r.ok && Array.isArray(r.reservas))
+    session.lastBookings = r.reservas.map(b => ({ id: b.id, pista: b.pista, fecha: b.fecha, inicio: b.inicio }));
+  if (name === 'ver_partidos_abiertos' && r && r.ok && Array.isArray(r.partidos))
+    session.lastOpenMatches = r.partidos.map(p => ({ id: p.id, pista: p.pista, inicio: p.inicio }));
   if ((name === 'preparar_reserva' || name === 'preparar_anulacion') && r && r.ok && r.draft_id) {
     session.pendingDraft = {
       kind: name === 'preparar_reserva' ? 'reserva' : 'anulacion',
@@ -184,7 +198,7 @@ const TOOLS = [
     name: 'preparar_anulacion',
     description: 'Prepara la anulación de una reserva SIN anularla: devuelve un borrador con resumen. Después pide confirmación explícita y llama a confirmar_anulacion.',
     parameters: { type: 'object', properties: {
-      reserva_id: { type: 'integer', description: 'Id de la reserva (ver mis_reservas)' } },
+      reserva_id: { type: 'integer', description: 'Id EXACTO del campo id devuelto por mis_reservas. NUNCA uses el número de orden de la lista que muestres al socio.' } },
       required: ['reserva_id'] } } },
   { type: 'function', function: {
     name: 'confirmar_anulacion',
@@ -201,7 +215,7 @@ const TOOLS = [
     name: 'apuntarse_partido',
     description: 'Apunta al socio identificado a un partido abierto. Úsala solo cuando el socio lo pida claramente.',
     parameters: { type: 'object', properties: {
-      partido_id: { type: 'integer', description: 'Id del partido (ver ver_partidos_abiertos)' } },
+      partido_id: { type: 'integer', description: 'Id EXACTO del campo id devuelto por ver_partidos_abiertos. NUNCA uses el número de orden de la lista que muestres al socio.' } },
       required: ['partido_id'] } } },
   { type: 'function', function: {
     name: 'apuntarse_lista_espera',
@@ -304,7 +318,8 @@ function dispatch(name, args, ctx) {
       }
       case 'preparar_anulacion': {
         if (!ctx.memberNo) return toolResult(false, 'Necesito saber quién eres: dime tu nº de socio y tu PIN.');
-        const b = B.getBooking(parseInt(a.reserva_id, 10));
+        const rid = resolveListedId(ctx.session && ctx.session.lastBookings, a.reserva_id);
+        const b = B.getBooking(rid);
         if (!b || b.status !== 'active') return toolResult(false, 'No encuentro esa reserva activa.');
         if (b.titular_member_no !== ctx.memberNo) return toolResult(false, 'Esa reserva no es tuya.');
         const c = B.getConfig();
@@ -353,7 +368,8 @@ function dispatch(name, args, ctx) {
       case 'apuntarse_partido': {
         if (!ctx.memberNo) return toolResult(false, 'Necesito saber quién eres: dime tu nº de socio y tu PIN.');
         const member = B.getMember(ctx.memberNo);
-        const r = B.joinOpenMatch(parseInt(a.partido_id, 10), member);
+        const pid = resolveListedId(ctx.session && ctx.session.lastOpenMatches, a.partido_id);
+        const r = B.joinOpenMatch(pid, member);
         if (r.error) return toolResult(false, r.error);
         return toolResult(true, { apuntado: true });
       }
@@ -407,7 +423,7 @@ ${c.guest_price ? `- Invitados (no socios): pagan ${c.guest_price} en recepción
 
 Reglas de actuación:
 1. Para reservar, anular o apuntarte necesitas saber quién es el socio. Si no está identificado, pide su nº de socio y su PIN y usa "identificarse". El socio ${member ? `ya está identificado (${member.name})` : 'aún NO está identificado'}.
-2. Disponibilidad y precios: consúltalos SIEMPRE con las herramientas, nunca los inventes.
+2. Disponibilidad, reservas y precios: consúltalos SIEMPRE con las herramientas, nunca los inventes. Cuando muestres una lista al socio (sus reservas, partidos abiertos), usa viñetas sin numerarlas: el número de orden NO es el id.
 3. Para crear una reserva: primero "preparar_reserva", muestra el resumen al socio y pregúntale si lo confirma; solo cuando diga que sí (explícitamente), llama a "confirmar_reserva" con el draft_id.
 4. Para anular: primero "preparar_anulacion", muestra el resumen y pide confirmación explícita; luego "confirmar_anulacion".
 5. Si falta un dato (pista, hora), pregunta antes de llamar a la herramienta.
@@ -468,7 +484,7 @@ async function runChat({ message, session, llm }) {
   session.chatUsage.n++;
 
   const member = session.bookingMemberNo ? B.getMember(session.bookingMemberNo) : null;
-  const ctx = { memberNo: member ? member.member_no : null, courts: activeCourts() };
+  const ctx = { memberNo: member ? member.member_no : null, courts: activeCourts(), session };
   const history = (session.chatHistory || []).slice(-20);
   const messages = [
     { role: 'system', content: buildSystemPrompt(member) },
