@@ -92,5 +92,65 @@ eq(rows.map(r => [r.name, r.is_guest]), [['Socio Uno', 0], ['Socio Dos', 1], ['I
 const rows2 = B.normalizePlayers(B.getMember('S1'), [{ name: 'Socio Uno Bis', member_no: 'S1' }]);
 eq(rows2[1].is_guest, 0, 'nº de socio válido no es invitado');
 
+// Nivel del jugador
+eq(B.validLevel('3.5'), 3.5, 'validLevel 3.5');
+eq(B.validLevel('3,25'), 3.25, 'validLevel acepta coma');
+eq(B.validLevel(''), null, 'validLevel vacío → null');
+ok(B.validLevel('mal') === undefined, 'validLevel texto inválido');
+ok(B.validLevel('9') === undefined, 'validLevel fuera de rango');
+B.setLevel('S1', '4.25');
+eq(B.getMember('S1').level, 4.25, 'setLevel guarda el nivel');
+ok(B.setLevel('S1', 'mal').error, 'setLevel rechaza nivel inválido');
+eq(B.levelRangeText(3.5), '2.5–4.5', 'rango visible = nivel ±1');
+eq(B.levelRangeText(null), null, 'sin nivel no hay rango');
+
+// Buscador de socios
+B.upsertMember('S2', 'Socio Dos', '600222333');
+B.upsertMember('S3', 'Ana Tres', '600333444');
+ok(B.searchMembers('ana').some(s => s.member_no === 'S3'), 'busca por nombre');
+ok(B.searchMembers('600222').some(s => s.member_no === 'S2'), 'busca por móvil');
+ok(B.searchMembers('S3').some(s => s.member_no === 'S3'), 'busca por nº de socio');
+eq(B.searchMembers('x'), [], 'menos de 2 caracteres no busca');
+
+// Visibilidad de abiertos y bloqueos entre jugadores
+B.upsertMember('B1', 'Bloqueador', '1'); B.upsertMember('B2', 'Bloqueado', '2');
+B.setLevel('B1', 3.5);
+ok(B.openVisibleTo('B1', 3.5, null) === true, 'público siempre ve el abierto');
+ok(B.openVisibleTo('B1', 3.5, { member_no: 'X', level: 3 }) === true, 'nivel -0.5 lo ve');
+ok(B.openVisibleTo('B1', 3.5, { member_no: 'X', level: 4.5 }) === true, 'límite +1 lo ve');
+ok(B.openVisibleTo('B1', 3.5, { member_no: 'X', level: 4.75 }) === false, '+1.25 no lo ve');
+ok(B.openVisibleTo('B1', 3.5, { member_no: 'X', level: null }) === true, 'visitante sin nivel ve todo');
+ok(B.openVisibleTo('B1', null, { member_no: 'X', level: 6 }) === true, 'titular sin nivel visible para todos');
+ok(B.addBlock('B1', 'B1').error, 'no vale auto-bloquearse');
+ok(B.addBlock('B1', 'ZZZ').error, 'bloquear socio inexistente falla');
+B.addBlock('B1', 'B2');
+eq(B.getBlocks('B1').map(b => b.member_no), ['B2'], 'getBlocks lista bloqueados');
+ok(B.openVisibleTo('B1', 3.5, { member_no: 'B2', level: 3.5 }) === false, 'bloqueado no ve aunque el nivel encaje');
+B.removeBlock('B1', 'B2');
+ok(B.openVisibleTo('B1', 3.5, { member_no: 'B2', level: 3.5 }) === true, 'tras quitar el bloqueo vuelve a ver');
+
+// joinOpenMatch y syncOpenSpots
+B.setCfg('days_ahead', '14');
+const D9 = B.addDays(B.todayStr(), 9);
+B.upsertMember('J1', 'Join Uno', '1'); B.upsertMember('J2', 'Join Dos', '2');
+B.upsertMember('J3', 'Join Tres', '3'); B.upsertMember('J4', 'Join Cuatro', '4');
+B.setLevel('J1', 3.5); B.setLevel('J2', 4); B.setLevel('J3', 6);
+const jb = B.createBooking({ court_id: 2, court_name: 'P2', date: D9, start_min: 900, duration_min: 75, titular_member_no: 'J1', players: [], open_spots: 3 });
+ok(!jb.error && B.getBooking(jb.id).open_spots === 3, 'abierto con 3 plazas');
+ok(B.joinOpenMatch(jb.id, B.getMember('J2')).ok, 'J2 (nivel 4.0) se une');
+eq(B.getBooking(jb.id).open_spots, 2, 'las plazas bajan a 2');
+ok(B.joinOpenMatch(jb.id, B.getMember('J2')).error, 'no puede unirse dos veces');
+ok(B.joinOpenMatch(jb.id, B.getMember('J3')).error, 'J3 (nivel 6.0) fuera de rango no puede');
+ok(B.joinOpenMatch(jb.id, B.getMember('J1')).error, 'el titular no se une a su propio partido');
+B.setPlayers(jb.id, 'J1', [{ name: 'Join Dos', member_no: 'J2' }, { name: 'Extra', member_no: '' }]);
+B.syncOpenSpots(jb.id);
+eq(B.getBooking(jb.id).open_spots, 1, 'syncOpenSpots: 4 − 3 jugadores = 1 plaza');
+B.setPlayers(jb.id, 'J1', [{ name: 'Join Dos', member_no: 'J2' }, { name: 'A', member_no: '' }, { name: 'B', member_no: '' }]);
+B.syncOpenSpots(jb.id);
+eq(B.getBooking(jb.id).open_spots, 0, 'al completar los 4 se cierra solo');
+ok(B.joinOpenMatch(jb.id, B.getMember('J4')).error, 'cerrado: nadie más puede unirse');
+B.closeOpenMatch(jb.id);
+eq(B.getBooking(jb.id).open_spots, 0, 'closeOpenMatch deja 0 plazas');
+
 console.log(`\n${pass} OK, ${fail} FALLOS`);
 process.exit(fail ? 1 : 0);

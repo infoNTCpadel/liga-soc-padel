@@ -12,6 +12,41 @@
   </form>
 </div>
 <div class="card">
+  <h3>Mi nivel</h3>
+  <p class="mut">Tu partido abierto será visible para jugadores de tu nivel ±1.</p>
+  <form method="post" action="/reservar/datos/nivel" class="row2">
+    <div class="field"><label>Nivel (opcional)</label>
+      <select name="level">
+        <option value="">Sin definir</option>
+        <% for (let l = 1; l <= 7; l += 0.25) { %>
+          <option value="<%= l %>" <%= member.level === l ? 'selected' : '' %>><%= String(l).replace('.', ',') %></option>
+        <% } %>
+      </select>
+    </div>
+    <div class="field"><label>&nbsp;</label><button class="btn small" type="submit">Guardar nivel</button></div>
+  </form>
+</div>
+<div class="card">
+  <h3>Jugadores bloqueados</h3>
+  <p class="mut">No verán tus partidos abiertos.</p>
+  <% if (blocks && blocks.length) { %>
+  <ul>
+    <% for (const bl of blocks) { %>
+    <li><%= bl.name %> (socio <%= bl.member_no %>)
+      <form method="post" action="/reservar/datos/bloqueos/eliminar" style="display:inline">
+        <input type="hidden" name="member_no" value="<%= bl.member_no %>">
+        <button class="btn small ghost" type="submit">Quitar</button>
+      </form>
+    </li>
+    <% } %>
+  </ul>
+  <% } %>
+  <form method="post" action="/reservar/datos/bloqueos" class="row2">
+    <div class="field"><label>Añadir por nº de socio</label><input type="text" name="member_no" placeholder="p. ej. 1002" required></div>
+    <div class="field"><label>&nbsp;</label><button class="btn small" type="submit">Bloquear</button></div>
+  </form>
+</div>
+<div class="card">
   <h3>Cambiar PIN</h3>
   <form method="post" action="/reservar/datos/pin">
     <div class="field"><label>PIN actual</label><input type="password" name="pin_actual" inputmode="numeric" required></div>

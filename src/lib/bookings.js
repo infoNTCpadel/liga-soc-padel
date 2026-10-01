@@ -75,6 +75,10 @@ CREATE TABLE IF NOT EXISTS court_blocks(
   notes TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS member_blocks(
+  blocker_member_no TEXT NOT NULL, blocked_member_no TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY(blocker_member_no, blocked_member_no));
 CREATE TABLE IF NOT EXISTS waitlist(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   court_id INTEGER NOT NULL,
@@ -98,6 +102,8 @@ for (const sql of [
   'ALTER TABLE club_members ADD COLUMN email TEXT NOT NULL DEFAULT \'\'',
   'ALTER TABLE bookings ADD COLUMN reminded_at TEXT',
   'ALTER TABLE club_members ADD COLUMN pin_hash TEXT NOT NULL DEFAULT \'\'',
+  'ALTER TABLE club_members ADD COLUMN level REAL',
+  'ALTER TABLE bookings ADD COLUMN open_spots INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE court_blocks ADD COLUMN date_from TEXT NOT NULL DEFAULT \'\'',
   'ALTER TABLE court_blocks ADD COLUMN date_to TEXT NOT NULL DEFAULT \'\'',
   'ALTER TABLE waitlist ADD COLUMN duration_min INTEGER NOT NULL DEFAULT 0',
@@ -434,17 +440,18 @@ function setPlayers(booking_id, titular_member_no, extras) {
   return { ok: true, payment_status, count: rows.length };
 }
 
-function createBooking({ court_id, court_name, date, start_min, duration_min, titular_member_no, players }) {
+function createBooking({ court_id, court_name, date, start_min, duration_min, titular_member_no, players, open_spots = 0 }) {
   const err = validateNewBooking({ court_id, date, start_min, duration_min, titular_member_no, players });
   if (err) return { error: err };
   const d = parseInt(duration_min, 10);
   const end_min = start_min + d;
   const t = titular_member_no.trim();
   const member = getMember(t);
+  const spots = Math.max(0, Math.min(3, open_spots | 0));
   const r = bdb.prepare(
-    `INSERT INTO bookings(court_id, court_name, date, start_min, end_min, titular_member_no, titular_name, payment_status)
-     VALUES(?, ?, ?, ?, ?, ?, ?, 'ok')`).run(
-    court_id, court_name, date, start_min, end_min, t, member.name);
+    `INSERT INTO bookings(court_id, court_name, date, start_min, end_min, titular_member_no, titular_name, payment_status, open_spots)
+     VALUES(?, ?, ?, ?, ?, ?, ?, 'ok', ?)`).run(
+    court_id, court_name, date, start_min, end_min, t, member.name, spots);
   const id = Number(r.lastInsertRowid);
   setPlayers(id, t, players);
   const st = bdb.prepare('SELECT payment_status FROM bookings WHERE id = ?').get(id).payment_status;
@@ -476,6 +483,127 @@ function cancelBooking(id, byStaff = false) {
   bdb.prepare("UPDATE bookings SET status = 'cancelled' WHERE id = ?").run(id);
   promoteWaitlist(b.court_id, b.date);
   return { ok: true };
+}
+
+// ------------------------------------------------------------ partidos abiertos
+// Buscador de socios por nombre, nº de socio o móvil (para el formulario).
+function searchMembers(q) {
+  q = (q || '').trim();
+  if (q.length < 2) return [];
+  const like = '%' + q.replace(/[%_]/g, '') + '%';
+  return bdb.prepare(
+    `SELECT member_no, name, phone, level FROM club_members
+     WHERE active = 1 AND (name LIKE ? OR member_no LIKE ? OR phone LIKE ?)
+     ORDER BY name LIMIT 10`).all(like, like, like);
+}
+function validLevel(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = parseFloat(String(v).replace(',', '.'));
+  if (!Number.isFinite(n) || n < 1 || n > 7) return undefined;
+  return Math.round(n * 4) / 4;
+}
+function setLevel(member_no, level) {
+  const v = validLevel(level);
+  if (v === undefined) return { error: 'Nivel no válido (1.0 – 7.0).' };
+  bdb.prepare('UPDATE club_members SET level = ? WHERE member_no = ?').run(v, member_no);
+  return { ok: true, level: v };
+}
+const fmtLevel = n => String(Math.round(n * 100) / 100);
+// Rango visible del partido abierto: nivel del titular ±1.
+function levelRangeText(level) {
+  if (level === null || level === undefined) return null;
+  return fmtLevel(level - 1) + '–' + fmtLevel(level + 1);
+}
+// Bloqueos entre jugadores: blocker no quiere que blocked vea sus abiertos.
+function addBlock(blocker, blocked) {
+  if (blocker === blocked) return { error: 'No puedes bloquearte a ti mismo.' };
+  if (!getMember(blocked)) return { error: 'Socio no encontrado.' };
+  bdb.prepare('INSERT OR IGNORE INTO member_blocks(blocker_member_no, blocked_member_no) VALUES(?, ?)').run(blocker, blocked);
+  return { ok: true };
+}
+function removeBlock(blocker, blocked) {
+  bdb.prepare('DELETE FROM member_blocks WHERE blocker_member_no = ? AND blocked_member_no = ?').run(blocker, blocked);
+  return { ok: true };
+}
+function getBlocks(blocker) {
+  return bdb.prepare(
+    `SELECT m.member_no, m.name FROM member_blocks b
+     JOIN club_members m ON m.member_no = b.blocked_member_no
+     WHERE b.blocker_member_no = ? ORDER BY m.name`).all(blocker);
+}
+function isBlockedBy(bookerNo, viewerNo) {
+  if (!viewerNo) return false;
+  return !!bdb.prepare(
+    'SELECT 1 FROM member_blocks WHERE blocker_member_no = ? AND blocked_member_no = ?').get(bookerNo, viewerNo);
+}
+// ¿Puede viewer ver el partido abierto del titular? viewer = null → público:
+// siempre visible (decisión de Mathius); el login solo se exige para apuntarse.
+function openVisibleTo(bookerNo, bookerLevel, viewer) {
+  if (!viewer) return true;
+  if (isBlockedBy(bookerNo, viewer.member_no)) return false;
+  if (viewer.level === null || viewer.level === undefined) return true;
+  if (bookerLevel === null || bookerLevel === undefined) return true;
+  return Math.abs(bookerLevel - viewer.level) <= 1;
+}
+// Apuntarse a un partido abierto.
+function joinOpenMatch(booking_id, member) {
+  const b = bdb.prepare('SELECT * FROM bookings WHERE id = ?').get(booking_id);
+  if (!b || b.status !== 'active') return { error: 'Ese partido ya no está disponible.' };
+  if (!(b.open_spots > 0)) return { error: 'Ese partido ya está cerrado.' };
+  if (b.titular_member_no === member.member_no) return { error: 'Es tu propio partido.' };
+  const booker = getMember(b.titular_member_no);
+  if (!openVisibleTo(b.titular_member_no, booker && booker.level, member))
+    return { error: 'No puedes ver este partido.' };
+  const already = bdb.prepare(
+    `SELECT 1 FROM booking_players WHERE booking_id = ?
+     AND (member_no = ? OR lower(name) = lower(?)) LIMIT 1`).get(booking_id, member.member_no, member.name);
+  if (already) return { error: 'Ya estás apuntado en este partido.' };
+  const d = b.end_min - b.start_min;
+  const clash = bdb.prepare(
+    `SELECT 1 FROM bookings bk JOIN booking_players p ON p.booking_id = bk.id
+     WHERE bk.date = ? AND bk.status = 'active' AND p.member_no = ?
+     AND bk.start_min < ? AND ? < bk.end_min LIMIT 1`).get(b.date, member.member_no, b.end_min, b.start_min);
+  if (clash) return { error: 'Tienes otra reserva en ese tramo horario.' };
+  bdb.prepare('INSERT INTO booking_players(booking_id, name, member_no, is_guest) VALUES(?, ?, ?, 0)')
+    .run(booking_id, member.name, member.member_no);
+  bdb.prepare('UPDATE bookings SET open_spots = open_spots - 1 WHERE id = ?').run(booking_id);
+  recomputePayment(booking_id);
+  return { ok: true };
+}
+// Tras editar jugadores: si era abierto, las plazas se reajustan solas.
+function syncOpenSpots(booking_id) {
+  const b = bdb.prepare('SELECT open_spots FROM bookings WHERE id = ?').get(booking_id);
+  if (!b || !(b.open_spots > 0)) return;
+  const total = bdb.prepare('SELECT COUNT(*) c FROM booking_players WHERE booking_id = ?').get(booking_id).c;
+  const spots = Math.max(0, 4 - total); // titular + acompañantes con nombre
+  bdb.prepare('UPDATE bookings SET open_spots = ? WHERE id = ?').run(spots, booking_id);
+}
+function closeOpenMatch(booking_id) {
+  bdb.prepare('UPDATE bookings SET open_spots = 0 WHERE id = ?').run(booking_id);
+  return { ok: true };
+}
+// Parrilla del día para la vista calendario: por pista, tramos libres,
+// reservas y bloqueos ordenados, con visibilidad de abiertos según viewer.
+function daySchedule(date, viewer, courts) {
+  const blocks = dayBlocks(date);
+  const bookings = bdb.prepare(
+    `SELECT bk.*, m.level AS booker_level FROM bookings bk
+     LEFT JOIN club_members m ON m.member_no = bk.titular_member_no
+     WHERE bk.date = ? AND bk.status = 'active'`).all(date);
+  return courts.map(court => {
+    const items = [];
+    for (const b of bookings.filter(x => x.court_id === court.id)) {
+      const open = b.open_spots > 0 && openVisibleTo(b.titular_member_no, b.booker_level, viewer);
+      items.push({ type: 'booking', start: b.start_min, end: b.end_min, booking: b,
+        open, range: levelRangeText(b.booker_level) });
+    }
+    for (const bl of blocks.filter(x => x.court_id === court.id))
+      items.push({ type: 'block', start: bl.start_min, end: bl.end_min, reason: bl.reason });
+    for (const g of freeSegments(court.id, date))
+      if (g.type === 'free') items.push({ type: 'free', start: g.start, end: g.end });
+    items.sort((a, b2) => a.start - b2.start);
+    return { court, items };
+  });
 }
 
 // ------------------------------------------------------------ lista de espera
@@ -725,6 +853,9 @@ module.exports = {
   isBookable, isPotentiallyValid, gridFor,
   validateNewBooking, normalizePlayers, setPlayers, recomputePayment,
   createBooking, getBooking, cancelBooking,
+  searchMembers, validLevel, setLevel, fmtLevel, levelRangeText,
+  addBlock, removeBlock, getBlocks, isBlockedBy, openVisibleTo,
+  joinOpenMatch, syncOpenSpots, closeOpenMatch, daySchedule,
   expireOffers, promoteWaitlist, joinWaitlist, confirmOffer, leaveWaitlist, memberArea,
   validateBlock, affectedBookings, createBlock, deleteBlock, listBlocks,
   setBookingPaid, addCharge, setChargePaid, deleteCharge, dayDetail, pendingPayments,

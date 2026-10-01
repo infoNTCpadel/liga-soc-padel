@@ -60,6 +60,14 @@
       <div class="field"><label>Nº de socio</label><input type="text" name="p<%= i %>_member" inputmode="numeric"></div>
     </div>
     <% } %>
+    <div class="field"><label>Plazas abiertas (partido abierto)</label>
+      <select name="open_spots">
+        <option value="0">0 · partido cerrado</option>
+        <option value="1">1 plaza</option>
+        <option value="2">2 plazas</option>
+        <option value="3">3 plazas</option>
+      </select>
+    </div>
     <button class="btn" type="submit">Crear reserva</button>
     <a class="btn ghost" href="<%= backUrl %>" style="margin-left:.5em">Cancelar</a>
   </form>

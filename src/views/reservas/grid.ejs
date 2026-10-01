@@ -1,5 +1,5 @@
 <h1>Reservar pista</h1>
-<p class="mut">Solo para socios del club. Las reservas se encajan sin dejar huecos: cada tramo libre se reserva desde su inicio (o en horas que dejen el resto rellenable). Si algún jugador no es socio, deberá pagar en recepción antes de jugar.</p>
+<p class="mut">Solo para socios del club. Para reservar o apuntarte a un partido abierto necesitas entrar con tu nº de socio y PIN. Si algún jugador no es socio, deberá pagar en recepción antes de jugar.</p>
 
 <% if (typeof error !== 'undefined' && error) { %><div class="alert error"><%= error %></div><% } %>
 <% if (typeof info !== 'undefined' && info) { %><div class="alert ok"><%= info %></div><% } %>
@@ -18,53 +18,99 @@
   </div>
 </div>
 
+<div class="daytabs">
+  <% for (const t of tabs) { %>
+    <a class="daytab<%= t === date ? ' on' : '' %>" href="/reservar?date=<%= t %>"><%= tabLabel(t) %></a>
+  <% } %>
+</div>
+
 <% if (noCourts) { %>
   <div class="card"><p class="mut">Aún no hay pistas configuradas. El club las está preparando.</p></div>
-<% } else { %>
-  <% for (const row of grid) { %>
-  <div class="card">
-    <h3><%= row.court.name %></h3>
-    <table class="tbl">
-      <tr><th>Tramo</th><th>Estado</th><th></th></tr>
-      <% for (const it of row.items) { %>
-      <tr>
-        <td><%= minToStr(it.start) %>–<%= minToStr(it.end) %></td>
-        <td>
-          <% if (it.type === 'free') { %><span class="badge ok">Libre</span>
-          <% } else if (it.type === 'booked') { %><span class="badge">Ocupado</span>
-          <% } else if (it.type === 'blocked') { %><span class="mut" title="<%= it.block.reason %><%= it.block.notes ? ' · ' + it.block.notes : '' %>">Bloqueada</span>
-          <% } else { %><span class="mut">—</span><% } %>
-        </td>
-        <td>
-          <% if (it.type === 'free') { %>
-            <% if (member) { %><a class="btn small" href="/reservar/nueva?court=<%= row.court.id %>&date=<%= date %>&desde=<%= it.start %>">Reservar</a>
-            <% } else { %><a class="btn small" href="/reservar/entrar?next=<%= encodeURIComponent('/reservar/nueva?court=' + row.court.id + '&date=' + date + '&desde=' + it.start) %>">Reservar</a><% } %>
-          <% } %>
-        </td>
-      </tr>
-      <% } %>
-    </table>
-    <% if (waitStarts[row.court.id] && waitStarts[row.court.id].length) { %>
-    <details style="margin-top:.6em">
-      <summary class="mut" style="cursor:pointer">Avisadme si se libera una hora</summary>
-      <% if (member) { %>
-      <form method="post" action="/reservar/espera" class="row2" style="margin-top:.5em">
-        <input type="hidden" name="court_id" value="<%= row.court.id %>">
-        <input type="hidden" name="date" value="<%= date %>">
-        <div class="field"><label>Hora deseada</label><select name="start_min" required>
-          <% for (const v of waitStarts[row.court.id]) { %><option value="<%= v.start_min %>"><%= minToStr(v.start_min) %></option><% } %>
-        </select></div>
-        <div class="field"><label>Duración</label><select name="duration_min" required>
-          <% for (const d of config.durations) { %><option value="<%= d %>" <%= d === 75 ? 'selected' : '' %>><%= d %> min</option><% } %>
-        </select></div>
-        <div class="field"><label>&nbsp;</label><button class="btn small" type="submit">Avisadme</button></div>
-      </form>
-      <% } else { %>
-      <p class="mut"><a href="/reservar/entrar">Entra</a> para apuntarte a la lista de espera.</p>
-      <% } %>
-    </details>
-    <% } %>
+<% } else {
+  const ppm = 1; // px por minuto
+  const top0 = config.open_min, totalMin = config.close_min - config.open_min;
+  const hours = [];
+  for (let h = top0; h <= config.close_min; h += 60) hours.push(h);
+%>
+<style>
+.daytabs{display:flex;gap:.4em;overflow-x:auto;margin:.8em 0}
+.daytab{flex:0 0 auto;padding:.5em .9em;border:1px solid #d8d3e8;border-radius:999px;background:#fff;color:#4b3d8f;text-decoration:none;font-weight:600}
+.daytab.on{background:#5b3df0;color:#fff;border-color:#5b3df0}
+.calwrap{overflow-x:auto;border:1px solid #e5e1f2;border-radius:12px;background:#fff}
+.cal{display:flex;min-width:<%= 60 + schedule.length * 118 %>px}
+.gutter{flex:0 0 52px;position:relative;color:#8a86a3;font-size:.78em}
+.gutter span{position:absolute;right:6px;transform:translateY(-50%)}
+.courtcol{flex:1 0 110px;border-left:1px solid #efeaf8}
+.courthead{padding:.45em;text-align:center;font-weight:700;color:#4b3d8f;border-bottom:1px solid #efeaf8;background:#faf8ff;position:sticky;top:0}
+.courtbody{position:relative}
+.hline{position:absolute;left:0;right:0;border-top:1px dashed #eee9f9}
+.blk{position:absolute;left:4px;right:4px;border-radius:8px;font-size:.8em;font-weight:600;display:flex;align-items:center;justify-content:center;text-align:center;padding:2px;overflow:hidden;text-decoration:none}
+.blk.free{border:1.5px solid #5b3df0;color:#4b3d8f;background:#f4f1ff}
+.blk.free:hover{background:#e9e3ff}
+.blk.busy{background:#f1f0f6;color:#b9b6c9}
+.blk.blocked{background:repeating-linear-gradient(45deg,#f1f0f6,#f1f0f6 6px,#e7e5f0 6px,#e7e5f0 12px);color:#a5a2b8}
+.blk.openblk{border:1.5px solid #1e8e4d;color:#146c39;background:#e9f7ef}
+.blk.openblk:hover{background:#d9f0e3}
+.legend{display:flex;gap:1em;flex-wrap:wrap;margin:.7em 0;font-size:.85em;color:#6b6884}
+.legend i{display:inline-block;width:.9em;height:.9em;border-radius:3px;margin-right:.3em;vertical-align:-1px}
+</style>
+<div class="calwrap"><div class="cal">
+  <div class="gutter" style="height:<%= totalMin * ppm %>px">
+    <% for (const h of hours) { %><span style="top:<%= (h - top0) * ppm %>px"><%= minToStr(h) %></span><% } %>
+  </div>
+  <% for (const col of schedule) { %>
+  <div class="courtcol">
+    <div class="courthead"><%= col.court.name %></div>
+    <div class="courtbody" style="height:<%= totalMin * ppm %>px">
+      <% for (const h of hours) { %><div class="hline" style="top:<%= (h - top0) * ppm %>px"></div><% } %>
+      <% for (const it of col.items) {
+        const top = (it.start - top0) * ppm, hgt = Math.max((it.end - it.start) * ppm - 2, 18);
+        if (it.type === 'free') {
+          const url = '/reservar/nueva?court=' + col.court.id + '&date=' + date + '&desde=' + it.start;
+          const href = member ? url : '/reservar/entrar?next=' + encodeURIComponent(url);
+      %><a class="blk free" style="top:<%= top %>px;height:<%= hgt %>px" href="<%= href %>"><%= col.court.name %> · libre</a><%
+        } else if (it.type === 'booking' && it.open) {
+      %><a class="blk openblk" style="top:<%= top %>px;height:<%= hgt %>px" href="/reservar/abierto/<%= it.booking.id %>"><%= it.booking.open_spots %> <%= it.booking.open_spots === 1 ? 'plaza' : 'plazas' %><%= it.range ? ' · ' + it.range : '' %></a><%
+        } else if (it.type === 'booking') {
+      %><div class="blk busy" style="top:<%= top %>px;height:<%= hgt %>px"><%= col.court.name %> · ocupada</div><%
+        } else {
+      %><div class="blk blocked" style="top:<%= top %>px;height:<%= hgt %>px" title="<%= it.reason || '' %>">Bloqueada</div><%
+        }
+      } %>
+    </div>
   </div>
   <% } %>
+</div></div>
+<div class="legend">
+  <span><i style="background:#f4f1ff;border:1.5px solid #5b3df0"></i>Libre (pulsa para reservar)</span>
+  <span><i style="background:#e9f7ef;border:1.5px solid #1e8e4d"></i>Partido abierto (faltan jugadores)</span>
+  <span><i style="background:#f1f0f6"></i>Ocupada</span>
+</div>
 <p class="hint">Duraciones disponibles: <%= config.durations.join(' y ') %> minutos. Las horas ofrecidas son las que no dejan huecos inservibles.</p>
 <% } %>
+
+<details class="card" style="margin-top:1em">
+  <summary class="mut" style="cursor:pointer">Avisadme si se libera una hora (lista de espera)</summary>
+  <% if (member) { %>
+  <form method="post" action="/reservar/espera" class="row2" style="margin-top:.5em">
+    <input type="hidden" name="date" value="<%= date %>">
+    <div class="field"><label>Pista</label><select name="court_id" id="w_court" required>
+      <% for (const col of schedule) { %><option value="<%= col.court.id %>"><%= col.court.name %></option><% } %>
+    </select></div>
+    <div class="field"><label>Hora deseada</label><select name="start_min" id="w_start" required></select></div>
+    <div class="field"><label>Duración</label><select name="duration_min" required>
+      <% for (const d of config.durations) { %><option value="<%= d %>" <%= d === 75 ? 'selected' : '' %>><%= d %> min</option><% } %>
+    </select></div>
+    <div class="field"><label>&nbsp;</label><button class="btn small" type="submit">Avisadme</button></div>
+  </form>
+  <script>
+  const WS = <%- JSON.stringify(waitStarts) %>;
+  const M2S = m => String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0');
+  const wc = document.getElementById('w_court'), ws = document.getElementById('w_start');
+  function fillW(){ ws.innerHTML = (WS[wc.value] || []).map(s => '<option value="'+s+'">'+M2S(s)+'</option>').join(''); }
+  wc.addEventListener('change', fillW); fillW();
+  </script>
+  <% } else { %>
+  <p class="mut"><a href="/reservar/entrar">Entra</a> para apuntarte a la lista de espera.</p>
+  <% } %>
+</details>

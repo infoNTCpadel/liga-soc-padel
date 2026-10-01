@@ -1,0 +1,33 @@
+<h1>Partido abierto</h1>
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+<div class="card">
+  <h3><%= b.court_name %> · <%= b.date.slice(8,10) %>/<%= b.date.slice(5,7) %> · <%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %></h3>
+  <p><span class="pill" style="background:#e9f7ef;color:#146c39;padding:.2em .8em;border-radius:999px;font-weight:700">
+    <%= b.open_spots %> <%= b.open_spots === 1 ? 'plaza libre' : 'plazas libres' %></span>
+    <% if (range) { %><span class="mut"> · Nivel <%= range %></span><% } %>
+  </p>
+  <h4>Jugadores</h4>
+  <% if (member) { %>
+    <ul>
+      <% for (const p of b.players) { %><li><%= p.name %><%= p.is_guest ? ' <span class="mut">(invitado)</span>' : '' %></li><% } %>
+      <% for (let i = 0; i < b.open_spots; i++) { %><li class="mut">— plaza libre —</li><% } %>
+    </ul>
+  <% } else { %>
+    <p class="mut">Entra con tu nº de socio para ver quién juega y apuntarte.</p>
+  <% } %>
+  <% if (mine) { %>
+    <p class="mut">Es tu partido.</p>
+    <form method="post" action="/reservar/abierto/<%= b.id %>/cerrar" style="display:inline">
+      <button class="btn small ghost" type="submit">Cerrar partido</button>
+    </form>
+  <% } else if (!member) { %>
+    <a class="btn" href="/reservar/entrar?next=<%= encodeURIComponent('/reservar/abierto/' + b.id) %>">Entrar para apuntarme</a>
+  <% } else if (already) { %>
+    <p class="mut">Ya estás apuntado en este partido.</p>
+  <% } else { %>
+    <form method="post" action="/reservar/abierto/<%= b.id %>/unirse">
+      <button class="btn" type="submit">Apuntarme (<%= b.open_spots %> <%= b.open_spots === 1 ? 'plaza' : 'plazas' %>)</button>
+    </form>
+  <% } %>
+  <p style="margin-top:1em"><a class="btn ghost small" href="/reservar?date=<%= b.date %>">← Volver a la parrilla</a></p>
+</div>

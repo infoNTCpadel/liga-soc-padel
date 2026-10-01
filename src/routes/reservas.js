@@ -91,53 +91,80 @@ router.get('/salir', (req, res) => {
 
 // ---- mis datos: cambiar teléfono y PIN ----
 router.get('/datos', requireMember, (req, res) => {
-  res.renderPage('reservas/datos', { error: null, ok: null, member: me(req) });
+  const m = me(req);
+  res.renderPage('reservas/datos', { error: null, ok: null, member: m, blocks: B.getBlocks(m.member_no) });
 });
+const renderDatos = (req, res, error, okMsg) =>
+  res.renderPage('reservas/datos', { error: error || null, ok: okMsg || null, member: me(req), blocks: B.getBlocks(me(req).member_no) });
 router.post('/datos/telefono', requireMember, (req, res) => {
   const m = me(req);
   const phone = (req.body.phone || '').trim();
   const email = (req.body.email || '').trim();
-  if (!B.normPhone(phone)) {
-    return res.renderPage('reservas/datos', { error: 'Indica un teléfono válido.', ok: null, member: m });
-  }
+  if (!B.normPhone(phone)) return renderDatos(req, res, 'Indica un teléfono válido.');
   B.updateMemberContact(m.member_no, phone, email);
-  res.renderPage('reservas/datos', { error: null, ok: 'Datos actualizados.', member: me(req) });
+  renderDatos(req, res, null, 'Datos actualizados.');
 });
 router.post('/datos/pin', requireMember, (req, res) => {
   const m = me(req);
-  const render = (error, okMsg) => res.renderPage('reservas/datos', { error: error || null, ok: okMsg || null, member: me(req) });
-  if (!B.checkPin(m.member_no, req.body.pin_actual)) return render('El PIN actual no es correcto.');
+  if (!B.checkPin(m.member_no, req.body.pin_actual)) return renderDatos(req, res, 'El PIN actual no es correcto.');
   const pin = (req.body.pin || '').trim();
-  if (!B.validPin(pin)) return render('El PIN debe tener entre 4 y 8 dígitos.');
-  if (pin !== (req.body.pin2 || '').trim()) return render('Los PIN nuevos no coinciden.');
+  if (!B.validPin(pin)) return renderDatos(req, res, 'El PIN debe tener entre 4 y 8 dígitos.');
+  if (pin !== (req.body.pin2 || '').trim()) return renderDatos(req, res, 'Los PIN nuevos no coinciden.');
   B.setPin(m.member_no, pin);
-  return render(null, 'PIN cambiado.');
+  return renderDatos(req, res, null, 'PIN cambiado.');
+});
+router.post('/datos/nivel', requireMember, (req, res) => {
+  const r = B.setLevel(me(req).member_no, req.body.level);
+  if (r.error) return renderDatos(req, res, r.error);
+  renderDatos(req, res, null, 'Nivel actualizado.');
+});
+router.post('/datos/bloqueos', requireMember, (req, res) => {
+  const m = me(req);
+  const r = B.addBlock(m.member_no, (req.body.member_no || '').trim());
+  if (r.error) return renderDatos(req, res, r.error);
+  renderDatos(req, res, null, 'Jugador bloqueado: no verá tus partidos abiertos.');
+});
+router.post('/datos/bloqueos/eliminar', requireMember, (req, res) => {
+  B.removeBlock(me(req).member_no, (req.body.member_no || '').trim());
+  renderDatos(req, res, null, 'Bloqueo eliminado.');
 });
 
 // ---- parrilla de disponibilidad (pública) ----
 router.get('/', (req, res) => {
   const c = B.getConfig();
   const date = clampDate(validDate(req.query.date));
-  const courts = activeCourts();
-  const grid = B.gridFor(date, courts);
+  const member = me(req);
+  const viewer = member ? { member_no: member.member_no, level: member.level } : null;
+  const schedule = B.daySchedule(date, viewer, activeCourts());
   const today = B.todayStr();
-  // Inicios potencialmente reservables por pista (para la lista de espera).
+  const maxDate = B.addDays(today, c.days_ahead);
+  const tabs = [];
+  for (let d = today, i = 0; d <= maxDate && i < 14; d = B.addDays(d, 1), i++) tabs.push(d);
+  const wd = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const tabLabel = (d) => {
+    if (d === today) return 'Hoy';
+    if (d === B.addDays(today, 1)) return 'Mañana';
+    const dt = new Date(d + 'T12:00:00');
+    return wd[dt.getDay()] + ' ' + dt.getDate();
+  };
+  // Inicios potencialmente reservables por pista (lista de espera).
+  const courts = schedule.map(s => s.court);
   const waitStarts = {};
   for (const court of courts) {
     const seen = new Set(), list = [];
     for (const g of B.freeSegments(court.id, date, { ignoreBookings: true })) {
       for (const v of B.validStarts(g.start, g.end)) {
-        if (!seen.has(v.start_min)) { seen.add(v.start_min); list.push(v); }
+        if (!seen.has(v.start_min)) { seen.add(v.start_min); list.push(v.start_min); }
       }
     }
     waitStarts[court.id] = list;
   }
   res.renderPage('reservas/grid', {
-    date, grid, config: c, today, waitStarts,
+    date, schedule, config: c, today, tabs, tabLabel, waitStarts,
     prev: date > today ? B.addDays(date, -1) : null,
-    next: date < B.addDays(today, c.days_ahead) ? B.addDays(date, 1) : null,
-    noCourts: courts.length === 0,
-    minToStr: B.minToStr, member: me(req),
+    next: date < maxDate ? B.addDays(date, 1) : null,
+    noCourts: schedule.length === 0,
+    minToStr: B.minToStr, member,
     info: req.query.ok ? 'Te has apuntado a la lista de espera. Te guardamos la plaza ' + c.hold_min + ' minutos si se libera.' : null,
     error: req.query.err || null,
   });
@@ -212,6 +239,23 @@ router.post('/nueva', requireMember, (req, res) => {
     });
   };
   if (!court) return res.redirect('/reservar?date=' + date);
+  const filled = players.filter(p => p.name).length;
+  // Si faltan jugadores y no viene de lista de espera: validar y preguntar si abrir el partido.
+  if (!offerRow && filled < 3) {
+    const verr = B.validateNewBooking({ court_id: court.id, date, start_min, duration_min, titular_member_no: member.member_no, players });
+    if (verr) return render(verr);
+    req.session.pendingOpen = {
+      mode: 'new', court_id: court.id, court_name: court.name, date, start_min, duration_min,
+      players, titular_email: (req.body.titular_email || '').trim(),
+      missing: 3 - filled,
+    };
+    return res.renderPage('reservas/abrir', {
+      error: null, mode: 'new', missing: 3 - filled,
+      level: member.level, levelRange: B.levelRangeText(member.level),
+      minToStr: B.minToStr, member,
+      when: B.minToStr(start_min) + '–' + B.minToStr(start_min + duration_min) + ' · ' + court.name,
+    });
+  }
   const r = B.createBooking({
     court_id: court.id, court_name: court.name, date, start_min, duration_min,
     titular_member_no: member.member_no, players,
@@ -220,6 +264,76 @@ router.post('/nueva', requireMember, (req, res) => {
   const titularEmail = (req.body.titular_email || '').trim();
   if (titularEmail && titularEmail !== member.email) B.updateMemberContact(member.member_no, member.phone, titularEmail);
   res.redirect('/reservar/ok?id=' + r.id);
+});
+
+// Confirmación de partido abierto (al crear o al quitar un jugador).
+router.post('/abrir/confirmar', requireMember, (req, res) => {
+  const member = me(req);
+  const pend = req.session.pendingOpen;
+  if (!pend) return res.redirect('/reservar');
+  delete req.session.pendingOpen;
+  const wantOpen = req.body.abrir === '1';
+  if (pend.mode === 'new') {
+    const r = B.createBooking({
+      court_id: pend.court_id, court_name: pend.court_name, date: pend.date,
+      start_min: pend.start_min, duration_min: pend.duration_min,
+      titular_member_no: member.member_no, players: pend.players,
+      open_spots: wantOpen ? pend.missing : 0,
+    });
+    if (r.error) return res.renderPage('reservas/abrir', {
+      error: r.error, mode: 'new', missing: pend.missing,
+      level: member.level, levelRange: B.levelRangeText(member.level),
+      minToStr: B.minToStr, member, when: '',
+    });
+    if (pend.titular_email && pend.titular_email !== member.email)
+      B.updateMemberContact(member.member_no, member.phone, pend.titular_email);
+    return res.redirect('/reservar/ok?id=' + r.id);
+  }
+  // mode 'existing': quitar jugador de un partido cerrado
+  const b = B.getBooking(pend.booking_id);
+  if (!b || b.titular_member_no !== member.member_no) return res.redirect('/reservar/mis');
+  B.setPlayers(b.id, member.member_no, pend.players);
+  if (wantOpen) {
+    const total = B.getBooking(b.id).players.length;
+    B.bdb.prepare('UPDATE bookings SET open_spots = ? WHERE id = ?').run(Math.max(0, 4 - total), b.id);
+  }
+  res.redirect('/reservar/mis?ok=' + encodeURIComponent('Jugadores actualizados.'));
+});
+
+// ---- partido abierto: detalle y unirse ----
+router.get('/abierto/:id', (req, res) => {
+  const member = me(req);
+  const viewer = member ? { member_no: member.member_no, level: member.level } : null;
+  const b = B.getBooking(parseInt(req.params.id, 10));
+  if (!b || b.status !== 'active' || !(b.open_spots > 0)) return res.redirect('/reservar');
+  const booker = B.getMember(b.titular_member_no);
+  const mine = member && b.titular_member_no === member.member_no;
+  if (!mine && !B.openVisibleTo(b.titular_member_no, booker && booker.level, viewer))
+    return res.redirect('/reservar');
+  const already = member && b.players.some(p => p.member_no === member.member_no);
+  res.renderPage('reservas/abierto', {
+    b, booker, mine, already, member,
+    range: B.levelRangeText(booker && booker.level),
+    minToStr: B.minToStr, error: req.query.err || null,
+  });
+});
+router.post('/abierto/:id/unirse', requireMember, (req, res) => {
+  const member = me(req);
+  const r = B.joinOpenMatch(parseInt(req.params.id, 10), member);
+  if (r.error) return res.redirect('/reservar/abierto/' + req.params.id + '?err=' + encodeURIComponent(r.error));
+  res.redirect('/reservar/mis?ok=' + encodeURIComponent('Te has apuntado al partido.'));
+});
+router.post('/abierto/:id/cerrar', requireMember, (req, res) => {
+  const member = me(req);
+  const b = B.getBooking(parseInt(req.params.id, 10));
+  if (!b || (b.titular_member_no !== member.member_no && !req.session.admin)) return res.redirect('/reservar/mis');
+  B.closeOpenMatch(b.id);
+  res.redirect('/reservar/mis?ok=' + encodeURIComponent('Partido cerrado.'));
+});
+
+// Buscador de socios (nombre, nº de socio o móvil) para el formulario.
+router.get('/socios/buscar', requireMember, (req, res) => {
+  res.json(B.searchMembers(req.query.q || ''));
 });
 
 router.get('/ok', requireMember, (req, res) => {
@@ -247,7 +361,7 @@ router.post('/anular', requireMember, (req, res) => {
     area: B.memberArea(member.member_no), minToStr: B.minToStr, config: B.getConfig(), member,
   });
 });
-// Completar jugadores a posteriori (titular).
+// Completar o quitar jugadores a posteriori (titular).
 router.post('/jugadores', requireMember, (req, res) => {
   const member = me(req);
   const b = B.getBooking(parseInt(req.body.booking_id, 10));
@@ -257,8 +371,23 @@ router.post('/jugadores', requireMember, (req, res) => {
     name: (req.body['p' + i + '_name'] || '').trim(),
     member_no: (req.body['p' + i + '_member'] || '').trim(),
   }));
+  const prevFilled = b.players.length - 1;
+  const newFilled = players.filter(p => p.name).length;
   const r = B.setPlayers(b.id, member.member_no, players);
-  res.redirect('/reservar/mis' + (r.error ? '' : '?ok=' + encodeURIComponent('Jugadores actualizados.')));
+  if (r.error) return res.redirect('/reservar/mis');
+  B.syncOpenSpots(b.id);
+  // Partido cerrado al que le quitan un jugador: preguntar si abrirlo.
+  const upd = B.getBooking(b.id);
+  if (!(upd.open_spots > 0) && newFilled < prevFilled && newFilled < 3) {
+    req.session.pendingOpen = { mode: 'existing', booking_id: b.id, players, missing: 3 - newFilled };
+    return res.renderPage('reservas/abrir', {
+      error: null, mode: 'existing', missing: 3 - newFilled,
+      level: member.level, levelRange: B.levelRangeText(member.level),
+      minToStr: B.minToStr, member,
+      when: B.minToStr(b.start_min) + '–' + B.minToStr(b.end_min) + ' · ' + b.court_name,
+    });
+  }
+  res.redirect('/reservar/mis?ok=' + encodeURIComponent('Jugadores actualizados.'));
 });
 router.post('/espera/salir', requireMember, (req, res) => {
   const member = me(req);

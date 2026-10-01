@@ -23,7 +23,8 @@
     <tr style="<%= b.status==='cancelled' ? 'opacity:.45' : '' %>">
       <td><%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %></td>
       <td><%= b.court_name %></td>
-      <td><%= b.titular_name %><br><span class="mut">socio <%= b.titular_member_no %></span></td>
+      <td><%= b.titular_name %><br><span class="mut">socio <%= b.titular_member_no %></span>
+        <% if (b.open_spots > 0) { %><br><span class="badge" style="background:#e9f7ef;color:#146c39">Abierto · <%= b.open_spots %> <%= b.open_spots === 1 ? 'plaza' : 'plazas' %></span><% } %></td>
       <td><% for (const p of b.players) { %><%= p.name %><%= p.is_guest ? ' <span class="badge warn">inv.</span>' : '' %><br><% } %>
         <% if (b.status === 'active') { %>
         <details style="margin-top:.3em">
