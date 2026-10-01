@@ -74,34 +74,15 @@ router.post('/:id/jugadores', (req, res) => {
 router.get('/socios/buscar', (req, res) => {
   res.json(B.searchMembers(req.query.q || ''));
 });
-// Parrilla visual (la misma que ven los socios): pulsar una franja libre abre
-// el formulario de nueva reserva con pista, fecha y tramo listos.
+// Parrilla visual estilo timeline: las tarjetas se posicionan por hora; pulsar
+// una abre el detalle debajo y pulsar un hueco libre abre el formulario de
+// nueva reserva con pista, fecha y hora listos.
 router.get('/parrilla', (req, res) => {
-  const c = B.getConfig();
   const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : B.todayStr();
   const courts = activeCourts();
-  const rows = B.slotDay(date, null, courts);
-  const today = B.todayStr();
-  const maxDate = B.addDays(today, c.days_ahead);
-  const tabs = [];
-  for (let d = today, i = 0; d <= maxDate && i < 14; d = B.addDays(d, 1), i++) tabs.push(d);
-  const wd = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-  const tabLabel = (d) => {
-    if (d === today) return 'Hoy';
-    if (d === B.addDays(today, 1)) return 'Mañana';
-    const dt = new Date(d + 'T12:00:00');
-    return wd[dt.getDay()] + ' ' + dt.getDate();
-  };
-  res.renderPage('reservas/grid', {
-    date, rows, courts, config: c, today, tabs, tabLabel, waitStarts: {},
-    prev: date > today ? B.addDays(date, -1) : null,
-    next: date < maxDate ? B.addDays(date, 1) : null,
-    noCourts: courts.length === 0,
-    closed: !B.dayHours(date),
-    minToStr: B.minToStr, member: null,
-    staffMode: true, staffBase: '/recepcion/reservas', staffDay: '/recepcion/reservas',
-    info: null, error: null,
-  });
+  res.renderPage('reservas/timeline', B.staffTimeline(date, {
+    staffBase: '/recepcion/reservas', staffDay: '/recepcion/reservas', anularPrefix: '/recepcion/reservas/',
+  }, courts));
 });
 router.get('/nueva', (req, res) => {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : B.todayStr();

@@ -42,7 +42,7 @@
       </td>
       <td>
         <% if (b.status === 'active') { %>
-          <%= b.payment_status === 'pending' ? '<span class="badge warn">Pendiente</span>' : '<span class="badge ok">OK</span>' %>
+          <%- b.payment_status === 'pending' ? '<span class="badge warn">Pendiente</span>' : '<span class="badge ok">OK</span>' %>
           <form method="post" action="/admin/reservas/reservas/<%= b.id %>/pago" style="margin-top:.3em">
             <input type="hidden" name="paid" value="<%= b.payment_status === 'pending' ? '1' : '0' %>">
             <button class="btn small ghost" type="submit"><%= b.payment_status === 'pending' ? 'Marcar pagado' : 'Marcar pendiente' %></button>
@@ -51,7 +51,7 @@
       </td>
       <td>
         <% for (const ch of b.charges) { %>
-          <%= ch.label %> · <%= eur(ch.amount_cents) %> <%= ch.paid ? '<span class="badge ok">pagado</span>' : '<span class="badge warn">pdte.</span>' %><br>
+          <%= ch.label %> · <%= eur(ch.amount_cents) %> <%- ch.paid ? '<span class="badge ok">pagado</span>' : '<span class="badge warn">pdte.</span>' %><br>
         <% } %>
         <% if (b.status === 'active') { %>
         <form method="post" action="/admin/reservas/reservas/<%= b.id %>/cargo" style="margin-top:.3em">

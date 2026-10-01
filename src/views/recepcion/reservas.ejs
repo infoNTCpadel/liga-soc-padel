@@ -65,7 +65,7 @@
         </details>
         <% } %>
       </td>
-      <td><%= b.status === 'cancelled' ? '<span class="mut">Anulada</span>' : (b.payment_status === 'pending' ? '<span class="badge warn">Pendiente</span>' : '<span class="badge ok">OK</span>') %><% if (b.open_spots > 0) { %><br><span class="badge" style="background:#e9f7ef;color:#146c39">Abierto · <%= b.open_spots %></span><% } %></td>
+      <td><%- b.status === 'cancelled' ? '<span class="mut">Anulada</span>' : (b.payment_status === 'pending' ? '<span class="badge warn">Pendiente</span>' : '<span class="badge ok">OK</span>') %><% if (b.open_spots > 0) { %><br><span class="badge" style="background:#e9f7ef;color:#146c39">Abierto · <%= b.open_spots %></span><% } %></td>
       <td><% if (b.status === 'active') { %>
         <form method="post" action="/recepcion/reservas/<%= b.id %>/anular" style="display:inline" onsubmit="return confirm('¿Anular esta reserva?')">
           <button class="btn small danger" type="submit">Anular</button></form>

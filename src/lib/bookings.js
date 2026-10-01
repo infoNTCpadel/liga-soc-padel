@@ -987,6 +987,87 @@ async function checkReminders() {
   return due.length;
 }
 
+// Datos para la parrilla visual del personal (timeline): pistas, reservas activas
+// con jugadores, niveles, bloqueos y estadísticas del día.
+function levelColor(l) {
+  l = parseFloat(l);
+  if (!(l >= 0)) return '#9a9aa6';
+  if (l < 2.5) return '#34d399';
+  if (l < 4) return '#a78bfa';
+  if (l < 5) return '#fbbf24';
+  return '#fb923c';
+}
+function staffTimeline(date, urls, courts) {
+  const c = getConfig();
+  const today = todayStr(), maxDate = addDays(today, c.days_ahead);
+  const tabs = [];
+  for (let d = today, i = 0; d <= maxDate && i < 14; d = addDays(d, 1), i++) tabs.push(d);
+  const wdS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const tabLabel = (d) => {
+    if (d === today) return 'Hoy';
+    if (d === addDays(today, 1)) return 'Mañana';
+    const dt = new Date(d + 'T12:00:00');
+    return wdS[dt.getDay()] + ' ' + dt.getDate();
+  };
+  courts = courts || [];
+  const hours = dayHours(date);
+  const { bookings, blocks } = dayDetail(date);
+  const act = bookings.filter(b => b.status !== 'cancelled');
+  const nos = new Set();
+  act.forEach(b => {
+    if (b.titular_member_no) nos.add(b.titular_member_no);
+    (b.players || []).forEach(p => { if (p.member_no) nos.add(p.member_no); });
+  });
+  const levels = {};
+  for (const no of nos) {
+    const m = getMember(no);
+    if (m && m.level != null && m.level !== '') levels[no] = m.level;
+  }
+  const span = hours ? hours.close_min - hours.open_min : 0;
+  let bookedMin = 0;
+  act.forEach(b => {
+    if (hours) bookedMin += Math.max(0, Math.min(b.end_min, hours.close_min) - Math.max(b.start_min, hours.open_min));
+  });
+  const ocup = span > 0 && courts.length ? Math.round(bookedMin / (courts.length * span) * 100) : 0;
+  const open = act.filter(b => b.open_spots > 0).length;
+  let free = 0;
+  if (hours) for (const ct of courts) free += freeSegments(ct.id, date).filter(s => s.end - s.start >= 30).length;
+  const pct = (m) => {
+    if (!span) return 0;
+    const cl = Math.max(hours.open_min, Math.min(hours.close_min, m));
+    return (cl - hours.open_min) / span * 100;
+  };
+  const cardChips = (b) => {
+    const out = [];
+    const lv = (no) => (no && levels[no] != null ? levels[no] : null);
+    const tl = lv(b.titular_member_no);
+    if (tl != null) out.push({ level: tl });
+    (b.players || []).forEach(p => { const l = lv(p.member_no); if (l != null) out.push({ level: l }); });
+    if (b.open_spots > 0) for (let i = 0; i < b.open_spots; i++) out.push({ free: true });
+    return out;
+  };
+  const wdL = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  const dt = new Date(date + 'T12:00:00');
+  const dateStr = wdL[dt.getDay()] + ' ' + dt.getDate();
+  const safeJson = (o) => JSON.stringify(o).replace(/</g, '\\u003c');
+  return {
+    date, tabs, tabLabel, today, courts, hours, hoursCount: span / 60,
+    bookings: act, blocks, levels, levelColor, pct, cardChips,
+    stats: { ocup, open, free },
+    dateStr, minToStr,
+    prev: date > today ? addDays(date, -1) : null,
+    next: date < maxDate ? addDays(date, 1) : null,
+    bookingsJson: safeJson(act.map(b => ({
+      id: b.id, court_id: b.court_id, court_name: b.court_name,
+      start_min: b.start_min, end_min: b.end_min,
+      titular_name: b.titular_name, titular_member_no: b.titular_member_no,
+      open_spots: b.open_spots, payment_status: b.payment_status,
+      players: (b.players || []).map(p => ({ name: p.name, member_no: p.member_no })),
+    }))),
+    levelsJson: safeJson(levels),
+    staffBase: urls.staffBase, staffDay: urls.staffDay, anularPrefix: urls.anularPrefix,
+  };
+}
 module.exports = {
   bdb, cfg, setCfg, getConfig, validateConfig, parseDurations,
   minToStr, strToMin, todayStr, addDays, nowMin, overlaps, normPhone, weekdayName,
@@ -1005,4 +1086,5 @@ module.exports = {
   validateBlock, affectedBookings, createBlock, deleteBlock, listBlocks,
   setBookingPaid, addCharge, setChargePaid, deleteCharge, dayDetail, pendingPayments,
   dueReminders, checkReminders, sendEmail,
+  levelColor, staffTimeline,
 };

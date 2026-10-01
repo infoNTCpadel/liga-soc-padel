@@ -1,0 +1,159 @@
+<% /* Parrilla visual estilo timeline para el personal (admin/recepción).
+     - Eje de horas, una fila por pista, tarjetas posicionadas por hora.
+     - Pulsar una tarjeta abre el detalle debajo (jugadores, anular).
+     - Pulsar un hueco libre abre el formulario de nueva reserva con pista/fecha/hora. */ %>
+<style>
+.tl-wrap { overflow-x: auto; border: 1px solid #2a2a35; border-radius: 12px; background: #14141b; }
+.tl-inner { min-width: 900px; }
+.tl-head, .tl-row { display: flex; }
+.tl-corner { flex: 0 0 96px; }
+.tl-axis { position: relative; flex: 1; height: 26px; }
+.tl-axis span { position: absolute; transform: translateX(-50%); font-size: .72rem; color: #8a8a96; white-space: nowrap; }
+.tl-row { border-top: 1px solid #23232c; }
+.tl-label { flex: 0 0 96px; padding: .55em .6em; font-weight: 700; font-size: .85rem; }
+.tl-track { position: relative; flex: 1; min-height: 62px; cursor: crosshair;
+  background-image: linear-gradient(to right, #23232c 1px, transparent 1px);
+  background-size: calc(100% / <%= hoursCount %>) 100%; }
+.tl-card { position: absolute; top: 5px; bottom: 5px; border: 1.5px solid #4ade80; border-radius: 10px;
+  background: #1b1b26; padding: 4px 7px; overflow: hidden; cursor: pointer; font-size: .78rem; line-height: 1.25; }
+.tl-card.open { border-color: #a78bfa; }
+.tl-card .t { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tl-card .s { color: #9a9aa6; font-size: .7rem; white-space: nowrap; }
+.tl-card .chips { margin-top: 2px; white-space: nowrap; }
+.lchip { display: inline-block; font-size: .68rem; font-weight: 700; border-radius: 6px; padding: 1px 6px; margin-right: 3px; color: #111; }
+.lchip.free { background: transparent; border: 1.5px dashed #a78bfa; color: #a78bfa; padding: 0 5px; cursor: pointer; }
+.tl-block { position: absolute; top: 5px; bottom: 5px; border-radius: 10px; color: #cfcfda;
+  background: repeating-linear-gradient(45deg, #26262f, #26262f 8px, #202028 8px, #202028 16px);
+  border: 1px solid #3a3a46; font-size: .72rem; padding: 4px 7px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tl-detail { margin-top: 1em; border: 1px solid #3a3a5a; border-radius: 12px; background: #17171f; padding: 1em 1.2em; display: none; }
+.tl-detail h3 { margin: 0 0 .2em; }
+.tl-detail ul { margin: .5em 0; padding-left: 1.2em; }
+.tl-stats { display: flex; gap: .8em; margin: .9em 0; flex-wrap: wrap; }
+.tl-stat { flex: 1; min-width: 150px; background: #17171f; border: 1px solid #2a2a35; border-radius: 12px; padding: .7em 1em; }
+.tl-stat b { font-size: 1.5rem; display: block; }
+.tl-stat span { color: #9a9aa6; font-size: .85rem; }
+.tl-tabs { display: flex; gap: .4em; flex-wrap: wrap; margin-bottom: .6em; }
+.tl-legend { display: flex; gap: 1em; flex-wrap: wrap; color: #9a9aa6; font-size: .8rem; margin-top: .8em; align-items: center; }
+</style>
+
+<h2>Parrilla visual · <%= dateStr %></h2>
+<div class="tl-tabs">
+  <% for (const d of tabs) { %>
+    <a class="btn small <%= d === date ? '' : 'ghost' %>" href="<%= staffBase %>/parrilla?date=<%= d %>"><%= tabLabel(d) %></a>
+  <% } %>
+</div>
+
+<% if (prev || next) { %>
+<p>
+  <% if (prev) { %><a class="btn small ghost" href="<%= staffBase %>/parrilla?date=<%= prev %>">← Día anterior</a><% } %>
+  <% if (next) { %><a class="btn small ghost" href="<%= staffBase %>/parrilla?date=<%= next %>">Día siguiente →</a><% } %>
+  <a class="btn small ghost" href="<%= staffDay %>?date=<%= date %>">Vista del día</a>
+</p>
+<% } %>
+
+<% if (!hours) { %>
+  <p class="mut">El club está cerrado este día.</p>
+<% } else { %>
+
+<div class="tl-stats">
+  <div class="tl-stat"><b><%= stats.ocup %>%</b><span>ocupación</span></div>
+  <div class="tl-stat"><b><%= stats.open %></b><span>partidos buscan jugadores</span></div>
+  <div class="tl-stat"><b><%= stats.free %></b><span>huecos libres</span></div>
+</div>
+
+<div class="tl-wrap"><div class="tl-inner">
+  <div class="tl-head">
+    <div class="tl-corner"></div>
+    <div class="tl-axis">
+      <% for (let h = hours.open_min; h <= hours.close_min; h += 60) { %>
+        <span style="left:<%= ((h - hours.open_min) / (hours.close_min - hours.open_min) * 100).toFixed(2) %>%"><%= minToStr(h) %></span>
+      <% } %>
+    </div>
+  </div>
+  <% for (const c of courts) { %>
+  <div class="tl-row">
+    <div class="tl-label"><%= c.name %></div>
+    <div class="tl-track" data-court="<%= c.id %>" data-courtname="<%= c.name %>">
+      <% for (const bl of blocks.filter(b => b.court_id === c.id)) { %>
+        <div class="tl-block" style="left:<%= pct(bl.start_min) %>%;width:<%= pct(bl.end_min) - pct(bl.start_min) %>%" title="<%= bl.reason || 'Bloqueo' %> · <%= minToStr(bl.start_min) %>–<%= minToStr(bl.end_min) %>"><%= bl.reason || 'Bloqueo' %></div>
+      <% } %>
+      <% for (const b of bookings.filter(b => b.court_id === c.id)) { %>
+        <div class="tl-card <%= b.open_spots > 0 ? 'open' : '' %>" data-bid="<%= b.id %>"
+             style="left:<%= pct(b.start_min) %>%;width:<%= Math.max(pct(b.end_min) - pct(b.start_min), 3) %>%"
+             title="<%= b.open_spots > 0 ? 'Partido abierto' : b.titular_name %> · <%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %>">
+          <div class="t"><%= b.open_spots > 0 ? 'Partido abierto' : b.titular_name %></div>
+          <div class="s"><%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %><%= b.payment_status === 'pending' ? ' · pdte. pago' : '' %></div>
+          <div class="chips">
+            <% for (const pl of cardChips(b)) { %>
+              <% if (pl.free) { %><span class="lchip free">+</span>
+              <% } else if (pl.level != null) { %><span class="lchip" style="background:<%= levelColor(pl.level) %>"><%= pl.level %></span><% } %>
+            <% } %>
+          </div>
+        </div>
+      <% } %>
+    </div>
+  </div>
+  <% } %>
+</div></div>
+
+<div class="tl-legend">
+  <span><span class="lchip" style="background:#34d399">2.0</span> iniciación</span>
+  <span><span class="lchip" style="background:#a78bfa">3.0</span> intermedio</span>
+  <span><span class="lchip" style="background:#fbbf24">4.0</span> avanzado</span>
+  <span><span class="lchip" style="background:#fb923c">5.0</span> competición</span>
+  <span><span class="lchip free">+</span> plaza libre</span>
+  <span>Toca una reserva para ver quién juega. Toca un hueco libre para crear una reserva.</span>
+</div>
+
+<div class="tl-detail" id="tlDetail"></div>
+
+<script>
+(function() {
+  const open = <%= hours.open_min %>, close = <%= hours.close_min %>;
+  const date = '<%= date %>', staffBase = '<%= staffBase %>', staffDay = '<%= staffDay %>';
+  const anularPrefix = '<%- anularPrefix %>';
+  const wd = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  const bookings = <%- bookingsJson %>;
+  const levels = <%- levelsJson %>;
+  const byId = {}; bookings.forEach(b => byId[b.id] = b);
+  const lvlColor = (l) => l < 2.5 ? '#34d399' : l < 4 ? '#a78bfa' : l < 5 ? '#fbbf24' : '#fb923c';
+  const mm = (m) => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+  const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  document.querySelectorAll('.tl-track').forEach(track => {
+    track.addEventListener('click', (e) => {
+      if (e.target.closest('.tl-card')) return; // la tarjeta tiene su propio gesto
+      const r = track.getBoundingClientRect();
+      const frac = Math.min(Math.max((e.clientX - r.left) / r.width, 0), 0.999);
+      let mins = open + Math.floor(frac * (close - open));
+      mins = Math.max(open, Math.min(close - 30, mins - (mins % 15))); // múltiplo de 15
+      location.href = staffBase + '/nueva?date=' + date + '&court=' + track.dataset.court + '&desde=' + mins;
+    });
+  });
+
+  const detail = document.getElementById('tlDetail');
+  document.querySelectorAll('.tl-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const b = byId[card.dataset.bid]; if (!b) return;
+      const d = new Date(date + 'T12:00:00');
+      const names = [{ name: b.titular_name, member_no: b.titular_member_no }].concat(b.players || []);
+      const lis = names.map(p => {
+        const lv = p.member_no && levels[p.member_no] != null ? levels[p.member_no] : null;
+        return '<li>' + esc(p.name) + (lv != null ? ' <span class="lchip" style="background:' + lvlColor(lv) + '">' + lv + '</span>' : '') + '</li>';
+      }).join('');
+      detail.innerHTML =
+        '<h3>' + wd[d.getDay()] + ' ' + mm(b.start_min) + ' · ' + esc(b.court_name) + '</h3>' +
+        '<p class="mut" style="margin:.2em 0">' + (b.open_spots > 0 ? 'Partido abierto · ' + b.open_spots + ' plaza(s) libre(s)' : 'Pista entera') +
+        (b.payment_status === 'pending' ? ' · <span class="badge warn">Pago pendiente</span>' : ' · <span class="badge ok">Pagado</span>') + '</p>' +
+        '<ul>' + lis + '</ul>' +
+        '<p><form method="post" action="' + anularPrefix + b.id + '/anular" style="display:inline" onsubmit="return confirm(\'¿Anular esta reserva?\')">' +
+        '<button class="btn small danger" type="submit">Anular</button></form> ' +
+        '<a class="btn small ghost" href="' + staffDay + '?date=' + date + '">Vista del día</a></p>';
+      detail.style.display = 'block';
+      detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+  });
+})();
+</script>
+<% } %>
