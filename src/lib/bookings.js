@@ -192,6 +192,13 @@ function strToMin(s) {
 function todayStr(d = new Date()) {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
+// Día de la semana en español para una fecha AAAA-MM-DD (cálculo UTC: inmune al huso del servidor).
+const WD_ES = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+function weekdayName(dateStr) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr || '');
+  if (!m) return '';
+  return WD_ES[new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).getUTCDay()];
+}
 function addDays(dateStr, n) {
   const [y, m, d] = dateStr.split('-').map(Number);
   const dt = new Date(y, m - 1, d + n);
@@ -879,7 +886,7 @@ async function checkReminders() {
 
 module.exports = {
   bdb, cfg, setCfg, getConfig, validateConfig, parseDurations,
-  minToStr, strToMin, todayStr, addDays, nowMin, overlaps, normPhone,
+  minToStr, strToMin, todayStr, addDays, nowMin, overlaps, normPhone, weekdayName,
   getMember, listMembers, upsertMember, setMemberActive, updateMemberContact, importMembers,
   validPin, setPin, hasPin, checkPin, resetPin,
   dayBookings, dayBlocks, freeSegments, reachableSet, validStarts,

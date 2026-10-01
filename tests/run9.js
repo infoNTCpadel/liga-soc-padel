@@ -352,7 +352,7 @@ process.env.LLM_API_KEY = 'test-key';
       (messages) => {
         const note = messages.find(m => m.role === 'system' && m.content.includes('usa el id exacto en preparar_anulacion'));
         ok(!!note, 'el turno recibe la nota con los ids reales de las reservas');
-        const m = note.content.match(/#(\d+): Pista 1, (\d{4}-\d{2}-\d{2})/);
+        const m = note.content.match(/#(\d+): \S+ (\d{4}-\d{2}-\d{2}) \d{2}:\d{2}, Pista 1/);
         ok(!!m && parseInt(m[1], 10) === target.id, 'la nota trae el id real de la reserva de pista 1');
         return { content: null, toolCalls: [{ id: 't1', name: 'preparar_anulacion', args: { reserva_id: parseInt(m[1], 10) } }], usage: { in: 1, out: 1 } };
       },
@@ -401,6 +401,21 @@ process.env.LLM_API_KEY = 'test-key';
     ]),
   });
   ok(r.reply && r.reply.includes('2 reservas activas'), 'el chat comunica el tope al socio');
+}
+
+// ---- 17. dia_semana: el backend calcula el día de la semana (el modelo no) ----
+{
+  // 2026-10-04 fue domingo, 05 lunes, 06 martes, 07 miércoles (verificado por calendario)
+  ok(B.weekdayName('2026-10-04') === 'domingo', 'weekdayName: 2026-10-04 es domingo');
+  ok(B.weekdayName('2026-10-05') === 'lunes', 'weekdayName: 2026-10-05 es lunes');
+  ok(B.weekdayName('2026-10-06') === 'martes', 'weekdayName: 2026-10-06 es martes');
+  ok(B.weekdayName('2026-10-07') === 'miércoles', 'weekdayName: 2026-10-07 es miércoles');
+  const seen = Chat.dispatch('mis_reservas', {}, { memberNo: '10', courts: [] });
+  ok(seen.ok && seen.reservas.length >= 2, 'mis_reservas devuelve las reservas del socio 10');
+  const allOk = seen.reservas.every(b => b.dia_semana === B.weekdayName(b.fecha));
+  ok(allOk, 'cada reserva trae su dia_semana correcto');
+  const disp = Chat.dispatch('ver_disponibilidad', { fecha: D2 }, { memberNo: '10', courts: [] });
+  ok(disp.ok && disp.dia_semana === B.weekdayName(D2), 'ver_disponibilidad trae dia_semana');
 }
 
 console.log(`\n${pass}/${pass + fail} pruebas del chat superadas`);

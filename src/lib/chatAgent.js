@@ -106,7 +106,7 @@ function resolveListedId(listed, rawId) {
 function trackDraftCall(session, name, args, r) {
   if (!session || typeof session !== 'object') return;
   if (name === 'mis_reservas' && r && r.ok && Array.isArray(r.reservas))
-    session.lastBookings = r.reservas.map(b => ({ id: b.id, pista: b.pista, fecha: b.fecha, inicio: b.inicio, anulable: b.anulable }));
+    session.lastBookings = r.reservas.map(b => ({ id: b.id, pista: b.pista, fecha: b.fecha, dia: b.dia_semana, inicio: b.inicio, anulable: b.anulable }));
   if (name === 'ver_partidos_abiertos' && r && r.ok && Array.isArray(r.partidos))
     session.lastOpenMatches = r.partidos.map(p => ({ id: p.id, pista: p.pista, inicio: p.inicio }));
   if ((name === 'preparar_reserva' || name === 'preparar_anulacion') && r && r.ok && r.draft_id) {
@@ -138,7 +138,7 @@ function listedIdsNote(session) {
   const lb = session && session.lastBookings;
   if (lb && lb.length)
     parts.push('Reservas del socio (usa el id exacto en preparar_anulacion): ' +
-      lb.map(b => `#${b.id}: ${b.pista}, ${b.fecha} ${b.inicio}`).join(' | '));
+      lb.map(b => `#${b.id}: ${b.dia || ''} ${b.fecha} ${b.inicio}, ${b.pista}`).join(' | '));
   const lm = session && session.lastOpenMatches;
   if (lm && lm.length)
     parts.push('Partidos abiertos mostrados (usa el id exacto en apuntarse_partido): ' +
@@ -197,7 +197,7 @@ const TOOLS = [
       required: ['fecha'] } } },
   { type: 'function', function: {
     name: 'mis_reservas',
-    description: 'Próximas reservas del socio identificado (con id para anular). Cada una trae fecha (AAAA-MM-DD) y "anulable" (true si aún se puede anular online). Muestra SIEMPRE la fecha al listarlas.',
+    description: 'Próximas reservas del socio identificado (con id para anular). Cada una trae fecha (AAAA-MM-DD), dia_semana ya calculado y "anulable" (true si aún se puede anular online). Muestra SIEMPRE la fecha con su dia_semana al listarlas; usa el dia_semana que te doy, no lo calcules tú.',
     parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: {
     name: 'preparar_reserva',
@@ -279,7 +279,7 @@ function dispatch(name, args, ctx) {
           }
           return { pista: court.name, id: court.id, huecos };
         });
-        return toolResult(true, { fecha: a.fecha, pistas });
+        return toolResult(true, { fecha: a.fecha, dia_semana: B.weekdayName(a.fecha), pistas });
       }
       case 'mis_reservas': {
         if (!ctx.memberNo) return toolResult(false, 'Necesito saber quién eres: dime tu nº de socio y tu PIN.');
@@ -287,12 +287,12 @@ function dispatch(name, args, ctx) {
         const cfg = B.getConfig();
         return toolResult(true, {
           reservas: area.bookings.map(b => ({
-            id: b.id, fecha: b.date, inicio: B.minToStr(b.start_min), fin: B.minToStr(b.end_min),
+            id: b.id, fecha: b.date, dia_semana: B.weekdayName(b.date), inicio: B.minToStr(b.start_min), fin: B.minToStr(b.end_min),
             pista: b.court_name, jugadores: b.players.map(p => p.name),
             plazas_libres: b.open_spots,
             anulable: cancelHoursLeft(b) >= cfg.cancel_limit_h,
           })),
-          ofertas_espera: area.offers.map(w => ({ id: w.id, fecha: w.date, inicio: B.minToStr(w.start_min), pista: w.court_name })),
+          ofertas_espera: area.offers.map(w => ({ id: w.id, fecha: w.date, dia_semana: B.weekdayName(w.date), inicio: B.minToStr(w.start_min), pista: w.court_name })),
         });
       }
       case 'preparar_reserva': {
@@ -318,7 +318,7 @@ function dispatch(name, args, ctx) {
         if (verr) return toolResult(false, verr);
         const member = B.getMember(ctx.memberNo);
         const names = [member.name, ...extras.map(e => e.name)].filter(Boolean).join(', ');
-        const resumen = `${court.name} · ${a.fecha.split('-').reverse().join('/')} · ${B.minToStr(start_min)}–${B.minToStr(start_min + d)} (${d} min) · ${names}`;
+        const resumen = `${B.weekdayName(a.fecha)} ${a.fecha.split('-').reverse().join('/')} · ${court.name} · ${B.minToStr(start_min)}–${B.minToStr(start_min + d)} (${d} min) · ${names}`;
         const id = newDraft('reserva', ctx.memberNo, {
           court_id: court.id, court_name: court.name, date: a.fecha,
           start_min, duration_min: d, titular_member_no: ctx.memberNo, players: extras,
@@ -386,7 +386,7 @@ function dispatch(name, args, ctx) {
             apuntados: players.map(p => p.name),
           });
         }
-        return toolResult(true, { fecha, partidos });
+        return toolResult(true, { fecha, dia_semana: B.weekdayName(fecha), partidos });
       }
       case 'apuntarse_partido': {
         if (!ctx.memberNo) return toolResult(false, 'Necesito saber quién eres: dime tu nº de socio y tu PIN.');
@@ -452,7 +452,8 @@ Reglas de actuación:
 5. Si falta un dato (pista, hora), pregunta antes de llamar a la herramienta.
 6. Para anular: si aún no has mostrado sus reservas en esta conversación, llama primero a mis_reservas para obtener los ids; si varias reservas encajan con lo que pide (misma pista, varias fechas), pregunta cuál antes de preparar nada. Después llama a "preparar_anulacion" y deja que la herramienta decida (su mensaje de error es el que vale). No rehúses una anulación por tu cuenta ni calcules tú el límite de horas. El campo "anulable" de mis_reservas te dice de un vistazo cuáles aún se pueden anular.
 7. Límite: cada socio puede tener como máximo 2 reservas activas (aún no jugadas) a la vez; si preparar_reserva lo rechaza por eso, explícaselo y sugiere anular alguna o esperar a que termine.
-7. Respuestas cortas, sin tecnicismos. Las horas en formato HH:MM y las fechas como "viernes 3/10".`;
+8. Las herramientas te dan el día de la semana ya calculado (dia_semana). Úsalo tal cual al hablar de fechas ("lunes 5/10"); no calcules tú el día de la semana a partir de la fecha.
+9. Respuestas cortas, sin tecnicismos. Las horas en formato HH:MM y las fechas como "viernes 3/10".`;
 }
 
 // ------------------------------------------------------------ llamada al LLM
