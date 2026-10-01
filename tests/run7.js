@@ -76,6 +76,7 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
   // 3. Parrilla pública por tramos
   r = await anon.req('GET', '/reservar?date=' + TOM);
   ok(r.statusCode === 200 && r.text.includes('Pista 1') && r.text.includes('Libre') && r.text.includes('08:00'), 'parrilla pública con tramos libres');
+  ok(r.text.includes('blk free') && r.text.includes('court%3D1'), 'los tramos libres son enlaces clicables a reservar');
 
   // 4. Reserva: el titular sale de la sesión, 3 jugadores opcionales
   r = await pub.req('GET', '/reservar/nueva?court=1&date=' + TOM + '&desde=480');

@@ -600,7 +600,7 @@ function daySchedule(date, viewer, courts) {
     for (const bl of blocks.filter(x => x.court_id === court.id))
       items.push({ type: 'block', start: bl.start_min, end: bl.end_min, reason: bl.reason });
     for (const g of freeSegments(court.id, date))
-      if (g.type === 'free') items.push({ type: 'free', start: g.start, end: g.end });
+      items.push({ type: 'free', start: g.start, end: g.end });
     items.sort((a, b2) => a.start - b2.start);
     return { court, items };
   });

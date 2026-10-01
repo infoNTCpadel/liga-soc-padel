@@ -152,5 +152,9 @@ ok(B.joinOpenMatch(jb.id, B.getMember('J4')).error, 'cerrado: nadie más puede u
 B.closeOpenMatch(jb.id);
 eq(B.getBooking(jb.id).open_spots, 0, 'closeOpenMatch deja 0 plazas');
 
+// daySchedule muestra los tramos libres (bug: se filtraban y la parrilla salía vacía)
+const sch = B.daySchedule('2030-01-01', null, [{ id: 1, name: 'P1' }]);
+ok(sch[0].items.some(i => i.type === 'free'), 'daySchedule incluye tramos libres');
+
 console.log(`\n${pass} OK, ${fail} FALLOS`);
 process.exit(fail ? 1 : 0);
