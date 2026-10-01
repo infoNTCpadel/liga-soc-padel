@@ -107,6 +107,7 @@ for (const sql of [
   'ALTER TABLE court_blocks ADD COLUMN date_from TEXT NOT NULL DEFAULT \'\'',
   'ALTER TABLE court_blocks ADD COLUMN date_to TEXT NOT NULL DEFAULT \'\'',
   'ALTER TABLE waitlist ADD COLUMN duration_min INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE bookings ADD COLUMN kind TEXT NOT NULL DEFAULT \'reserva\'',
 ]) {
   try { bdb.exec(sql); } catch (e) { /* ya existe */ }
 }
@@ -723,12 +724,12 @@ function slotCell(court_id, date, slot, viewer) {
   if (b) {
     if (b.open_spots > 0 && openVisibleTo(b.titular_member_no, b.booker_level, viewer))
       return { st: 'open', booking: b, range: levelRangeText(b.booker_level) };
-    return { st: 'busy' };
+    return { st: 'busy', booking: b };
   }
   const bl = bdb.prepare(
-    `SELECT 1 FROM court_blocks WHERE court_id = ? AND ? BETWEEN date_from AND date_to
+    `SELECT reason FROM court_blocks WHERE court_id = ? AND ? BETWEEN date_from AND date_to
      AND start_min <= ? AND ? < end_min LIMIT 1`).get(court_id, date, slot, slot);
-  if (bl) return { st: 'busy' };
+  if (bl) return { st: 'blocked', block: { reason: bl.reason || 'Bloqueo' } };
   const d = fitDuration(court_id, date, slot);
   return d ? { st: 'free', duration: d } : { st: 'unavailable' };
 }
@@ -997,6 +998,17 @@ function levelColor(l) {
   if (l < 5) return '#fbbf24';
   return '#fb923c';
 }
+// Color de cada reserva en la parrilla del personal, por tipo/estado:
+// partido abierto = azul, reservada = rojo, clase = morado, torneo = ámbar, bloqueo = gris.
+function bookingColor(b) {
+  if (!b) return '#9aa88f';
+  if (b.open_spots > 0) return '#60a5fa';
+  switch (b.kind) {
+    case 'clase': return '#a78bfa';
+    case 'torneo': return '#fbbf24';
+    default: return '#f87171';
+  }
+}
 function staffGrid(date, urls, courts) {
   const c = getConfig();
   const today = todayStr(), maxDate = addDays(today, c.days_ahead);
@@ -1052,7 +1064,7 @@ function staffGrid(date, urls, courts) {
   const safeJson = (o) => JSON.stringify(o).replace(/</g, '\\u003c');
   return {
     date, tabs, tabLabel, today, courts, hours, hoursCount: span / 60,
-    bookings: act, blocks, levels, levelColor, pct, cardChips,
+    bookings: act, blocks, levels, levelColor, bookingColor, pct, cardChips,
     stats: { ocup, open, free },
     dateStr, minToStr,
     prev: date > today ? addDays(date, -1) : null,
@@ -1062,6 +1074,7 @@ function staffGrid(date, urls, courts) {
       start_min: b.start_min, end_min: b.end_min,
       titular_name: b.titular_name, titular_member_no: b.titular_member_no,
       open_spots: b.open_spots, payment_status: b.payment_status,
+      kind: b.kind || 'reserva',
       players: (b.players || []).map(p => ({ name: p.name, member_no: p.member_no })),
     }))),
     levelsJson: safeJson(levels),
@@ -1086,5 +1099,5 @@ module.exports = {
   validateBlock, affectedBookings, createBlock, deleteBlock, listBlocks,
   setBookingPaid, addCharge, setChargePaid, deleteCharge, dayDetail, pendingPayments,
   dueReminders, checkReminders, sendEmail,
-  levelColor, staffGrid,
+  levelColor, staffGrid, bookingColor,
 };

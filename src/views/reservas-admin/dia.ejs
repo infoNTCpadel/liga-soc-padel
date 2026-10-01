@@ -1,3 +1,12 @@
+<style>
+.prow{position:relative}
+.prow .psearch{width:100%;box-sizing:border-box}
+.plist{position:absolute;z-index:30;left:0;right:0;background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:8px;max-height:11em;overflow:auto;box-shadow:0 8px 20px rgba(0,0,0,.35)}
+.plist>div{padding:.45em .6em;cursor:pointer}
+.plist>div:hover{background:#2b351f}
+.pill{display:inline-block;background:#2b351f;border:1px solid var(--lime);color:var(--lime);border-radius:999px;padding:0 .55em;font-size:.85em;margin-right:.3em}
+.pill.inv{background:#3a2f14;border-color:var(--amber);color:var(--amber)}
+</style>
 <h1>Reservas · <%= date.slice(8,10) %>/<%= date.slice(5,7) %>/<%= date.slice(0,4) %></h1>
 <% if (info) { %><div class="alert ok"><%= info %></div><% } %>
 
@@ -32,8 +41,13 @@
           <summary class="mut" style="cursor:pointer;font-size:.85em">Completar jugadores</summary>
           <form method="post" action="/admin/reservas/reservas/<%= b.id %>/jugadores" style="margin-top:.3em">
             <% for (let i = 0; i < 3; i++) { const p = b.players[i + 1]; %>
-            <input type="text" name="p<%= i + 1 %>_name" placeholder="Nombre" value="<%= p ? p.name : '' %>" size="10">
-            <input type="text" name="p<%= i + 1 %>_member" placeholder="nº socio" value="<%= p ? p.member_no : '' %>" size="6" inputmode="numeric"><br>
+            <div class="prow" style="margin-bottom:.35em">
+              <input type="text" class="psearch" placeholder="Buscar socio por nombre, nº o móvil…" autocomplete="off" value="<%= p ? p.name + (p.member_no ? ' (' + p.member_no + ')' : '') : '' %>">
+              <input type="hidden" class="pname" name="p<%= i + 1 %>_name" value="<%= p ? p.name : '' %>">
+              <input type="hidden" class="pmember" name="p<%= i + 1 %>_member" value="<%= p ? p.member_no : '' %>">
+              <div class="plist" style="display:none"></div>
+              <div class="pinfo mut" style="font-size:.85em"></div>
+            </div>
             <% } %>
             <button class="btn small ghost" type="submit">Guardar</button>
           </form>
@@ -78,3 +92,48 @@
   </table>
   <% if (!bookings.length) { %><p class="mut">No hay reservas este día.</p><% } %>
 </div>
+<script>
+(function(){
+  const searchBase = '/admin/reservas/socios/buscar';
+  let timer = null;
+  document.querySelectorAll('.prow').forEach(row => {
+    const input = row.querySelector('.psearch'), list = row.querySelector('.plist'),
+      hname = row.querySelector('.pname'), hmem = row.querySelector('.pmember'),
+      info = row.querySelector('.pinfo');
+    function paint() {
+      const n = hname.value.trim(), m = hmem.value.trim();
+      if (!n) { info.innerHTML = ''; return; }
+      info.innerHTML = m ? '<span class="pill">Socio ' + m + '</span>' : '<span class="pill inv">Invitado</span>';
+    }
+    function pick(s) {
+      hname.value = s.name; hmem.value = s.member_no;
+      input.value = s.name + ' (' + s.member_no + ')';
+      list.style.display = 'none'; paint();
+    }
+    input.addEventListener('input', () => {
+      hname.value = input.value.trim(); hmem.value = ''; paint();
+      clearTimeout(timer);
+      const q = input.value.trim();
+      if (q.length < 2) { list.style.display = 'none'; return; }
+      timer = setTimeout(() => {
+        fetch(searchBase + '?q=' + encodeURIComponent(q))
+          .then(r => r.json()).then(arr => {
+            if (!arr.length) { list.style.display = 'none'; return; }
+            list.innerHTML = '';
+            arr.forEach(s => {
+              const d = document.createElement('div');
+              d.textContent = s.name + ' · socio ' + s.member_no + (s.phone ? ' · ' + s.phone : '');
+              d.addEventListener('mousedown', () => pick(s));
+              list.appendChild(d);
+            });
+            list.style.display = '';
+          })
+          .catch(() => { info.innerHTML = '<span class="pill inv">No se pudo buscar: recarga la página</span>'; });
+      }, 250);
+    });
+    input.addEventListener('blur', () => setTimeout(() => list.style.display = 'none', 200));
+    input.addEventListener('focus', () => { if (list.children.length) list.style.display = ''; });
+    paint();
+  });
+})();
+</script>

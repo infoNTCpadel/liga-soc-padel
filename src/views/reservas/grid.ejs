@@ -76,10 +76,8 @@ a.chip.free:hover{background:#2b351f;color:var(--lime)}
 <% } %>
 </style>
 <div class="slotwrap"><table class="slots">
-  <% const CC = ['#8b7cf6', '#34d399', '#fbbf24', '#fb923c', '#7cc7ff', '#f472b6']; %>
-  <% const ccByCourt = {}; if (staff) { courts.forEach((ct, i) => { ccByCourt[ct.id] = CC[i % CC.length]; }); } %>
   <% const bmap = {}; if (staff && typeof bookings !== 'undefined') { for (const b of bookings) bmap[b.id] = b; } %>
-  <thead><tr><th></th><% for (const court of courts) { %><th><% if (staff) { %><span style="color:<%= ccByCourt[court.id] %>">●</span> <% } %><%= court.name %></th><% } %></tr></thead>
+  <thead><tr><th></th><% for (const court of courts) { %><th><%= court.name %></th><% } %></tr></thead>
   <tbody>
   <% for (const row of rows) { %>
     <tr>
@@ -93,17 +91,20 @@ a.chip.free:hover{background:#2b351f;color:var(--lime)}
         } else if ((cell.st === 'open' || cell.st === 'busy') && staff && cell.booking && bmap[cell.booking.id]) {
           const b = bmap[cell.booking.id];
           const chips = cardChips(b);
-          const cc = ccByCourt[b.court_id] || '#8b7cf6';
+          const cc = bookingColor(b);
           const bname = b.open_spots > 0 ? 'Partido abierto' : b.titular_name;
       %><td><button type="button" class="chip busy<%= b.open_spots > 0 ? ' is-open' : '' %>" data-bid="<%= b.id %>" style="border-color:<%= cc %>;background:<%= cc %>1f" title="<%= bname %> · <%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %> — pulsa para ver el detalle">
         <span class="rname"><%= bname %></span>
         <span class="rtime"><%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %><% if (b.payment_status === 'pending') { %> <span class="ppend" title="Pago pendiente">●</span><% } %></span>
         <span class="rchips"><% for (const ch of chips) { %><% if (ch.free) { %><span class="lchip free">+</span><% } else { %><span class="lchip" style="background:<%= levelColor(ch.level) %>"><%= ch.level %></span><% } %><% } %></span>
       </button></td><%
+        } else if (cell.st === 'blocked' && staff) {
+          const breason = (cell.block && cell.block.reason) || 'Bloqueo';
+      %><td><span class="chip busy" style="border-color:#9aa88f;background:#9aa88f1f;cursor:default" title="<%= breason %>">Bloqueo</span></td><%
         } else if (cell.st === 'open') {
           const openHref = staff ? staffDay + '?date=' + date : '/reservar/abierto/' + cell.booking.id;
       %><td><a class="chip open" href="<%= openHref %>"><%= court.name %> · <%= cell.booking.open_spots %> <%= cell.booking.open_spots === 1 ? 'plaza' : 'plazas' %><%= cell.range ? ' · ' + cell.range : '' %></a></td><%
-        } else if (cell.st === 'busy') {
+        } else if (cell.st === 'busy' || cell.st === 'blocked') {
       %><td><span class="chip busy"><%= court.name %> · ocupada</span></td><%
         } else if (cell.st === 'past') {
       %><td><span class="chip na" title="Franja pasada"><%= minToStr(row.slot) %></span></td><%
@@ -118,8 +119,9 @@ a.chip.free:hover{background:#2b351f;color:var(--lime)}
 <div class="legend">
 <% if (staff) { %>
   <span><i style="background:transparent;border:1.5px solid var(--lime)"></i>Libre (pulsa para reservar)</span>
-  <span><i style="background:#8b7cf61f;border:1.5px solid #8b7cf6"></i>Ocupada, color de la pista (pulsa para ver el detalle)</span>
-  <span><i style="background:#8b7cf61f;border:1.5px dashed #8b7cf6"></i>Partido abierto (faltan jugadores)</span>
+  <span><i style="background:#f871711f;border:1.5px solid #f87171"></i>Reservada (pulsa para ver el detalle)</span>
+  <span><i style="background:#60a5fa1f;border:1.5px dashed #60a5fa"></i>Partido abierto (faltan jugadores)</span>
+  <span><i style="background:#9aa88f1f;border:1.5px solid #9aa88f"></i>Bloqueo</span>
   <span><span class="ppend">●</span> Pago pendiente</span>
 <% } else { %>
   <span><i style="background:#f4f1ff;border:1.5px solid #5b3df0"></i>Libre (pulsa para reservar)</span>
@@ -148,8 +150,9 @@ a.chip.free:hover{background:#2b351f;color:var(--lime)}
   function card(b){
     const pls = b.players || [];
     const free = b.open_spots || 0;
+    const kindLabel = { clase: 'Clase', torneo: 'Torneo', reserva: 'Reserva' }[b.kind] || 'Reserva';
     let h = '<h3>' + esc(b.court_name) + ' · ' + M2S(b.start_min) + '–' + M2S(b.end_min) + '</h3>';
-    h += '<p class="mut" style="margin-top:-.4em">' + (free > 0 ? 'Partido abierto · faltan ' + free + (free === 1 ? ' jugador' : ' jugadores') : 'Partido cerrado') + '</p>';
+    h += '<p class="mut" style="margin-top:-.4em">' + (free > 0 ? 'Partido abierto · faltan ' + free + (free === 1 ? ' jugador' : ' jugadores') : kindLabel + ' cerrada') + '</p>';
     h += '<ul>';
     for (const p of pls){
       const lv = (p.level !== undefined && p.level !== null && p.level !== '') ? p.level : LVL[p.member_number];
