@@ -2,6 +2,7 @@
 const express = require('express');
 const { db } = require('../db');
 const B = require('../lib/bookings');
+const Chat = require('../lib/chatAgent');
 
 const router = express.Router();
 router.use((req, res, next) => { res.locals.section = 'public'; res.locals.sub = 'reservar'; next(); });
@@ -165,6 +166,7 @@ router.get('/', (req, res) => {
     next: date < maxDate ? B.addDays(date, 1) : null,
     noCourts: courts.length === 0,
     minToStr: B.minToStr, member,
+    chatEnabled: Chat.chatConfig().enabled,
     info: req.query.ok ? 'Te has apuntado a la lista de espera. Te guardamos la plaza ' + c.hold_min + ' minutos si se libera.' : null,
     error: req.query.err || null,
   });
@@ -348,6 +350,19 @@ router.post('/abierto/:id/cerrar', requireMember, (req, res) => {
 // Buscador de socios (nombre, nº de socio o móvil) para el formulario.
 router.get('/socios/buscar', requireMember, (req, res) => {
   res.json(B.searchMembers(req.query.q || ''));
+});
+
+// ---- chat conversacional de reservas ----
+router.post('/chat', async (req, res) => {
+  const message = (req.body.message || '').toString().slice(0, 500);
+  if (!message.trim()) return res.json({ reply: 'Escríbeme tu pregunta y te ayudo con la reserva.' });
+  try {
+    const r = await Chat.runChat({ message, session: req.session });
+    res.json({ reply: r.reply, identified: r.identified === true });
+  } catch (e) {
+    console.error('chat', e.message);
+    res.json({ reply: 'Se me ha atragantado la respuesta. Prueba de nuevo o usa la parrilla.' });
+  }
 });
 
 router.get('/ok', requireMember, (req, res) => {

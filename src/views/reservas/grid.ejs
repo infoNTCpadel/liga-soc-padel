@@ -104,3 +104,5 @@ a.chip.open:hover{background:#d9f0e3}
   <p class="mut"><a href="/reservar/entrar">Entra</a> para apuntarte a la lista de espera.</p>
   <% } %>
 </details>
+
+<% if (typeof chatEnabled !== 'undefined' && chatEnabled) { %><%- include('chat-widget') %><% } %>
