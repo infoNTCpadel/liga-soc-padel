@@ -128,9 +128,12 @@ router.get('/nueva', (req, res) => {
   const courts = activeCourts();
   const court = courts.find(x => x.id === parseInt(req.query.court, 10)) || null;
   const desde = parseInt(req.query.desde, 10);
+  const durQ = parseInt(req.query.duracion, 10);
   const d = {
     action: '/admin/reservas/nueva', backUrl: '/admin/reservas/dia?date=' + date,
     error: null, date, courts, court, config: B.getConfig(), minToStr: B.minToStr,
+    desde: Number.isInteger(desde) ? desde : null,
+    duracion: B.getConfig().durations.includes(durQ) ? durQ : null,
     segs: court && !Number.isInteger(desde) ? B.freeSegments(court.id, date) : null,
     seg: null, starts: null,
   };
@@ -148,9 +151,12 @@ router.post('/nueva', (req, res) => {
   const desde = parseInt(req.body.desde, 10);
   const render = (error) => {
     const seg = court && Number.isInteger(desde) ? B.freeSegments(court.id, date).find(g => desde >= g.start && desde < g.end) : null;
+    const durB = parseInt(req.body.duration_min, 10);
     res.renderPage('reservas/staff-nueva', {
       action: '/admin/reservas/nueva', backUrl: '/admin/reservas/dia?date=' + date,
       error, date, courts, court: court || null, config: B.getConfig(), minToStr: B.minToStr,
+      desde: Number.isInteger(desde) ? desde : null,
+      duracion: B.getConfig().durations.includes(durB) ? durB : null,
       segs: null, seg, starts: seg ? B.bookableStarts(seg.start, seg.end, date) : null,
     });
   };

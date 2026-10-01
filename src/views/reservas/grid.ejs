@@ -62,8 +62,8 @@ table.slots tbody th{background:var(--card);color:var(--mut)}
 .chip.free{border:1.5px solid var(--lime);color:var(--lime);background:transparent}
 a.chip.free:hover{background:#2b351f;color:var(--lime)}
 .chip.busy{background:#232b1c;color:var(--txt);border:1.5px solid var(--line);cursor:pointer;text-align:left;min-width:9em;font:inherit}
-.chip.busy:hover{border-color:var(--lime)}
-.chip.busy.is-open{border-color:var(--amber)}
+.chip.busy:hover{filter:brightness(1.25)}
+.chip.busy.is-open{border-style:dashed}
 .chip.busy .rname{display:block;font-size:1em}
 .chip.busy .rtime{display:block;font-weight:400;font-size:.78em;color:var(--mut)}
 .chip.busy .rchips{display:block;margin-top:2px}
@@ -76,23 +76,27 @@ a.chip.free:hover{background:#2b351f;color:var(--lime)}
 <% } %>
 </style>
 <div class="slotwrap"><table class="slots">
-  <thead><tr><th></th><% for (const court of courts) { %><th><%= court.name %></th><% } %></tr></thead>
-  <tbody>
+  <% const CC = ['#8b7cf6', '#34d399', '#fbbf24', '#fb923c', '#7cc7ff', '#f472b6']; %>
+  <% const ccByCourt = {}; if (staff) { courts.forEach((ct, i) => { ccByCourt[ct.id] = CC[i % CC.length]; }); } %>
   <% const bmap = {}; if (staff && typeof bookings !== 'undefined') { for (const b of bookings) bmap[b.id] = b; } %>
+  <thead><tr><th></th><% for (const court of courts) { %><th><% if (staff) { %><span style="color:<%= ccByCourt[court.id] %>">●</span> <% } %><%= court.name %></th><% } %></tr></thead>
+  <tbody>
   <% for (const row of rows) { %>
     <tr>
       <th><%= minToStr(row.slot) %></th>
       <% for (const { court, cell } of row.cells) {
         if (cell.st === 'free') {
           const url = '/reservar/nueva?court=' + court.id + '&date=' + date + '&desde=' + row.slot + '&duracion=' + cell.duration;
-          const href = staff ? staffBase + '/nueva?court=' + court.id + '&date=' + date + '&desde=' + row.slot
+          const href = staff ? staffBase + '/nueva?court=' + court.id + '&date=' + date + '&desde=' + row.slot + '&duracion=' + cell.duration
             : (member ? url : '/reservar/entrar?next=' + encodeURIComponent(url));
       %><td><a class="chip free" href="<%= href %>" title="<%= cell.duration %> minutos"><%= staff ? 'Libre · ' + cell.duration + ' min' : court.name + ' · libre' %></a></td><%
         } else if ((cell.st === 'open' || cell.st === 'busy') && staff && cell.booking && bmap[cell.booking.id]) {
           const b = bmap[cell.booking.id];
           const chips = cardChips(b);
-      %><td><button type="button" class="chip busy<%= b.open_spots > 0 ? ' is-open' : '' %>" data-bid="<%= b.id %>" title="Ver detalle">
-        <span class="rname"><%= b.open_spots > 0 ? 'Partido abierto' : b.titular_name %></span>
+          const cc = ccByCourt[b.court_id] || '#8b7cf6';
+          const bname = b.open_spots > 0 ? 'Partido abierto' : b.titular_name;
+      %><td><button type="button" class="chip busy<%= b.open_spots > 0 ? ' is-open' : '' %>" data-bid="<%= b.id %>" style="border-color:<%= cc %>;background:<%= cc %>1f" title="<%= bname %> · <%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %> — pulsa para ver el detalle">
+        <span class="rname"><%= bname %></span>
         <span class="rtime"><%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %><% if (b.payment_status === 'pending') { %> <span class="ppend" title="Pago pendiente">●</span><% } %></span>
         <span class="rchips"><% for (const ch of chips) { %><% if (ch.free) { %><span class="lchip free">+</span><% } else { %><span class="lchip" style="background:<%= levelColor(ch.level) %>"><%= ch.level %></span><% } %><% } %></span>
       </button></td><%
@@ -114,8 +118,8 @@ a.chip.free:hover{background:#2b351f;color:var(--lime)}
 <div class="legend">
 <% if (staff) { %>
   <span><i style="background:transparent;border:1.5px solid var(--lime)"></i>Libre (pulsa para reservar)</span>
-  <span><i style="background:#232b1c;border:1.5px solid var(--line)"></i>Ocupada (pulsa para ver el detalle)</span>
-  <span><i style="background:#232b1c;border:1.5px solid var(--amber)"></i>Partido abierto (faltan jugadores)</span>
+  <span><i style="background:#8b7cf61f;border:1.5px solid #8b7cf6"></i>Ocupada, color de la pista (pulsa para ver el detalle)</span>
+  <span><i style="background:#8b7cf61f;border:1.5px dashed #8b7cf6"></i>Partido abierto (faltan jugadores)</span>
   <span><span class="ppend">●</span> Pago pendiente</span>
 <% } else { %>
   <span><i style="background:#f4f1ff;border:1.5px solid #5b3df0"></i>Libre (pulsa para reservar)</span>
