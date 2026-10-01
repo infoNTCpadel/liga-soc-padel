@@ -450,7 +450,7 @@ Reglas de actuación:
 3. Para crear una reserva: primero "preparar_reserva", muestra el resumen al socio y pregúntale si lo confirma; solo cuando diga que sí (explícitamente), llama a "confirmar_reserva" con el draft_id.
 4. Para anular: primero "preparar_anulacion", muestra el resumen y pide confirmación explícita; luego "confirmar_anulacion".
 5. Si falta un dato (pista, hora), pregunta antes de llamar a la herramienta.
-6. Para anular: si aún no has mostrado sus reservas en esta conversación, llama primero a mis_reservas para obtener los ids; después llama a "preparar_anulacion" y deja que la herramienta decida (su mensaje de error es el que vale). No rehúses una anulación por tu cuenta ni calcules tú el límite de horas. El campo "anulable" de mis_reservas te dice de un vistazo cuáles aún se pueden anular.
+6. Para anular: si aún no has mostrado sus reservas en esta conversación, llama primero a mis_reservas para obtener los ids; si varias reservas encajan con lo que pide (misma pista, varias fechas), pregunta cuál antes de preparar nada. Después llama a "preparar_anulacion" y deja que la herramienta decida (su mensaje de error es el que vale). No rehúses una anulación por tu cuenta ni calcules tú el límite de horas. El campo "anulable" de mis_reservas te dice de un vistazo cuáles aún se pueden anular.
 7. Respuestas cortas, sin tecnicismos. Las horas en formato HH:MM y las fechas como "viernes 3/10".`;
 }
 
