@@ -447,6 +447,33 @@ process.env.LLM_API_KEY = 'test-key';
   ok(!bad.ok && bad.error.includes('pista o la hora'), 'partido_id inválido devuelve mensaje claro');
 }
 
+{
+  // Punto 1: la reserva de hoy ya terminada no cuenta como activa.
+  B.upsertMember('20', 'Veinte Pruebas', '600000020'); B.setPin('20', '2020');
+  const today = B.todayStr(), now = B.nowMin();
+  const past = B.bdb.prepare(`INSERT INTO bookings(court_id, court_name, date, start_min, end_min, titular_member_no, titular_name)
+    VALUES(1, 'Pista 1', ?, ?, ?, '20', 'Veinte Pruebas')`).run(today, now - 180, now - 105);
+  const fut = B.bdb.prepare(`INSERT INTO bookings(court_id, court_name, date, start_min, end_min, titular_member_no, titular_name)
+    VALUES(1, 'Pista 1', ?, ?, ?, '20', 'Veinte Pruebas')`).run(today, now + 120, now + 195);
+  const area = B.memberArea('20');
+  eq(area.bookings.map(b => !!b.ya_jugada), [true, false], 'memberArea marca ya_jugada solo en la ya terminada');
+  const mr = Chat.dispatch('mis_reservas', {}, { memberNo: '20', courts: [] });
+  ok(mr.ok, 'mis_reservas responde ok');
+  eq(mr.activas, 1, 'mis_reservas devuelve activas=1 (la terminada no cuenta)');
+  eq(mr.reservas.map(b => b.ya_jugada), [true, false], 'mis_reservas incluye ya_jugada por reserva');
+  ok(mr.reservas.every(b => typeof b.anulable === 'boolean'), 'mis_reservas mantiene anulable');
+  B.bdb.prepare('DELETE FROM bookings WHERE id IN (?, ?)').run(past.lastInsertRowid, fut.lastInsertRowid);
+}
+
+{
+  // Punto 3: el buscador de staff responde igual que el del socio.
+  B.upsertMember('21', 'Ventiuno Pruebas', '600000021');
+  const s1 = B.searchMembers('ventiuno');
+  ok(s1.some(m => m.member_no === '21'), 'searchMembers encuentra por nombre');
+  ok(!B.getMember('99998'), 'nº inexistente no devuelve socio (la validación del POST lo rechazaría)');
+  B.bdb.prepare('DELETE FROM club_members WHERE member_no = ?').run('21');
+}
+
 console.log(`\n${pass}/${pass + fail} pruebas del chat superadas`);
 process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('ERROR:', e); process.exit(1); });

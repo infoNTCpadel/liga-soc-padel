@@ -106,7 +106,7 @@ function resolveListedId(listed, rawId) {
 function trackDraftCall(session, name, args, r) {
   if (!session || typeof session !== 'object') return;
   if (name === 'mis_reservas' && r && r.ok && Array.isArray(r.reservas))
-    session.lastBookings = r.reservas.map(b => ({ id: b.id, pista: b.pista, fecha: b.fecha, dia: b.dia_semana, inicio: b.inicio, anulable: b.anulable }));
+    session.lastBookings = r.reservas.map(b => ({ id: b.id, pista: b.pista, fecha: b.fecha, dia: b.dia_semana, inicio: b.inicio, anulable: b.anulable, ya_jugada: b.ya_jugada }));
   if (name === 'ver_partidos_abiertos' && r && r.ok && Array.isArray(r.partidos))
     session.lastOpenMatches = r.partidos.map(p => ({ id: p.id, pista: p.pista, fecha: r.fecha, dia: r.dia_semana, inicio: p.inicio }));
   if ((name === 'preparar_reserva' || name === 'preparar_anulacion') && r && r.ok && r.draft_id) {
@@ -197,7 +197,7 @@ const TOOLS = [
       required: ['fecha'] } } },
   { type: 'function', function: {
     name: 'mis_reservas',
-    description: 'Próximas reservas del socio identificado (con id para anular). Cada una trae fecha (AAAA-MM-DD), dia_semana ya calculado y "anulable" (true si aún se puede anular online). Muestra SIEMPRE la fecha con su dia_semana al listarlas; usa el dia_semana que te doy, no lo calcules tú.',
+    description: 'Próximas reservas del socio identificado (con id para anular). Cada una trae fecha (AAAA-MM-DD), dia_semana ya calculado, "anulable" (true si aún se puede anular online) y "ya_jugada" (true si su hora ya pasó: sale en la lista pero NO cuenta como activa). La respuesta incluye además "activas", el nº real de reservas activas para el límite: úsalo, no cuentes tú las reservas. Muestra SIEMPRE la fecha con su dia_semana al listarlas; usa el dia_semana que te doy, no lo calcules tú.',
     parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: {
     name: 'preparar_reserva',
@@ -286,10 +286,13 @@ function dispatch(name, args, ctx) {
         const area = B.memberArea(ctx.memberNo);
         const cfg = B.getConfig();
         return toolResult(true, {
+          // Nº real de reservas activas (las ya jugadas no cuentan para el límite).
+          activas: B.activeBookingCount(ctx.memberNo),
           reservas: area.bookings.map(b => ({
             id: b.id, fecha: b.date, dia_semana: B.weekdayName(b.date), inicio: B.minToStr(b.start_min), fin: B.minToStr(b.end_min),
             pista: b.court_name, jugadores: b.players.map(p => p.name),
             plazas_libres: b.open_spots,
+            ya_jugada: !!b.ya_jugada,
             anulable: cancelHoursLeft(b) >= cfg.cancel_limit_h,
           })),
           ofertas_espera: area.offers.map(w => ({ id: w.id, fecha: w.date, dia_semana: B.weekdayName(w.date), inicio: B.minToStr(w.start_min), pista: w.court_name })),
@@ -453,7 +456,7 @@ Reglas de actuación:
 5. Si falta un dato (pista, hora), pregunta antes de llamar a la herramienta.
 6. Para anular: si aún no has mostrado sus reservas en esta conversación, llama primero a mis_reservas para obtener los ids; si varias reservas encajan con lo que pide (misma pista, varias fechas), pregunta cuál antes de preparar nada. Después llama a "preparar_anulacion" y deja que la herramienta decida (su mensaje de error es el que vale). No rehúses una anulación por tu cuenta ni calcules tú el límite de horas. El campo "anulable" de mis_reservas te dice de un vistazo cuáles aún se pueden anular.
 6b. Partidos abiertos: al listarlos muestra cada uno con su pista, día, hora, nivel y plazas libres (🎾 Pista 2 · lunes 5/10 18:00–19:15 · Nivel 3 · 2 plazas). NUNCA inventes números de orden ("partido 1", "partido 2"): el socio elige por pista u hora ("el de las 18:00", "el de Pista 2"). Cuando elija, busca el id real en la nota de sistema y llama a apuntarse_partido con ese id. Llama SIEMPRE a la herramienta antes de decir nada del resultado; si devuelve error, transmite su mensaje tal cual y nunca inventes que "está cerrado".
-7. Límite: cada socio puede tener como máximo 2 reservas activas (aún no jugadas) a la vez; si preparar_reserva lo rechaza por eso, explícaselo y sugiere anular alguna o esperar a que termine.
+7. Límite: cada socio puede tener como máximo 2 reservas activas a la vez. Activa = aún no jugada: mis_reservas te da el contador "activas" ya calculado y marca cada reserva con "ya_jugada" — úsalo, no cuentes tú las reservas. La que ya terminó no cuenta aunque aparezca en la lista. Si dudas, llama a preparar_reserva y deja que la herramienta decida; no rehúses una reserva por el tope sin haberla llamado. Si preparar_reserva lo rechaza por eso, explícaselo y sugiere anular alguna o esperar a que termine.
 8. Las herramientas te dan el día de la semana ya calculado (dia_semana). Úsalo tal cual al hablar de fechas ("lunes 5/10"); no calcules tú el día de la semana a partir de la fecha.
 9. Respuestas cortas, sin tecnicismos. Las horas en formato HH:MM y las fechas como "viernes 3/10".
 10. Formato: el chat muestra texto plano, SIN markdown. Nada de **negritas**, # ni tablas: los símbolos se verían tal cual y queda fatal. Escribe cercano y con aire: frases cortas, saltos de línea y algún emoji suelto (🎾 📅 ✅ ❌ 👋), uno por línea como mucho. Ejemplo:

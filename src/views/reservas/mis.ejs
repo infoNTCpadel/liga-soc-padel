@@ -30,8 +30,10 @@
   <div style="border-top:1px solid #eee;padding:.7em 0">
     <p><strong><%= b.court_name %></strong> · <%= b.date.slice(8,10) %>/<%= b.date.slice(5,7) %>/<%= b.date.slice(0,4) %> · <%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %>
       <% if (b.payment_status === 'pending') { %><span class="badge warn">Invitados: pagar en recepción</span><% } else { %><span class="badge ok">Todo OK</span><% } %>
-      <% if (b.open_spots > 0) { %><span class="badge" style="background:#e9f7ef;color:#146c39">Abierto · <%= b.open_spots %> <%= b.open_spots === 1 ? 'plaza' : 'plazas' %></span><% } %></p>
+      <% if (b.open_spots > 0) { %><span class="badge" style="background:#e9f7ef;color:#146c39">Abierto · <%= b.open_spots %> <%= b.open_spots === 1 ? 'plaza' : 'plazas' %></span><% } %>
+      <% if (b.ya_jugada) { %><span class="badge" style="background:#f0f0f0;color:#666">Ya jugada</span><% } %></p>
     <p class="mut">Jugadores: <%= b.players.map(p => p.name + (p.is_guest ? ' (inv.)' : '')).join(' · ') %></p>
+    <% if (!b.ya_jugada) { %>
     <% if (b.open_spots > 0) { %>
     <p><a class="btn small ghost" href="/reservar/abierto/<%= b.id %>">Ver partido</a>
       <form method="post" action="/reservar/abierto/<%= b.id %>/cerrar" style="display:inline;margin-left:.5em">
@@ -56,6 +58,7 @@
       <input type="hidden" name="booking_id" value="<%= b.id %>">
       <button class="btn small danger" type="submit">Anular</button>
     </form>
+    <% } %>
   </div>
   <% } %>
   <p style="margin-top:1em"><a class="btn" href="/reservar">Reservar pista</a></p>

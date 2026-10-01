@@ -731,10 +731,14 @@ function memberArea(member_no) {
   const t = (member_no || '').trim();
   const member = getMember(t);
   if (!member) return null;
-  const today = todayStr();
+  const today = todayStr(), now = nowMin();
   const bookings = bdb.prepare(
     `SELECT * FROM bookings WHERE titular_member_no = ? AND status = 'active' AND date >= ?
-     ORDER BY date, start_min`).all(t, today).map(b => ({ ...b, players: bdb.prepare('SELECT * FROM booking_players WHERE booking_id = ? ORDER BY id').all(b.id) }));
+     ORDER BY date, start_min`).all(t, today).map(b => ({
+       ...b,
+       // La reserva de hoy cuya hora ya pasó sigue saliendo en la lista, pero ya no cuenta como activa.
+       ya_jugada: b.date < today || (b.date === today && b.end_min <= now),
+       players: bdb.prepare('SELECT * FROM booking_players WHERE booking_id = ? ORDER BY id').all(b.id) }));
   const offers = bdb.prepare(
     `SELECT * FROM waitlist WHERE member_no = ? AND status = 'offered' ORDER BY date, start_min`).all(t);
   const waiting = bdb.prepare(

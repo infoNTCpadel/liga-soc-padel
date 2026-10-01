@@ -117,6 +117,10 @@ router.post('/nueva', (req, res) => {
     name: (req.body['p' + i + '_name'] || '').trim(),
     member_no: (req.body['p' + i + '_member'] || '').trim(),
   }));
+  for (const p of players) {
+    if (p.member_no && !B.getMember(p.member_no))
+      return render(`El nº de socio ${p.member_no} no existe. Corrige el jugador o quita el número para dejarlo como invitado.`);
+  }
   const r = B.createBooking({
     court_id: court.id, court_name: court.name, date,
     start_min: parseInt(req.body.start_min, 10), duration_min: parseInt(req.body.duration_min, 10),
@@ -152,6 +156,9 @@ router.post('/config', (req, res) => {
 });
 
 // ---- socios ----
+router.get('/socios/buscar', (req, res) => {
+  res.json(B.searchMembers(req.query.q || ''));
+});
 router.get('/socios', (req, res) => {
   res.renderPage('reservas-admin/socios', {
     members: B.listMembers(), ok: req.query.ok || null, error: null, newPin: req.query.pin || null,
