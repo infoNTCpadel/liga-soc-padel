@@ -764,7 +764,9 @@ function playoffStages(category) {
   const ranking = L.getRanking(db, category).map(r => r.pair_id);
   const excluded = excludedPairs(category);
   const playing = ranking.filter(id => !excluded.has(id));
-  const { cats, unused } = L.splitPlayoffCategories(playing);
+  // Tamaños configurados en Ajustes ("16,8"); vacío = reparto automático.
+  const parsed = L.parsePlayoffSizes(getSetting('playoff_sizes_' + category, ''));
+  const { cats, unused } = L.splitPlayoffCategories(playing, parsed.sizes || []);
   return {
     stages: cats.map((ids, i) => ({ stage: `po${i + 1}`, ids })),
     unused,
@@ -1164,14 +1166,23 @@ router.get('/ajustes', (req, res) => {
   const keys = ['club_name', 'season_name', 'phase_insc_label', 'phase_insc_ini', 'phase_insc_fin',
     'phase_r1_label', 'phase_r1_ini', 'phase_r1_fin', 'phase_r2_label', 'phase_r2_ini', 'phase_r2_fin',
     'phase_r3_label', 'phase_r3_ini', 'phase_r3_fin', 'phase_po_label', 'phase_po_ini', 'phase_po_fin',
-    'inscription_price', 'inscription_price_2', 'shirt_price', 'registration_closed'];
+    'inscription_price', 'inscription_price_2', 'shirt_price', 'registration_closed',
+    'playoff_sizes_M', 'playoff_sizes_F', 'playoff_sizes_X'];
   const s = Object.fromEntries(keys.map(k => [k, getSetting(k, '')]));
-  res.renderPage('admin/ajustes', { s, msg: req.query.msg || null, receptionSet: !!getReceptionHash() });
+  res.renderPage('admin/ajustes', { s, msg: req.query.msg || null, error: req.query.error || null, receptionSet: !!getReceptionHash() });
 });
 
 router.post('/ajustes', (req, res) => {
+  // Validar los tamaños de playoff antes de guardar nada
+  for (const c of ['M', 'F', 'X']) {
+    const p = L.parsePlayoffSizes(req.body['playoff_sizes_' + c] || '');
+    if (p.error) {
+      return res.redirect('/admin/ajustes?error=' + encodeURIComponent(
+        `Playoffs (${L.catName(c)}): ${p.error} No se ha guardado nada.`));
+    }
+  }
   for (const [k, v] of Object.entries(req.body)) {
-    if (k.startsWith('phase_') || ['club_name', 'season_name', 'inscription_price', 'inscription_price_2', 'shirt_price'].includes(k)) {
+    if (k.startsWith('phase_') || k.startsWith('playoff_sizes_') || ['club_name', 'season_name', 'inscription_price', 'inscription_price_2', 'shirt_price'].includes(k)) {
       setSetting(k, (v || '').trim());
     }
   }

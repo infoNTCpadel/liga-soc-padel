@@ -9,7 +9,7 @@
 <% } else { %>
   <% const anyGen = data.some(d => d.generated); %>
   <% if (!anyGen) { %>
-    <div class="alert info">Ronda 3 cerrada. Revisa el orden de cabezas de serie por categoría (puedes mover parejas con ↑ ↓), marca las parejas que no vayan a jugar el playoff y genera los cuadros. Las parejas marcadas se retiran <strong>antes</strong> de dividir el ranking en categorías de 16; si el resto final tiene menos de 8, esas parejas no juegan.</div>
+    <div class="alert info">Ronda 3 cerrada. Revisa el orden de cabezas de serie por categoría (puedes mover parejas con ↑ ↓), marca las parejas que no vayan a jugar el playoff y genera los cuadros. Las parejas marcadas se retiran <strong>antes</strong> de dividir el ranking en cuadros según lo configurado en Ajustes (por defecto, bloques de 16); las parejas que queden fuera no juegan.</div>
   <% } %>
 <% } %>
 
@@ -96,7 +96,7 @@
     <% } %>
   <% } %>
   <% if (d.unused.length) { %>
-    <p class="small mut">Sin playoff (resto de menos de 8 parejas): <%= d.unused.map(id => d.pairName(id)).join(', ') %></p>
+    <p class="small mut">Sin playoff (fuera de los cuadros configurados): <%= d.unused.map(id => d.pairName(id)).join(', ') %></p>
   <% } %>
   <% if (d.excluded.length) { %>
     <h4>No juegan el playoff <span class="mut small">· excluidas antes de formar las categorías</span></h4>

@@ -375,14 +375,47 @@ function buildBracket(rankedIds, draw34) {
 // Se completan categorías de 16 desde lo alto del ranking; el resto forma su
 // propia categoría si tiene 8 o más parejas; si tiene menos de 8, esas parejas
 // no juegan el playoff.
-function splitPlayoffCategories(rankedIds) {
+//
+// Si se pasan `sizes` (p. ej. [16, 8] configurado en Ajustes), cada bloque
+// coge hasta ese nº de parejas desde lo alto del ranking, en orden. Un bloque
+// que quede con menos de 4 parejas no se juega y esas parejas pasan a
+// `unused`, igual que las que sobren del total configurado.
+function splitPlayoffCategories(rankedIds, sizes) {
   const rest = [...rankedIds];
   const cats = [];
-  while (rest.length >= 16) cats.push(rest.splice(0, 16));
   let unused = [];
+  if (sizes && sizes.length) {
+    for (const size of sizes) {
+      if (!rest.length) break;
+      const chunk = rest.splice(0, size);
+      if (chunk.length >= 4) cats.push(chunk);
+      else unused.push(...chunk);
+    }
+    unused.push(...rest);
+    return { cats, unused };
+  }
+  while (rest.length >= 16) cats.push(rest.splice(0, 16));
   if (rest.length >= 8) cats.push(rest);
   else unused = rest;
   return { cats, unused };
+}
+
+// Valida el ajuste "parejas por cuadro de playoff" (texto "16,8").
+// Devuelve { sizes: [...] } o { error: '...' }. Vacío = reparto automático.
+function parsePlayoffSizes(str) {
+  const s = String(str || '').trim();
+  if (!s) return { sizes: [] };
+  const parts = s.split(',').map(p => p.trim()).filter(p => p !== '');
+  if (!parts.length) return { sizes: [] };
+  const sizes = [];
+  for (const p of parts) {
+    if (!/^\d+$/.test(p)) return { error: `«${p}» no es un número entero.` };
+    const n = parseInt(p, 10);
+    if (n < 4) return { error: `«${p}»: cada cuadro necesita al menos 4 parejas.` };
+    if (n > 32) return { error: `«${p}»: máximo 32 parejas por cuadro.` };
+    sizes.push(n);
+  }
+  return { sizes };
 }
 
 // 'po1' -> '1ª', 'po2' -> '2ª', ...
@@ -498,7 +531,7 @@ module.exports = {
   roundPoints, matchOutcome, countsForStandings, isSetFinished,
   computeStandings, movementDelta, targetGroup,
   chunkIntoGroups, roundRobin, nextPowerOfTwo, seedOrder, formatSlot,
-  buildBracket, splitPlayoffCategories, placeSeeds, drawSeeds34, playoffOrdinal, isPlayoffStage, matchStageClosed,
+  buildBracket, splitPlayoffCategories, parsePlayoffSizes, placeSeeds, drawSeeds34, playoffOrdinal, isPlayoffStage, matchStageClosed,
   BRACKET_NEXT, BRACKET_NAMES, BRACKET_NAME_BY_CODE,
   autoValidateExpired,
   getGroups, getGroupMembers, getGroupMatches, pairName, getRanking,
