@@ -148,7 +148,8 @@
               list.appendChild(d);
             });
             list.style.display = '';
-          });
+          })
+          .catch(() => { info.innerHTML = '<span class="pill inv">No se pudo buscar: recarga la página</span>'; });
       }, 250);
     });
     input.addEventListener('blur', () => setTimeout(() => list.style.display = 'none', 200));

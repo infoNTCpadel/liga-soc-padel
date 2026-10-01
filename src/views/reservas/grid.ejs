@@ -1,5 +1,10 @@
-<h1>Reservar pista</h1>
+<% const staff = typeof staffMode !== 'undefined' && staffMode; %>
+<h1><%= staff ? 'Parrilla · nueva reserva' : 'Reservar pista' %></h1>
+<% if (staff) { %>
+<p class="mut">Pulsa una franja libre para crear la reserva como personal: se abre el formulario con pista, fecha y tramo ya elegidos.</p>
+<% } else { %>
 <p class="mut">Solo para socios del club. Para reservar o apuntarte a un partido abierto necesitas entrar con tu nº de socio y PIN. Si algún jugador no es socio, deberá pagar en recepción antes de jugar.</p>
+<% } %>
 
 <% if (typeof error !== 'undefined' && error) { %><div class="alert error"><%= error %></div><% } %>
 <% if (typeof info !== 'undefined' && info) { %><div class="alert ok"><%= info %></div><% } %>
@@ -7,12 +12,13 @@
 <div class="card">
   <div class="row2" style="align-items:center">
     <div>
-      <% if (prev) { %><a class="btn small ghost" href="/reservar?date=<%= prev %>">← <%= prev.slice(8,10) %>/<%= prev.slice(5,7) %></a><% } %>
+      <% if (prev) { %><a class="btn small ghost" href="<%= staff ? staffBase + '/parrilla?date=' + prev : '/reservar?date=' + prev %>">← <%= prev.slice(8,10) %>/<%= prev.slice(5,7) %></a><% } %>
       <strong style="margin:0 .6em"><%= date.slice(8,10) %>/<%= date.slice(5,7) %>/<%= date.slice(0,4) %></strong>
-      <% if (next) { %><a class="btn small ghost" href="/reservar?date=<%= next %>"><%= next.slice(8,10) %>/<%= next.slice(5,7) %> →</a><% } %>
+      <% if (next) { %><a class="btn small ghost" href="<%= staff ? staffBase + '/parrilla?date=' + next : '/reservar?date=' + next %>"><%= next.slice(8,10) %>/<%= next.slice(5,7) %> →</a><% } %>
     </div>
     <div style="text-align:right">
-      <% if (member) { %><a class="btn small ghost" href="/reservar/mis">Mis reservas</a> <a class="btn small ghost" href="/reservar/datos">Mis datos</a>
+      <% if (staff) { %><a class="btn small ghost" href="<%= staffDay %>?date=<%= date %>">Ver reservas del día</a>
+      <% } else if (member) { %><a class="btn small ghost" href="/reservar/mis">Mis reservas</a> <a class="btn small ghost" href="/reservar/datos">Mis datos</a>
       <% } else { %><a class="btn small" href="/reservar/entrar?next=<%= encodeURIComponent('/reservar?date=' + date) %>">Entrar para reservar</a><% } %>
     </div>
   </div>
@@ -20,7 +26,7 @@
 
 <div class="daytabs">
   <% for (const t of tabs) { %>
-    <a class="daytab<%= t === date ? ' on' : '' %>" href="/reservar?date=<%= t %>"><%= tabLabel(t) %></a>
+    <a class="daytab<%= t === date ? ' on' : '' %>" href="<%= staff ? staffBase + '/parrilla?date=' + t : '/reservar?date=' + t %>"><%= tabLabel(t) %></a>
   <% } %>
 </div>
 
@@ -57,10 +63,12 @@ a.chip.open:hover{background:#d9f0e3}
       <% for (const { court, cell } of row.cells) {
         if (cell.st === 'free') {
           const url = '/reservar/nueva?court=' + court.id + '&date=' + date + '&desde=' + row.slot + '&duracion=' + cell.duration;
-          const href = member ? url : '/reservar/entrar?next=' + encodeURIComponent(url);
+          const href = staff ? staffBase + '/nueva?court=' + court.id + '&date=' + date + '&desde=' + row.slot
+            : (member ? url : '/reservar/entrar?next=' + encodeURIComponent(url));
       %><td><a class="chip free" href="<%= href %>" title="<%= cell.duration %> minutos"><%= court.name %> · libre</a></td><%
         } else if (cell.st === 'open') {
-      %><td><a class="chip open" href="/reservar/abierto/<%= cell.booking.id %>"><%= court.name %> · <%= cell.booking.open_spots %> <%= cell.booking.open_spots === 1 ? 'plaza' : 'plazas' %><%= cell.range ? ' · ' + cell.range : '' %></a></td><%
+          const openHref = staff ? staffDay + '?date=' + date : '/reservar/abierto/' + cell.booking.id;
+      %><td><a class="chip open" href="<%= openHref %>"><%= court.name %> · <%= cell.booking.open_spots %> <%= cell.booking.open_spots === 1 ? 'plaza' : 'plazas' %><%= cell.range ? ' · ' + cell.range : '' %></a></td><%
         } else if (cell.st === 'busy') {
       %><td><span class="chip busy"><%= court.name %> · ocupada</span></td><%
         } else if (cell.st === 'past') {
@@ -78,9 +86,10 @@ a.chip.open:hover{background:#d9f0e3}
   <span><i style="background:#e9f7ef;border:1.5px solid #1e8e4d"></i>Partido abierto (faltan jugadores)</span>
   <span><i style="background:#f1f0f6"></i>Ocupada</span>
 </div>
-<p class="hint">Franjas de <%= config.durations.slice().sort((a,b) => b-a)[0] %> minutos. Al pulsar una franja libre se reserva esa duración sin preguntar (si no cabe, se ofrece la siguiente).</p>
+<p class="hint"><%= staff ? 'Pulsa una franja libre para empezar la reserva en ese tramo.' : 'Franjas de ' + config.durations.slice().sort((a,b) => b-a)[0] + ' minutos. Al pulsar una franja libre se reserva esa duración sin preguntar (si no cabe, se ofrece la siguiente).' %></p>
 <% } %>
 
+<% if (!staff) { %>
 <details class="card" style="margin-top:1em">
   <summary class="mut" style="cursor:pointer">Avisadme si se libera una hora (lista de espera)</summary>
   <% if (member) { %>
@@ -106,5 +115,6 @@ a.chip.open:hover{background:#d9f0e3}
   <p class="mut"><a href="/reservar/entrar">Entra</a> para apuntarte a la lista de espera.</p>
   <% } %>
 </details>
+<% } %>
 
-<% if (typeof chatEnabled !== 'undefined' && chatEnabled) { %><%- include('chat-widget') %><% } %>
+<% if (!staff && typeof chatEnabled !== 'undefined' && chatEnabled) { %><%- include('chat-widget') %><% } %>

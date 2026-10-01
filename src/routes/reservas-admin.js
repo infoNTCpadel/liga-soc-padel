@@ -54,6 +54,35 @@ router.get('/dia', (req, res) => {
     prev: B.addDays(date, -1), next: B.addDays(date, 1),
   });
 });
+// Parrilla visual (la misma que ven los socios): pulsar una franja libre abre
+// el formulario de nueva reserva del personal con pista, fecha y tramo listos.
+router.get('/parrilla', (req, res) => {
+  const c = B.getConfig();
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : B.todayStr();
+  const courts = activeCourts();
+  const rows = B.slotDay(date, null, courts);
+  const today = B.todayStr();
+  const maxDate = B.addDays(today, c.days_ahead);
+  const tabs = [];
+  for (let d = today, i = 0; d <= maxDate && i < 14; d = B.addDays(d, 1), i++) tabs.push(d);
+  const wd = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const tabLabel = (d) => {
+    if (d === today) return 'Hoy';
+    if (d === B.addDays(today, 1)) return 'Mañana';
+    const dt = new Date(d + 'T12:00:00');
+    return wd[dt.getDay()] + ' ' + dt.getDate();
+  };
+  res.renderPage('reservas/grid', {
+    date, rows, courts, config: c, today, tabs, tabLabel, waitStarts: {},
+    prev: date > today ? B.addDays(date, -1) : null,
+    next: date < maxDate ? B.addDays(date, 1) : null,
+    noCourts: courts.length === 0,
+    closed: !B.dayHours(date),
+    minToStr: B.minToStr, member: null,
+    staffMode: true, staffBase: '/admin/reservas', staffDay: '/admin/reservas/dia',
+    info: null, error: null,
+  });
+});
 router.post('/reservas/:id/anular', (req, res) => {
   const b = B.getBooking(parseInt(req.params.id, 10));
   const date = b ? b.date : B.todayStr();
