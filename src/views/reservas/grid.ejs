@@ -1,7 +1,7 @@
 <% const staff = typeof staffMode !== 'undefined' && staffMode; %>
 <h1><%= staff ? 'Parrilla · nueva reserva' : 'Reservar pista' %></h1>
 <% if (staff) { %>
-<p class="mut">Pulsa una franja libre para crear la reserva como personal: se abre el formulario con pista, fecha y tramo ya elegidos.</p>
+<p class="mut">Pulsa una franja libre para crear la reserva como personal (se abre el formulario con pista, fecha y tramo ya elegidos). Pulsa una franja ocupada para ver el detalle en grande debajo.</p>
 <% } else { %>
 <p class="mut">Solo para socios del club. Para reservar o apuntarte a un partido abierto necesitas entrar con tu nº de socio y PIN. Si algún jugador no es socio, deberá pagar en recepción antes de jugar.</p>
 <% } %>
@@ -53,10 +53,32 @@ a.chip.open:hover{background:#d9f0e3}
 .chip.na{background:#faf9fd;color:#d5d2e2}
 .legend{display:flex;gap:1em;flex-wrap:wrap;margin:.7em 0;font-size:.85em;color:#6b6884}
 .legend i{display:inline-block;width:.9em;height:.9em;border-radius:3px;margin-right:.3em;vertical-align:-1px}
+<% if (staff) { %>
+/* Tema del personal: colores de la app (oscuro + lima) */
+.slotwrap{background:var(--card);border-color:var(--line)}
+table.slots th, table.slots td{border-bottom:1px solid var(--line);color:var(--txt)}
+table.slots thead th{background:var(--card2);color:var(--lime)}
+table.slots tbody th{background:var(--card);color:var(--mut)}
+.chip.free{border:1.5px solid var(--lime);color:var(--lime);background:transparent}
+a.chip.free:hover{background:#2b351f;color:var(--lime)}
+.chip.busy{background:#232b1c;color:var(--txt);border:1.5px solid var(--line);cursor:pointer;text-align:left;min-width:9em;font:inherit}
+.chip.busy:hover{border-color:var(--lime)}
+.chip.busy.is-open{border-color:var(--amber)}
+.chip.busy .rname{display:block;font-size:1em}
+.chip.busy .rtime{display:block;font-weight:400;font-size:.78em;color:var(--mut)}
+.chip.busy .rchips{display:block;margin-top:2px}
+.lchip{display:inline-block;font-size:.72em;font-weight:700;border-radius:6px;padding:1px 7px;margin:1px 2px 1px 0;color:#111;vertical-align:middle}
+.lchip.free{background:transparent;border:1.5px dashed var(--amber);color:var(--amber);padding:0 6px}
+.ppend{color:var(--amber);font-weight:700}
+.legend{color:var(--mut)}
+#staffDetail h3{margin-top:0}
+#staffDetail ul{margin:.5em 0;padding-left:1.2em}
+<% } %>
 </style>
 <div class="slotwrap"><table class="slots">
   <thead><tr><th></th><% for (const court of courts) { %><th><%= court.name %></th><% } %></tr></thead>
   <tbody>
+  <% const bmap = {}; if (staff && typeof bookings !== 'undefined') { for (const b of bookings) bmap[b.id] = b; } %>
   <% for (const row of rows) { %>
     <tr>
       <th><%= minToStr(row.slot) %></th>
@@ -65,7 +87,15 @@ a.chip.open:hover{background:#d9f0e3}
           const url = '/reservar/nueva?court=' + court.id + '&date=' + date + '&desde=' + row.slot + '&duracion=' + cell.duration;
           const href = staff ? staffBase + '/nueva?court=' + court.id + '&date=' + date + '&desde=' + row.slot
             : (member ? url : '/reservar/entrar?next=' + encodeURIComponent(url));
-      %><td><a class="chip free" href="<%= href %>" title="<%= cell.duration %> minutos"><%= court.name %> · libre</a></td><%
+      %><td><a class="chip free" href="<%= href %>" title="<%= cell.duration %> minutos"><%= staff ? 'Libre · ' + cell.duration + ' min' : court.name + ' · libre' %></a></td><%
+        } else if ((cell.st === 'open' || cell.st === 'busy') && staff && cell.booking && bmap[cell.booking.id]) {
+          const b = bmap[cell.booking.id];
+          const chips = cardChips(b);
+      %><td><button type="button" class="chip busy<%= b.open_spots > 0 ? ' is-open' : '' %>" data-bid="<%= b.id %>" title="Ver detalle">
+        <span class="rname"><%= b.open_spots > 0 ? 'Partido abierto' : b.titular_name %></span>
+        <span class="rtime"><%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %><% if (b.payment_status === 'pending') { %> <span class="ppend" title="Pago pendiente">●</span><% } %></span>
+        <span class="rchips"><% for (const ch of chips) { %><% if (ch.free) { %><span class="lchip free">+</span><% } else { %><span class="lchip" style="background:<%= levelColor(ch.level) %>"><%= ch.level %></span><% } %><% } %></span>
+      </button></td><%
         } else if (cell.st === 'open') {
           const openHref = staff ? staffDay + '?date=' + date : '/reservar/abierto/' + cell.booking.id;
       %><td><a class="chip open" href="<%= openHref %>"><%= court.name %> · <%= cell.booking.open_spots %> <%= cell.booking.open_spots === 1 ? 'plaza' : 'plazas' %><%= cell.range ? ' · ' + cell.range : '' %></a></td><%
@@ -82,11 +112,69 @@ a.chip.open:hover{background:#d9f0e3}
   </tbody>
 </table></div>
 <div class="legend">
+<% if (staff) { %>
+  <span><i style="background:transparent;border:1.5px solid var(--lime)"></i>Libre (pulsa para reservar)</span>
+  <span><i style="background:#232b1c;border:1.5px solid var(--line)"></i>Ocupada (pulsa para ver el detalle)</span>
+  <span><i style="background:#232b1c;border:1.5px solid var(--amber)"></i>Partido abierto (faltan jugadores)</span>
+  <span><span class="ppend">●</span> Pago pendiente</span>
+<% } else { %>
   <span><i style="background:#f4f1ff;border:1.5px solid #5b3df0"></i>Libre (pulsa para reservar)</span>
   <span><i style="background:#e9f7ef;border:1.5px solid #1e8e4d"></i>Partido abierto (faltan jugadores)</span>
   <span><i style="background:#f1f0f6"></i>Ocupada</span>
+<% } %>
 </div>
-<p class="hint"><%= staff ? 'Pulsa una franja libre para empezar la reserva en ese tramo.' : 'Franjas de ' + config.durations.slice().sort((a,b) => b-a)[0] + ' minutos. Al pulsar una franja libre se reserva esa duración sin preguntar (si no cabe, se ofrece la siguiente).' %></p>
+<p class="hint"><%= staff ? 'Pulsa una franja libre para empezar la reserva en ese tramo. Pulsa una ocupada para ver el detalle en grande.' : 'Franjas de ' + config.durations.slice().sort((a,b) => b-a)[0] + ' minutos. Al pulsar una franja libre se reserva esa duración sin preguntar (si no cabe, se ofrece la siguiente).' %></p>
+<% if (staff) { %>
+<div id="staffDetail" class="card" style="display:none;margin-top:1em"></div>
+<script>
+(function(){
+  const DATA = <%- bookingsJson %>;
+  const LVL = <%- levelsJson %>;
+  const box = document.getElementById('staffDetail');
+  const M2S = m => String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0');
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const levelColor = function(n){
+    n = parseFloat(n);
+    if (!(n >= 0)) return '#9a9aa6';
+    if (n < 2.5) return '#34d399';
+    if (n < 4) return '#a78bfa';
+    if (n < 5) return '#fbbf24';
+    return '#fb923c';
+  };
+  function card(b){
+    const pls = b.players || [];
+    const free = b.open_spots || 0;
+    let h = '<h3>' + esc(b.court_name) + ' · ' + M2S(b.start_min) + '–' + M2S(b.end_min) + '</h3>';
+    h += '<p class="mut" style="margin-top:-.4em">' + (free > 0 ? 'Partido abierto · faltan ' + free + (free === 1 ? ' jugador' : ' jugadores') : 'Partido cerrado') + '</p>';
+    h += '<ul>';
+    for (const p of pls){
+      const lv = (p.level !== undefined && p.level !== null && p.level !== '') ? p.level : LVL[p.member_number];
+      h += '<li>' + esc(p.name) + (lv ? ' <span class="lchip" style="background:' + levelColor(lv) + '">' + esc(String(lv)) + '</span>' : '') + (p.is_guest ? ' <span class="mut">(invitado)</span>' : '') + '</li>';
+    }
+    for (let i = 0; i < free; i++) h += '<li><span class="mut">— plaza libre —</span></li>';
+    h += '</ul>';
+    h += '<p>' + (b.payment_status === 'paid' ? '<span class="badge ok">Pagado</span>' : b.payment_status === 'pending' ? '<span class="badge warn">Pago pendiente</span>' : '<span class="badge">Sin pago</span>') + '</p>';
+    h += '<div class="row2" style="margin-top:.8em"><div>';
+    h += '<a class="btn small ghost" href="<%= staffDay %>?date=<%= date %>">Ver el día completo</a>';
+    h += '</div><div style="text-align:right">';
+    h += '<form method="post" action="<%= anularPrefix %>' + b.id + '/anular" onsubmit="return confirm(\'¿Anular esta reserva?\')" style="display:inline">';
+    h += '<input type="hidden" name="date" value="<%= date %>">';
+    h += '<button class="btn small danger" type="submit">Anular</button></form>';
+    h += '</div></div>';
+    return h;
+  }
+  document.querySelectorAll('button.chip.busy[data-bid]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      const b = DATA.find(x => String(x.id) === btn.getAttribute('data-bid'));
+      if (!b) return;
+      box.innerHTML = card(b);
+      box.style.display = 'block';
+      box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+  });
+})();
+</script>
+<% } %>
 <% } %>
 
 <% if (!staff) { %>

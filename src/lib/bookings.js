@@ -987,8 +987,8 @@ async function checkReminders() {
   return due.length;
 }
 
-// Datos para la parrilla visual del personal (timeline): pistas, reservas activas
-// con jugadores, niveles, bloqueos y estadísticas del día.
+// Datos para la parrilla del personal: pistas, reservas activas con jugadores,
+// niveles, bloqueos y estadísticas del día.
 function levelColor(l) {
   l = parseFloat(l);
   if (!(l >= 0)) return '#9a9aa6';
@@ -997,7 +997,7 @@ function levelColor(l) {
   if (l < 5) return '#fbbf24';
   return '#fb923c';
 }
-function staffTimeline(date, urls, courts) {
+function staffGrid(date, urls, courts) {
   const c = getConfig();
   const today = todayStr(), maxDate = addDays(today, c.days_ahead);
   const tabs = [];
@@ -1086,5 +1086,5 @@ module.exports = {
   validateBlock, affectedBookings, createBlock, deleteBlock, listBlocks,
   setBookingPaid, addCharge, setChargePaid, deleteCharge, dayDetail, pendingPayments,
   dueReminders, checkReminders, sendEmail,
-  levelColor, staffTimeline,
+  levelColor, staffGrid,
 };

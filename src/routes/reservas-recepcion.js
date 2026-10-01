@@ -74,15 +74,26 @@ router.post('/:id/jugadores', (req, res) => {
 router.get('/socios/buscar', (req, res) => {
   res.json(B.searchMembers(req.query.q || ''));
 });
-// Parrilla visual estilo timeline: las tarjetas se posicionan por hora; pulsar
-// una abre el detalle debajo y pulsar un hueco libre abre el formulario de
-// nueva reserva con pista, fecha y hora listos.
+// Parrilla visual para el personal: la misma tabla de franjas que ven los socios,
+// con los colores de la app. Las franjas libres abren el formulario de nueva
+// reserva con pista, fecha y tramo listos; las ocupadas muestran la máxima
+// información y al pulsarlas se abre el detalle en grande debajo.
 router.get('/parrilla', (req, res) => {
+  const c = B.getConfig();
   const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : B.todayStr();
   const courts = activeCourts();
-  res.renderPage('reservas/timeline', B.staffTimeline(date, {
-    staffBase: '/recepcion/reservas', staffDay: '/recepcion/reservas', anularPrefix: '/recepcion/reservas/',
-  }, courts));
+  const rows = B.slotDay(date, null, courts);
+  res.renderPage('reservas/grid', {
+    date, rows, courts, config: c, waitStarts: {},
+    noCourts: courts.length === 0,
+    closed: !B.dayHours(date),
+    member: null,
+    staffMode: true,
+    info: null, error: null,
+    ...B.staffGrid(date, {
+      staffBase: '/recepcion/reservas', staffDay: '/recepcion/reservas', anularPrefix: '/recepcion/reservas/',
+    }, courts),
+  });
 });
 router.get('/nueva', (req, res) => {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : B.todayStr();
