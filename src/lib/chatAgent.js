@@ -85,6 +85,32 @@ function takeDraft(id, member_no, kind) {
   drafts.delete(id);
   return { draft: d };
 }
+// El borrador pendiente vive en la sesión para sobrevivir entre turnos (el
+// historial solo guarda texto). Si caduca o se consume, se limpia.
+function trackDraftCall(session, name, args, r) {
+  if (!session || typeof session !== 'object') return;
+  if ((name === 'preparar_reserva' || name === 'preparar_anulacion') && r && r.ok && r.draft_id) {
+    session.pendingDraft = {
+      kind: name === 'preparar_reserva' ? 'reserva' : 'anulacion',
+      draft_id: r.draft_id, resumen: r.resumen,
+    };
+  } else if ((name === 'confirmar_reserva' || name === 'confirmar_anulacion') &&
+             session.pendingDraft && (!args || args.draft_id === session.pendingDraft.draft_id)) {
+    session.pendingDraft = null;
+  }
+}
+function pendingDraftNote(session) {
+  const p = session && session.pendingDraft;
+  if (!p || !p.draft_id) return null;
+  const d = drafts.get(p.draft_id);
+  if (!d || Date.now() > d.expires) { session.pendingDraft = null; return null; }
+  const confirmTool = p.kind === 'reserva' ? 'confirmar_reserva' : 'confirmar_anulacion';
+  const prepareTool = p.kind === 'reserva' ? 'preparar_reserva' : 'preparar_anulacion';
+  return `Borrador pendiente de confirmación: "${p.resumen}" (draft_id=${p.draft_id}). ` +
+    `Si el socio lo confirma SIN cambios, llama a ${confirmTool} con ese draft_id, sin preparar nada de nuevo. ` +
+    `Si pide modificar algo, llama a ${prepareTool} con los cambios (sustituirá el borrador). ` +
+    `No vuelvas a pedir confirmación de un borrador que ya se confirmó en el turno anterior: actúa.`;
+}
 // Anti fuerza bruta del PIN en el chat (en memoria; un solo proceso).
 const pinFails = new Map();
 function pinLocked(no) {
@@ -447,8 +473,13 @@ async function runChat({ message, session, llm }) {
   const messages = [
     { role: 'system', content: buildSystemPrompt(member) },
     ...history,
-    { role: 'user', content: message },
   ];
+  // El historial solo guarda texto (sin tool_calls), así que el draft_id de un
+  // borrador pendiente se perdería entre turnos. Se reinyecta aquí para que el
+  // modelo pueda confirmar con confirmar_reserva/confirmar_anulacion.
+  const pendNote = pendingDraftNote(session);
+  if (pendNote) messages.push({ role: 'system', content: pendNote });
+  messages.push({ role: 'user', content: message });
 
   let reply = 'Se me ha atragantado la respuesta. Prueba de nuevo o usa la parrilla.';
   let totalIn = 0, totalOut = 0;
@@ -473,6 +504,7 @@ async function runChat({ message, session, llm }) {
         });
         for (const t of out.toolCalls) {
           const r = dispatch(t.name, t.args, ctx);
+          trackDraftCall(session, t.name, t.args, r);
           messages.push({ role: 'tool', tool_call_id: t.id, content: JSON.stringify(r) });
         }
         continue;

@@ -225,6 +225,43 @@ process.env.LLM_API_KEY = 'test-key';
   ok(join.ok && B.getBooking(created.id).open_spots === 1, 'apuntarse_partido resta una plaza');
 }
 
+// ---- 12. el borrador sobrevive entre turnos: "sí" confirma sin repreparar ----
+{
+  const session = { bookingMemberNo: '8' };
+  const seg = B.freeSegments(2, D2).find(g => g.end - g.start >= 150) || B.freeSegments(2, D2)[0];
+  const inicio = hhmm(seg.start);
+  // Turno 1: el modelo prepara el borrador y pide confirmación
+  let r = await Chat.runChat({
+    message: `reserva pasado mañana a las ${inicio} en pista 2`, session,
+    llm: scripted([
+      call('preparar_reserva', { fecha: D2, inicio, pista: 'Pista 2' }),
+      say('Te preparo la reserva. ¿Confirmo?'),
+    ]),
+  });
+  ok(session.pendingDraft && session.pendingDraft.draft_id, 'tras preparar, la sesión guarda el borrador pendiente');
+  ok(r.reply.includes('¿Confirmo?'), 'el agente pide confirmación tras preparar');
+  const before = B.dayBookings(D2).filter(b => b.titular_member_no === '8').length;
+  // Turno 2: el "sí" del socio. El LLM simulado solo sabe lo que runChat le pasa,
+  // como un modelo real: extrae el draft_id de la nota del sistema.
+  r = await Chat.runChat({
+    message: 'sí', session,
+    llm: scripted([
+      (messages) => {
+        const note = messages.find(m => m.role === 'system' && m.content.includes('Borrador pendiente'));
+        ok(!!note, 'el segundo turno recibe la nota con el borrador pendiente');
+        const id = (note.content.match(/draft_id=([0-9a-f]+)/) || [])[1];
+        ok(id === session.pendingDraft.draft_id, 'la nota trae el draft_id del borrador');
+        return { content: null, toolCalls: [{ id: 't1', name: 'confirmar_reserva', args: { draft_id: id } }], usage: { in: 1, out: 1 } };
+      },
+      say('Reserva confirmada.'),
+    ]),
+  });
+  const after = B.dayBookings(D2).filter(b => b.titular_member_no === '8').length;
+  ok(after === before + 1, 'decir "sí" confirma el borrador sin repreparar');
+  ok(!session.pendingDraft, 'tras confirmar se limpia el borrador pendiente');
+  ok(r.reply.includes('confirmada'), 'el agente confirma la reserva al socio');
+}
+
 console.log(`\n${pass}/${pass + fail} pruebas del chat superadas`);
 process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('ERROR:', e); process.exit(1); });
