@@ -92,10 +92,11 @@ a.chip.free:hover{background:#2b351f;color:var(--lime)}
           const b = bmap[cell.booking.id];
           const chips = cardChips(b);
           const cc = bookingColor(b);
-          const bname = b.open_spots > 0 ? 'Partido abierto' : b.titular_name;
-      %><td><button type="button" class="chip busy<%= b.open_spots > 0 ? ' is-open' : '' %>" data-bid="<%= b.id %>" style="border-color:<%= cc %>;background:<%= cc %>1f" title="<%= bname %> · <%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %> — pulsa para ver el detalle">
+          const isOpen = b.open_spots > 0;
+          const bname = b.titular_name;
+      %><td><button type="button" class="chip busy<%= isOpen ? ' is-open' : '' %>" data-bid="<%= b.id %>" style="border-color:<%= cc %>;background:<%= cc %>1f" title="<%= isOpen ? 'Partido abierto · ' : '' %><%= bname %> · <%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %> — pulsa para ver el detalle">
         <span class="rname"><%= bname %></span>
-        <span class="rtime"><%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %><% if (b.payment_status === 'pending') { %> <span class="ppend" title="Pago pendiente">●</span><% } %></span>
+        <span class="rtime"><%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %><% if (isOpen) { %> · abierto<% } %><% if (b.payment_status === 'pending') { %> <span class="ppend" title="Pago pendiente">●</span><% } %></span>
         <span class="rchips"><% for (const ch of chips) { %><% if (ch.free) { %><span class="lchip free">+</span><% } else { %><span class="lchip" style="background:<%= levelColor(ch.level) %>"><%= ch.level %></span><% } %><% } %></span>
       </button></td><%
         } else if (cell.st === 'blocked' && staff) {

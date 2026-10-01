@@ -114,6 +114,10 @@ for (const sql of [
 try {
   bdb.exec("UPDATE court_blocks SET date_from = date, date_to = date WHERE date_from = ''");
   bdb.exec('UPDATE waitlist SET duration_min = end_min - start_min WHERE duration_min = 0');
+  // Repara partidos abiertos con más jugadores que plazas libres (open_spots nunca
+  // puede superar 4 - nº de jugadores; al completar jugadores ya se recalcula).
+  bdb.exec(`UPDATE bookings SET open_spots = max(0, 4 - (SELECT COUNT(*) FROM booking_players bp WHERE bp.booking_id = bookings.id))
+    WHERE status = 'active' AND open_spots > 4 - (SELECT COUNT(*) FROM booking_players bp WHERE bp.booking_id = bookings.id)`);
   // La antigua franja única pasa a lista de duraciones (p. ej. 90 → "90").
   const hasDurs = bdb.prepare("SELECT 1 FROM booking_config WHERE key = 'slot_durations'").get();
   const oldSlot = bdb.prepare("SELECT value FROM booking_config WHERE key = 'slot_min'").get();

@@ -66,6 +66,7 @@ router.post('/:id/jugadores', (req, res) => {
       member_no: (req.body['p' + i + '_member'] || '').trim(),
     }));
     B.setPlayers(id, b.titular_member_no, players);
+    B.syncOpenSpots(id); // si se completaron los 4, el partido se cierra solo
   }
   res.redirect('/recepcion/reservas?date=' + (b ? b.date : B.todayStr()) + '&ok=' + encodeURIComponent('Jugadores actualizados.'));
 });
