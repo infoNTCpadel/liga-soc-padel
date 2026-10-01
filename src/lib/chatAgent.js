@@ -106,7 +106,7 @@ function resolveListedId(listed, rawId) {
 function trackDraftCall(session, name, args, r) {
   if (!session || typeof session !== 'object') return;
   if (name === 'mis_reservas' && r && r.ok && Array.isArray(r.reservas))
-    session.lastBookings = r.reservas.map(b => ({ id: b.id, pista: b.pista, fecha: b.fecha, inicio: b.inicio }));
+    session.lastBookings = r.reservas.map(b => ({ id: b.id, pista: b.pista, fecha: b.fecha, inicio: b.inicio, anulable: b.anulable }));
   if (name === 'ver_partidos_abiertos' && r && r.ok && Array.isArray(r.partidos))
     session.lastOpenMatches = r.partidos.map(p => ({ id: p.id, pista: p.pista, inicio: p.inicio }));
   if ((name === 'preparar_reserva' || name === 'preparar_anulacion') && r && r.ok && r.draft_id) {
@@ -130,6 +130,20 @@ function pendingDraftNote(session) {
     `Si el socio lo confirma SIN cambios, llama a ${confirmTool} con ese draft_id, sin preparar nada de nuevo. ` +
     `Si pide modificar algo, llama a ${prepareTool} con los cambios (sustituirá el borrador). ` +
     `No vuelvas a pedir confirmación de un borrador que ya se confirmó en el turno anterior: actúa.`;
+}
+// Ids reales de las últimas listas mostradas, para que el modelo no tenga que
+// adivinarlos entre turnos (el historial solo guarda texto).
+function listedIdsNote(session) {
+  const parts = [];
+  const lb = session && session.lastBookings;
+  if (lb && lb.length)
+    parts.push('Reservas del socio (usa el id exacto en preparar_anulacion): ' +
+      lb.map(b => `#${b.id}: ${b.pista}, ${b.fecha} ${b.inicio}`).join(' | '));
+  const lm = session && session.lastOpenMatches;
+  if (lm && lm.length)
+    parts.push('Partidos abiertos mostrados (usa el id exacto en apuntarse_partido): ' +
+      lm.map(p => `#${p.id}: ${p.pista}, ${p.inicio}`).join(' | '));
+  return parts.length ? parts.join('\n') : null;
 }
 // Anti fuerza bruta del PIN en el chat (en memoria; un solo proceso).
 const pinFails = new Map();
@@ -328,14 +342,15 @@ function dispatch(name, args, ctx) {
         if (!ctx.memberNo) return toolResult(false, 'Necesito saber quién eres: dime tu nº de socio y tu PIN.');
         const rid = resolveListedId(ctx.session && ctx.session.lastBookings, a.reserva_id);
         const b = B.getBooking(rid);
-        if (!b || b.status !== 'active') return toolResult(false, 'No encuentro esa reserva activa.');
-        if (b.titular_member_no !== ctx.memberNo) return toolResult(false, 'Esa reserva no es tuya.');
+        if (!b || b.status !== 'active') return toolResult(false, `No encuentro esa reserva activa (id ${a.reserva_id}).`);
+        const ident = `${b.court_name} ${b.date.split('-').reverse().join('/')} ${B.minToStr(b.start_min)} (id ${b.id})`;
+        if (b.titular_member_no !== ctx.memberNo) return toolResult(false, `La reserva ${ident} no es tuya.`);
         const c = B.getConfig();
         const hoursLeft = cancelHoursLeft(b);
         if (hoursLeft < 0)
-          return toolResult(false, 'Esa reserva ya ha empezado o ha terminado; no se puede anular.');
+          return toolResult(false, `La reserva ${ident} ya ha empezado o ha terminado; no se puede anular.`);
         if (hoursLeft < c.cancel_limit_h)
-          return toolResult(false, `Ya no se puede anular online (límite: ${c.cancel_limit_h} h antes). Contacta con recepción.`);
+          return toolResult(false, `La reserva ${ident} ya no se puede anular online (límite: ${c.cancel_limit_h} h antes). Contacta con recepción.`);
         const resumen = `${b.court_name} · ${b.date.split('-').reverse().join('/')} · ${B.minToStr(b.start_min)}–${B.minToStr(b.end_min)}`;
         const id = newDraft('anulacion', ctx.memberNo, { booking_id: b.id }, resumen);
         return toolResult(true, { draft_id: id, resumen });
@@ -435,7 +450,7 @@ Reglas de actuación:
 3. Para crear una reserva: primero "preparar_reserva", muestra el resumen al socio y pregúntale si lo confirma; solo cuando diga que sí (explícitamente), llama a "confirmar_reserva" con el draft_id.
 4. Para anular: primero "preparar_anulacion", muestra el resumen y pide confirmación explícita; luego "confirmar_anulacion".
 5. Si falta un dato (pista, hora), pregunta antes de llamar a la herramienta.
-6. Para anular: llama a "preparar_anulacion" y deja que la herramienta decida (su mensaje de error es el que vale); no rehúses una anulación por tu cuenta ni calcules tú el límite de horas. El campo "anulable" de mis_reservas te dice de un vistazo cuáles aún se pueden anular.
+6. Para anular: si aún no has mostrado sus reservas en esta conversación, llama primero a mis_reservas para obtener los ids; después llama a "preparar_anulacion" y deja que la herramienta decida (su mensaje de error es el que vale). No rehúses una anulación por tu cuenta ni calcules tú el límite de horas. El campo "anulable" de mis_reservas te dice de un vistazo cuáles aún se pueden anular.
 7. Respuestas cortas, sin tecnicismos. Las horas en formato HH:MM y las fechas como "viernes 3/10".`;
 }
 
@@ -504,6 +519,8 @@ async function runChat({ message, session, llm }) {
   // modelo pueda confirmar con confirmar_reserva/confirmar_anulacion.
   const pendNote = pendingDraftNote(session);
   if (pendNote) messages.push({ role: 'system', content: pendNote });
+  const idsNote = listedIdsNote(session);
+  if (idsNote) messages.push({ role: 'system', content: idsNote });
   messages.push({ role: 'user', content: message });
 
   let reply = 'Se me ha atragantado la respuesta. Prueba de nuevo o usa la parrilla.';

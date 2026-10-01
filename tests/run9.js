@@ -335,6 +335,39 @@ process.env.LLM_API_KEY = 'test-key';
   ok(near && near.anulable === false, 'una reserva a 2 h vista sale como no anulable');
 }
 
+// ---- 15. el modelo recibe los ids reales entre turnos (nota del sistema) ----
+{
+  const session = { bookingMemberNo: '8' };
+  // Turno 1: lista las reservas (la sesión memoriza ids)
+  await Chat.runChat({
+    message: 'mis reservas', session,
+    llm: scripted([call('mis_reservas', {}), say('tienes reservas')]),
+  });
+  ok(session.lastBookings && session.lastBookings.length > 0, 'hay reservas memorizadas en sesión');
+  // Turno 2: el modelo extrae el id real de la nota (como haría uno real) y anula bien
+  const target = session.lastBookings.find(b => b.pista === 'Pista 1' && b.anulable);
+  await Chat.runChat({
+    message: 'anula la de pista 1', session,
+    llm: scripted([
+      (messages) => {
+        const note = messages.find(m => m.role === 'system' && m.content.includes('usa el id exacto en preparar_anulacion'));
+        ok(!!note, 'el turno recibe la nota con los ids reales de las reservas');
+        const m = note.content.match(/#(\d+): Pista 1, (\d{4}-\d{2}-\d{2})/);
+        ok(!!m && parseInt(m[1], 10) === target.id, 'la nota trae el id real de la reserva de pista 1');
+        return { content: null, toolCalls: [{ id: 't1', name: 'preparar_anulacion', args: { reserva_id: parseInt(m[1], 10) } }], usage: { in: 1, out: 1 } };
+      },
+      (messages) => {
+        const j = JSON.parse(messages[messages.length - 1].content);
+        ok(j.ok && j.draft_id, 'preparar_anulacion con el id de la nota crea el borrador');
+        return { content: '¿confirmo la anulación?', toolCalls: [], usage: { in: 1, out: 1 } };
+      },
+    ]),
+  });
+  const pend = session.pendingDraft;
+  const d = pend && Chat._drafts.get(pend.draft_id);
+  ok(d && d.kind === 'anulacion' && d.payload.booking_id === target.id, 'el borrador de anulación apunta a la reserva correcta');
+}
+
 console.log(`\n${pass}/${pass + fail} pruebas del chat superadas`);
 process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('ERROR:', e); process.exit(1); });
