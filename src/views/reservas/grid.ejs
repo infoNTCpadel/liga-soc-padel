@@ -26,67 +26,57 @@
 
 <% if (noCourts) { %>
   <div class="card"><p class="mut">Aún no hay pistas configuradas. El club las está preparando.</p></div>
-<% } else {
-  const ppm = 1; // px por minuto
-  const top0 = config.open_min, totalMin = config.close_min - config.open_min;
-  const hours = [];
-  for (let h = top0; h <= config.close_min; h += 60) hours.push(h);
-%>
+<% } else { %>
 <style>
 .daytabs{display:flex;gap:.4em;overflow-x:auto;margin:.8em 0}
 .daytab{flex:0 0 auto;padding:.5em .9em;border:1px solid #d8d3e8;border-radius:999px;background:#fff;color:#4b3d8f;text-decoration:none;font-weight:600}
 .daytab.on{background:#5b3df0;color:#fff;border-color:#5b3df0}
-.calwrap{overflow-x:auto;border:1px solid #e5e1f2;border-radius:12px;background:#fff}
-.cal{display:flex;min-width:<%= 60 + schedule.length * 118 %>px}
-.gutter{flex:0 0 52px;position:relative;color:#8a86a3;font-size:.78em}
-.gutter span{position:absolute;right:6px;transform:translateY(-50%)}
-.courtcol{flex:1 0 110px;border-left:1px solid #efeaf8}
-.courthead{padding:.45em;text-align:center;font-weight:700;color:#4b3d8f;border-bottom:1px solid #efeaf8;background:#faf8ff;position:sticky;top:0}
-.courtbody{position:relative}
-.hline{position:absolute;left:0;right:0;border-top:1px dashed #eee9f9}
-.blk{position:absolute;left:4px;right:4px;border-radius:8px;font-size:.8em;font-weight:600;display:flex;align-items:center;justify-content:center;text-align:center;padding:2px;overflow:hidden;text-decoration:none}
-.blk.free{border:1.5px solid #5b3df0;color:#4b3d8f;background:#f4f1ff}
-.blk.free:hover{background:#e9e3ff}
-.blk.busy{background:#f1f0f6;color:#b9b6c9}
-.blk.blocked{background:repeating-linear-gradient(45deg,#f1f0f6,#f1f0f6 6px,#e7e5f0 6px,#e7e5f0 12px);color:#a5a2b8}
-.blk.openblk{border:1.5px solid #1e8e4d;color:#146c39;background:#e9f7ef}
-.blk.openblk:hover{background:#d9f0e3}
+.slotwrap{overflow-x:auto;border:1px solid #e5e1f2;border-radius:12px;background:#fff}
+table.slots{border-collapse:separate;border-spacing:0;min-width:100%}
+table.slots th, table.slots td{padding:.45em .5em;border-bottom:1px solid #f0edf8;text-align:center;white-space:nowrap}
+table.slots thead th{background:#faf8ff;color:#4b3d8f;position:sticky;top:0}
+table.slots tbody th{color:#6b6884;font-weight:600;background:#fff;position:sticky;left:0}
+.chip{display:inline-block;padding:.45em .8em;border-radius:999px;font-size:.85em;font-weight:700;text-decoration:none;min-width:7.5em}
+.chip.free{border:1.5px solid #5b3df0;color:#4b3d8f;background:#f4f1ff}
+a.chip.free:hover{background:#e9e3ff}
+.chip.busy{background:#f1f0f6;color:#b9b6c9}
+.chip.open{border:1.5px solid #1e8e4d;color:#146c39;background:#e9f7ef}
+a.chip.open:hover{background:#d9f0e3}
+.chip.na{background:#faf9fd;color:#d5d2e2}
 .legend{display:flex;gap:1em;flex-wrap:wrap;margin:.7em 0;font-size:.85em;color:#6b6884}
 .legend i{display:inline-block;width:.9em;height:.9em;border-radius:3px;margin-right:.3em;vertical-align:-1px}
 </style>
-<div class="calwrap"><div class="cal">
-  <div class="gutter" style="height:<%= totalMin * ppm %>px">
-    <% for (const h of hours) { %><span style="top:<%= (h - top0) * ppm %>px"><%= minToStr(h) %></span><% } %>
-  </div>
-  <% for (const col of schedule) { %>
-  <div class="courtcol">
-    <div class="courthead"><%= col.court.name %></div>
-    <div class="courtbody" style="height:<%= totalMin * ppm %>px">
-      <% for (const h of hours) { %><div class="hline" style="top:<%= (h - top0) * ppm %>px"></div><% } %>
-      <% for (const it of col.items) {
-        const top = (it.start - top0) * ppm, hgt = Math.max((it.end - it.start) * ppm - 2, 18);
-        if (it.type === 'free') {
-          const url = '/reservar/nueva?court=' + col.court.id + '&date=' + date + '&desde=' + it.start;
+<div class="slotwrap"><table class="slots">
+  <thead><tr><th></th><% for (const court of courts) { %><th><%= court.name %></th><% } %></tr></thead>
+  <tbody>
+  <% for (const row of rows) { %>
+    <tr>
+      <th><%= minToStr(row.slot) %></th>
+      <% for (const { court, cell } of row.cells) {
+        if (cell.st === 'free') {
+          const url = '/reservar/nueva?court=' + court.id + '&date=' + date + '&desde=' + row.slot + '&duracion=' + cell.duration;
           const href = member ? url : '/reservar/entrar?next=' + encodeURIComponent(url);
-      %><a class="blk free" style="top:<%= top %>px;height:<%= hgt %>px" href="<%= href %>"><%= col.court.name %> · libre</a><%
-        } else if (it.type === 'booking' && it.open) {
-      %><a class="blk openblk" style="top:<%= top %>px;height:<%= hgt %>px" href="/reservar/abierto/<%= it.booking.id %>"><%= it.booking.open_spots %> <%= it.booking.open_spots === 1 ? 'plaza' : 'plazas' %><%= it.range ? ' · ' + it.range : '' %></a><%
-        } else if (it.type === 'booking') {
-      %><div class="blk busy" style="top:<%= top %>px;height:<%= hgt %>px"><%= col.court.name %> · ocupada</div><%
+      %><td><a class="chip free" href="<%= href %>" title="<%= cell.duration %> minutos"><%= court.name %> · libre</a></td><%
+        } else if (cell.st === 'open') {
+      %><td><a class="chip open" href="/reservar/abierto/<%= cell.booking.id %>"><%= court.name %> · <%= cell.booking.open_spots %> <%= cell.booking.open_spots === 1 ? 'plaza' : 'plazas' %><%= cell.range ? ' · ' + cell.range : '' %></a></td><%
+        } else if (cell.st === 'busy') {
+      %><td><span class="chip busy"><%= court.name %> · ocupada</span></td><%
+        } else if (cell.st === 'past') {
+      %><td><span class="chip na" title="Franja pasada"><%= minToStr(row.slot) %></span></td><%
         } else {
-      %><div class="blk blocked" style="top:<%= top %>px;height:<%= hgt %>px" title="<%= it.reason || '' %>">Bloqueada</div><%
+      %><td><span class="chip na" title="No encaja sin dejar huecos">—</span></td><%
         }
       } %>
-    </div>
-  </div>
+    </tr>
   <% } %>
-</div></div>
+  </tbody>
+</table></div>
 <div class="legend">
   <span><i style="background:#f4f1ff;border:1.5px solid #5b3df0"></i>Libre (pulsa para reservar)</span>
   <span><i style="background:#e9f7ef;border:1.5px solid #1e8e4d"></i>Partido abierto (faltan jugadores)</span>
   <span><i style="background:#f1f0f6"></i>Ocupada</span>
 </div>
-<p class="hint">Duraciones disponibles: <%= config.durations.join(' y ') %> minutos. Las horas ofrecidas son las que no dejan huecos inservibles.</p>
+<p class="hint">Franjas de <%= config.durations.slice().sort((a,b) => b-a)[0] %> minutos. Al pulsar una franja libre se reserva esa duración sin preguntar (si no cabe, se ofrece la siguiente).</p>
 <% } %>
 
 <details class="card" style="margin-top:1em">
@@ -95,7 +85,7 @@
   <form method="post" action="/reservar/espera" class="row2" style="margin-top:.5em">
     <input type="hidden" name="date" value="<%= date %>">
     <div class="field"><label>Pista</label><select name="court_id" id="w_court" required>
-      <% for (const col of schedule) { %><option value="<%= col.court.id %>"><%= col.court.name %></option><% } %>
+      <% for (const court of courts) { %><option value="<%= court.id %>"><%= court.name %></option><% } %>
     </select></div>
     <div class="field"><label>Hora deseada</label><select name="start_min" id="w_start" required></select></div>
     <div class="field"><label>Duración</label><select name="duration_min" required>

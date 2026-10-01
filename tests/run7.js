@@ -73,14 +73,14 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
   r = await pub.req('POST', '/reservar/entrar', { member_no: '1001', pin: '1234', next: '/reservar/mis' });
   ok(r.statusCode === 302 && r.location === '/reservar/mis', 'login con PIN correcto');
 
-  // 3. Parrilla pública por tramos
+  // 3. Parrilla por franjas
   r = await anon.req('GET', '/reservar?date=' + TOM);
-  ok(r.statusCode === 200 && r.text.includes('Pista 1') && r.text.includes('Libre') && r.text.includes('08:00'), 'parrilla pública con tramos libres');
-  ok(r.text.includes('blk free') && r.text.includes('court%3D1'), 'los tramos libres son enlaces clicables a reservar');
+  ok(r.statusCode === 200 && r.text.includes('Pista 1') && r.text.includes('Libre') && r.text.includes('08:00'), 'parrilla por franjas');
+  ok(r.text.includes('chip free') && r.text.includes('duracion%3D75'), 'las franjas libres enlazan a reservar 75 min');
 
   // 4. Reserva: el titular sale de la sesión, 3 jugadores opcionales
   r = await pub.req('GET', '/reservar/nueva?court=1&date=' + TOM + '&desde=480');
-  ok(r.statusCode === 200 && r.text.includes('Socio Uno') && r.text.includes('value="480"'), 'formulario con titular de la sesión e inicios');
+  ok(r.statusCode === 200 && r.text.includes('Socio Uno') && r.text.includes('value="480"') && r.text.includes('75 minutos'), 'formulario con titular, franja e inicio y duración automática');
   r = await pub.req('POST', '/reservar/nueva', { court_id: '1', date: TOM, start_min: '480', duration_min: '60',
     p1_name: 'Socio Dos', p1_member: '1002', p2_name: 'Invitado X', p2_member: '9999', p3_name: '', p3_member: '', titular_email: 'uno@example.com' });
   ok(r.statusCode === 200 && r.text.includes('¿Partido abierto?'), 'con un hueco pregunta si publicar abierto');
@@ -152,7 +152,7 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
   ok(bbq('SELECT status FROM bookings WHERE id = ?', bid4)[0].status === 'cancelled', 'la reserva afectada queda anulada');
   ok(bbq("SELECT COUNT(*) c FROM court_blocks WHERE date_from = ? AND date_to = ?", D3, D5)[0].c === 1, 'bloqueo guardado con rango');
   r = await anon.req('GET', '/reservar?date=' + D4);
-  ok(r.text.includes('Bloqueada'), 'la parrilla muestra la pista bloqueada en el rango');
+  ok(r.text.includes('Pista 2 · ocupada'), 'la parrilla muestra la pista bloqueada como ocupada');
   r = await pub.req('POST', '/reservar/nueva', { court_id: '2', date: D4, start_min: '840', duration_min: '60',
     p1_name: '', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
   r = await pub.req('POST', '/reservar/abrir/confirmar', { abrir: '0' });

@@ -582,28 +582,47 @@ function closeOpenMatch(booking_id) {
   bdb.prepare('UPDATE bookings SET open_spots = 0 WHERE id = ?').run(booking_id);
   return { ok: true };
 }
-// Parrilla del día para la vista calendario: por pista, tramos libres,
-// reservas y bloqueos ordenados, con visibilidad de abiertos según viewer.
-function daySchedule(date, viewer, courts) {
-  const blocks = dayBlocks(date);
-  const bookings = bdb.prepare(
+// Franja de la parrilla = la duración más larga del ajuste (ej. 75 con 60,75).
+function slotInterval() { return Math.max(...getConfig().durations); }
+// Inicios de franja del día: open, open+franja, ... mientras quepa la duración mínima.
+function slotStarts(date) {
+  const c = getConfig();
+  const step = slotInterval(), minD = Math.min(...c.durations);
+  const out = [];
+  for (let s = c.open_min; s + minD <= c.close_min; s += step) out.push(s);
+  return out;
+}
+// Primera duración (de mayor a menor) que encaja en ese inicio, o null.
+function fitDuration(court_id, date, start_min) {
+  const ds = [...getConfig().durations].sort((a, b) => b - a);
+  return ds.find(d => isBookable(court_id, date, start_min, d)) || null;
+}
+// ¿Qué hay en una pista a una hora de franja? → past / busy / open / free(duration) / unavailable
+function slotCell(court_id, date, slot, viewer) {
+  if (date === todayStr() && slot <= nowMin()) return { st: 'past' };
+  const b = bdb.prepare(
     `SELECT bk.*, m.level AS booker_level FROM bookings bk
      LEFT JOIN club_members m ON m.member_no = bk.titular_member_no
-     WHERE bk.date = ? AND bk.status = 'active'`).all(date);
-  return courts.map(court => {
-    const items = [];
-    for (const b of bookings.filter(x => x.court_id === court.id)) {
-      const open = b.open_spots > 0 && openVisibleTo(b.titular_member_no, b.booker_level, viewer);
-      items.push({ type: 'booking', start: b.start_min, end: b.end_min, booking: b,
-        open, range: levelRangeText(b.booker_level) });
-    }
-    for (const bl of blocks.filter(x => x.court_id === court.id))
-      items.push({ type: 'block', start: bl.start_min, end: bl.end_min, reason: bl.reason });
-    for (const g of freeSegments(court.id, date))
-      items.push({ type: 'free', start: g.start, end: g.end });
-    items.sort((a, b2) => a.start - b2.start);
-    return { court, items };
-  });
+     WHERE bk.date = ? AND bk.court_id = ? AND bk.status = 'active'
+       AND bk.start_min <= ? AND ? < bk.end_min LIMIT 1`).get(date, court_id, slot, slot);
+  if (b) {
+    if (b.open_spots > 0 && openVisibleTo(b.titular_member_no, b.booker_level, viewer))
+      return { st: 'open', booking: b, range: levelRangeText(b.booker_level) };
+    return { st: 'busy' };
+  }
+  const bl = bdb.prepare(
+    `SELECT 1 FROM court_blocks WHERE court_id = ? AND ? BETWEEN date_from AND date_to
+     AND start_min <= ? AND ? < end_min LIMIT 1`).get(court_id, date, slot, slot);
+  if (bl) return { st: 'busy' };
+  const d = fitDuration(court_id, date, slot);
+  return d ? { st: 'free', duration: d } : { st: 'unavailable' };
+}
+// Parrilla por franjas: [{ slot, cells: [{ court, cell }] }]
+function slotDay(date, viewer, courts) {
+  return slotStarts(date).map(slot => ({
+    slot,
+    cells: courts.map(court => ({ court, cell: slotCell(court.id, date, slot, viewer) })),
+  }));
 }
 
 // ------------------------------------------------------------ lista de espera
@@ -855,7 +874,8 @@ module.exports = {
   createBooking, getBooking, cancelBooking,
   searchMembers, validLevel, setLevel, fmtLevel, levelRangeText,
   addBlock, removeBlock, getBlocks, isBlockedBy, openVisibleTo,
-  joinOpenMatch, syncOpenSpots, closeOpenMatch, daySchedule,
+  joinOpenMatch, syncOpenSpots, closeOpenMatch,
+  slotInterval, slotStarts, slotCell, slotDay, fitDuration,
   expireOffers, promoteWaitlist, joinWaitlist, confirmOffer, leaveWaitlist, memberArea,
   validateBlock, affectedBookings, createBlock, deleteBlock, listBlocks,
   setBookingPaid, addCharge, setChargePaid, deleteCharge, dayDetail, pendingPayments,

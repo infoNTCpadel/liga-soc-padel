@@ -14,16 +14,14 @@
     <div class="field"><label>Hora de inicio</label>
       <select name="start_min" id="startSel" required>
         <% for (const v of starts) { %>
-          <option value="<%= v.start_min %>" data-d="<%= v.durations.join(',') %>"><%= minToStr(v.start_min) %></option>
+          <option value="<%= v.start_min %>" data-d="<%= v.durations.join(',') %>" <%= v.start_min === chosenStart ? 'selected' : '' %>><%= minToStr(v.start_min) %></option>
         <% } %>
       </select>
     </div>
     <div class="field"><label>Duración</label>
-      <div id="durRow">
-      <% for (const d of config.durations) { %>
-        <label style="display:inline-block;margin-right:1em"><input type="radio" name="duration_min" class="durOpt" value="<%= d %>" <%= d === 75 ? 'checked' : '' %>> <%= d %> min</label>
-      <% } %>
-      </div>
+      <p style="margin:.2em 0"><strong id="durText"><%= chosenDur %> minutos</strong>
+      <span class="mut" style="font-size:.85em">(automática: <%= config.durations.slice().sort((a,b) => b-a).join(' min o ') %> min, sin preguntar)</span></p>
+      <input type="hidden" name="duration_min" id="durInput" value="<%= chosenDur %>">
     </div>
   </div>
   <div class="card">
@@ -56,18 +54,12 @@
 <script>
 (function () {
   const sel = document.getElementById('startSel');
-  const opts = document.querySelectorAll('.durOpt');
+  const durInput = document.getElementById('durInput'), durText = document.getElementById('durText');
   function upd() {
-    const allowed = (sel.selectedOptions[0].dataset.d || '').split(',').map(Number);
-    opts.forEach(o => {
-      const on = allowed.includes(Number(o.value));
-      o.closest('label').style.display = on ? '' : 'none';
-      if (!on && o.checked) o.checked = false;
-    });
-    if (![...opts].some(o => o.checked && o.closest('label').style.display !== 'none')) {
-      const first = [...opts].find(o => o.closest('label').style.display !== 'none');
-      if (first) first.checked = true;
-    }
+    // Duración automática: la mayor que encaje en la hora elegida, sin preguntar.
+    const allowed = (sel.selectedOptions[0].dataset.d || '').split(',').map(Number).sort((a, b) => b - a);
+    const d = allowed[0] || Number(durInput.value);
+    durInput.value = d; durText.textContent = d + ' minutos';
   }
   sel.addEventListener('change', upd); upd();
 

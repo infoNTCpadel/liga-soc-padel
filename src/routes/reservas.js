@@ -135,7 +135,8 @@ router.get('/', (req, res) => {
   const date = clampDate(validDate(req.query.date));
   const member = me(req);
   const viewer = member ? { member_no: member.member_no, level: member.level } : null;
-  const schedule = B.daySchedule(date, viewer, activeCourts());
+  const courts = activeCourts();
+  const rows = B.slotDay(date, viewer, courts);
   const today = B.todayStr();
   const maxDate = B.addDays(today, c.days_ahead);
   const tabs = [];
@@ -148,7 +149,6 @@ router.get('/', (req, res) => {
     return wd[dt.getDay()] + ' ' + dt.getDate();
   };
   // Inicios potencialmente reservables por pista (lista de espera).
-  const courts = schedule.map(s => s.court);
   const waitStarts = {};
   for (const court of courts) {
     const seen = new Set(), list = [];
@@ -160,10 +160,10 @@ router.get('/', (req, res) => {
     waitStarts[court.id] = list;
   }
   res.renderPage('reservas/grid', {
-    date, schedule, config: c, today, tabs, tabLabel, waitStarts,
+    date, rows, courts, config: c, today, tabs, tabLabel, waitStarts,
     prev: date > today ? B.addDays(date, -1) : null,
     next: date < maxDate ? B.addDays(date, 1) : null,
-    noCourts: schedule.length === 0,
+    noCourts: courts.length === 0,
     minToStr: B.minToStr, member,
     info: req.query.ok ? 'Te has apuntado a la lista de espera. Te guardamos la plaza ' + c.hold_min + ' minutos si se libera.' : null,
     error: req.query.err || null,
@@ -188,20 +188,30 @@ router.get('/nueva', requireMember, (req, res) => {
       error: null, court, date: offer.date, offer,
       segStart: offer.start_min,
       starts: [{ start_min: offer.start_min, durations: [offer.duration_min] }],
+      chosenStart: offer.start_min, chosenDur: offer.duration_min,
       config: c, member, titularEmail: member.email || '', minToStr: B.minToStr,
     });
   }
   const date = clampDate(validDate(req.query.date));
   const court = courts.find(x => x.id === parseInt(req.query.court, 10));
   const desde = parseInt(req.query.desde, 10);
+  const durQ = parseInt(req.query.duracion, 10);
   if (!court || !Number.isInteger(desde)) return res.redirect('/reservar?date=' + date);
   const seg = B.freeSegments(court.id, date).find(g => desde >= g.start && desde < g.end);
   if (!seg) return res.redirect('/reservar?date=' + date);
   const starts = B.validStarts(seg.start, seg.end);
   if (!starts.length) return res.redirect('/reservar?date=' + date);
+  // Prefiere la franja pulsada si es válida; si no, la primera válida posterior.
+  const chosen = starts.find(v => v.start_min === desde) || starts.find(v => v.start_min > desde);
+  if (!chosen) return res.redirect('/reservar?date=' + date);
+  // Duración automática sin preguntar: la pedida si encaja, si no la mayor que quepa.
+  const dursDesc = [...c.durations].sort((a, b) => b - a);
+  const chosenDur = (dursDesc.includes(durQ) && chosen.durations.includes(durQ))
+    ? durQ : dursDesc.find(d => chosen.durations.includes(d));
   res.renderPage('reservas/nueva', {
     error: null, court, date, offer: null, segStart: seg.start,
-    starts, config: c, member, titularEmail: member.email || '', minToStr: B.minToStr,
+    starts, chosenStart: chosen.start_min, chosenDur,
+    config: c, member, titularEmail: member.email || '', minToStr: B.minToStr,
   });
 });
 
@@ -231,9 +241,13 @@ router.post('/nueva', requireMember, (req, res) => {
   }));
   const render = (error) => {
     const seg = !offerRow && court ? B.freeSegments(court.id, date).find(g => start_min >= g.start && start_min < g.end) : null;
+    const rstarts = seg ? B.validStarts(seg.start, seg.end) : [];
+    const pick = offerRow ? null : (rstarts.find(v => v.start_min === start_min) || rstarts[0]);
     res.renderPage('reservas/nueva', {
       error, court: court || {}, date, offer: offerRow, segStart: seg ? seg.start : start_min,
-      starts: seg ? B.validStarts(seg.start, seg.end) : [],
+      starts: rstarts,
+      chosenStart: offerRow ? offerRow.start_min : (pick ? pick.start_min : start_min),
+      chosenDur: offerRow ? offerRow.duration_min : duration_min,
       config: c, member, titularEmail: (req.body.titular_email || '').trim() || member.email || '',
       minToStr: B.minToStr,
     });

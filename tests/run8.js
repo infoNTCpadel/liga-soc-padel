@@ -152,9 +152,18 @@ ok(B.joinOpenMatch(jb.id, B.getMember('J4')).error, 'cerrado: nadie más puede u
 B.closeOpenMatch(jb.id);
 eq(B.getBooking(jb.id).open_spots, 0, 'closeOpenMatch deja 0 plazas');
 
-// daySchedule muestra los tramos libres (bug: se filtraban y la parrilla salía vacía)
-const sch = B.daySchedule('2030-01-01', null, [{ id: 1, name: 'P1' }]);
-ok(sch[0].items.some(i => i.type === 'free'), 'daySchedule incluye tramos libres');
+// Parrilla por franjas: la franja es la duración más larga del ajuste
+const D = B.addDays(B.todayStr(), 1);
+eq(B.slotInterval(), 75, 'franja = duración más larga (75)');
+const slots = B.slotStarts(D);
+ok(slots[0] === 480 && slots.every((s, i) => i === 0 || s - slots[i - 1] === 75), 'franjas cada 75 min desde la apertura');
+const cell = B.slotCell(1, D, 480, null);
+ok(cell.st === 'free' && cell.duration === 75, 'franja libre ofrece 75 sin preguntar');
+// Si 75 no cabe, ofrece 60
+B.createBooking({ court_id: 1, court_name: 'P1', date: D, start_min: 540, duration_min: 60, titular_member_no: 'S1', players: [] });
+const cell2 = B.slotCell(1, D, 480, null);
+ok(cell2.st === 'free' && cell2.duration === 60, 'si 75 no cabe se ofrecen 60');
+ok(B.slotCell(1, D, 540, null).st === 'busy', 'franja con reserva sale ocupada');
 
 console.log(`\n${pass} OK, ${fail} FALLOS`);
 process.exit(fail ? 1 : 0);
