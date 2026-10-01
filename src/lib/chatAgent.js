@@ -108,7 +108,7 @@ function trackDraftCall(session, name, args, r) {
   if (name === 'mis_reservas' && r && r.ok && Array.isArray(r.reservas))
     session.lastBookings = r.reservas.map(b => ({ id: b.id, pista: b.pista, fecha: b.fecha, dia: b.dia_semana, inicio: b.inicio, anulable: b.anulable }));
   if (name === 'ver_partidos_abiertos' && r && r.ok && Array.isArray(r.partidos))
-    session.lastOpenMatches = r.partidos.map(p => ({ id: p.id, pista: p.pista, inicio: p.inicio }));
+    session.lastOpenMatches = r.partidos.map(p => ({ id: p.id, pista: p.pista, fecha: r.fecha, dia: r.dia_semana, inicio: p.inicio }));
   if ((name === 'preparar_reserva' || name === 'preparar_anulacion') && r && r.ok && r.draft_id) {
     session.pendingDraft = {
       kind: name === 'preparar_reserva' ? 'reserva' : 'anulacion',
@@ -142,7 +142,7 @@ function listedIdsNote(session) {
   const lm = session && session.lastOpenMatches;
   if (lm && lm.length)
     parts.push('Partidos abiertos mostrados (usa el id exacto en apuntarse_partido): ' +
-      lm.map(p => `#${p.id}: ${p.pista}, ${p.inicio}`).join(' | '));
+      lm.map(p => `#${p.id}: ${p.dia || ''} ${p.fecha || ''} ${p.inicio}, ${p.pista}`).join(' | '));
   return parts.length ? parts.join('\n') : null;
 }
 // Anti fuerza bruta del PIN en el chat (en memoria; un solo proceso).
@@ -233,7 +233,7 @@ const TOOLS = [
       fecha: { type: 'string', description: 'Día AAAA-MM-DD (opcional, defecto hoy)' } } } } },
   { type: 'function', function: {
     name: 'apuntarse_partido',
-    description: 'Apunta al socio identificado a un partido abierto. Úsala solo cuando el socio lo pida claramente.',
+    description: 'Apunta al socio identificado a un partido abierto. Úsala solo cuando el socio lo pida claramente. El id sale de la nota de sistema "Partidos abiertos mostrados" (el número tras #); si el socio elige por pista u hora, busca ahí el id que corresponda. NUNCA inventes el id ni uses un número de orden que tú hayas puesto en tu mensaje.',
     parameters: { type: 'object', properties: {
       partido_id: { type: 'integer', description: 'Id EXACTO del campo id devuelto por ver_partidos_abiertos. NUNCA uses el número de orden de la lista que muestres al socio.' } },
       required: ['partido_id'] } } },
@@ -392,6 +392,7 @@ function dispatch(name, args, ctx) {
         if (!ctx.memberNo) return toolResult(false, 'Necesito saber quién eres: dime tu nº de socio y tu PIN.');
         const member = B.getMember(ctx.memberNo);
         const pid = resolveListedId(ctx.session && ctx.session.lastOpenMatches, a.partido_id);
+        if (!Number.isInteger(pid)) return toolResult(false, 'No sé a qué partido te refieres: dime la pista o la hora del partido abierto.');
         const r = B.joinOpenMatch(pid, member);
         if (r.error) return toolResult(false, r.error);
         return toolResult(true, { apuntado: true });
@@ -451,6 +452,7 @@ Reglas de actuación:
 4. Para anular: primero "preparar_anulacion", muestra el resumen y pide confirmación explícita; luego "confirmar_anulacion".
 5. Si falta un dato (pista, hora), pregunta antes de llamar a la herramienta.
 6. Para anular: si aún no has mostrado sus reservas en esta conversación, llama primero a mis_reservas para obtener los ids; si varias reservas encajan con lo que pide (misma pista, varias fechas), pregunta cuál antes de preparar nada. Después llama a "preparar_anulacion" y deja que la herramienta decida (su mensaje de error es el que vale). No rehúses una anulación por tu cuenta ni calcules tú el límite de horas. El campo "anulable" de mis_reservas te dice de un vistazo cuáles aún se pueden anular.
+6b. Partidos abiertos: al listarlos muestra cada uno con su pista, día, hora, nivel y plazas libres (🎾 Pista 2 · lunes 5/10 18:00–19:15 · Nivel 3 · 2 plazas). NUNCA inventes números de orden ("partido 1", "partido 2"): el socio elige por pista u hora ("el de las 18:00", "el de Pista 2"). Cuando elija, busca el id real en la nota de sistema y llama a apuntarse_partido con ese id. Llama SIEMPRE a la herramienta antes de decir nada del resultado; si devuelve error, transmite su mensaje tal cual y nunca inventes que "está cerrado".
 7. Límite: cada socio puede tener como máximo 2 reservas activas (aún no jugadas) a la vez; si preparar_reserva lo rechaza por eso, explícaselo y sugiere anular alguna o esperar a que termine.
 8. Las herramientas te dan el día de la semana ya calculado (dia_semana). Úsalo tal cual al hablar de fechas ("lunes 5/10"); no calcules tú el día de la semana a partir de la fecha.
 9. Respuestas cortas, sin tecnicismos. Las horas en formato HH:MM y las fechas como "viernes 3/10".

@@ -418,6 +418,35 @@ process.env.LLM_API_KEY = 'test-key';
   ok(disp.ok && disp.dia_semana === B.weekdayName(D2), 'ver_disponibilidad trae dia_semana');
 }
 
+// ---- 18. apuntarse a partido abierto: ordinal, lleno e id inválido ----
+{
+  B.upsertMember('11', 'Once Pruebas', '600000011'); B.setPin('11', '1111');
+  B.upsertMember('12', 'Doce Pruebas', '600000012'); B.setPin('12', '1212');
+  const seg = B.freeSegments(1, TOM).find(g => g.end - g.start >= 150) || B.freeSegments(1, TOM)[0];
+  const st = B.validStarts(seg.start, seg.end)[0];
+  const created = B.createBooking({
+    court_id: 1, court_name: 'Pista 1', date: TOM, start_min: st.start_min,
+    duration_min: st.durations[0], titular_member_no: '7', players: [], open_spots: 1, byStaff: true,
+  });
+  ok(!created.error, 'abierto con 1 plaza creado para el test');
+  const session = { bookingMemberNo: '11' };
+  await Chat.runChat({
+    message: 'partidos abiertos', session,
+    llm: scripted([call('ver_partidos_abiertos', { fecha: TOM }), say('hay uno')]),
+  });
+  ok(session.lastOpenMatches && session.lastOpenMatches.some(p => p.id === created.id),
+    'la sesión memoriza el partido abierto con su id real');
+  // el modelo pasa el ordinal ("el primero" -> 1): se resuelve al id real
+  const jr = Chat.dispatch('apuntarse_partido', { partido_id: 1 }, { memberNo: '11', courts: [], session });
+  ok(jr.ok && B.getBooking(created.id).open_spots === 0, 'ordinal 1 resuelve al id real y apunta (plazas a 0)');
+  // ya lleno: el error es específico de cerrado
+  const full = Chat.dispatch('apuntarse_partido', { partido_id: created.id }, { memberNo: '12', courts: [], session });
+  ok(!full.ok && full.error.includes('cerrado'), 'partido lleno devuelve error específico de cerrado');
+  // partido_id inválido (texto): mensaje claro para pedir pista u hora
+  const bad = Chat.dispatch('apuntarse_partido', { partido_id: 'partido 1' }, { memberNo: '12', courts: [], session });
+  ok(!bad.ok && bad.error.includes('pista o la hora'), 'partido_id inválido devuelve mensaje claro');
+}
+
 console.log(`\n${pass}/${pass + fail} pruebas del chat superadas`);
 process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('ERROR:', e); process.exit(1); });
