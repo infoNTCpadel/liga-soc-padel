@@ -85,6 +85,12 @@ function takeDraft(id, member_no, kind) {
   drafts.delete(id);
   return { draft: d };
 }
+// Horas que faltan para el inicio de una reserva (negativo si ya empezó).
+function cancelHoursLeft(b) {
+  const start = new Date(b.date + 'T00:00:00');
+  start.setMinutes(b.start_min);
+  return (start - new Date()) / 3600000;
+}
 // El modelo a veces pasa el número de orden de la lista que mostró al socio
 // en vez del id real. Si el id no está entre los listados pero encaja como
 // posición (1..N), se interpreta como posición de la última lista mostrada.
@@ -177,7 +183,7 @@ const TOOLS = [
       required: ['fecha'] } } },
   { type: 'function', function: {
     name: 'mis_reservas',
-    description: 'Próximas reservas del socio identificado (con id para anular).',
+    description: 'Próximas reservas del socio identificado (con id para anular). Cada una trae fecha (AAAA-MM-DD) y "anulable" (true si aún se puede anular online). Muestra SIEMPRE la fecha al listarlas.',
     parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: {
     name: 'preparar_reserva',
@@ -264,11 +270,13 @@ function dispatch(name, args, ctx) {
       case 'mis_reservas': {
         if (!ctx.memberNo) return toolResult(false, 'Necesito saber quién eres: dime tu nº de socio y tu PIN.');
         const area = B.memberArea(ctx.memberNo);
+        const cfg = B.getConfig();
         return toolResult(true, {
           reservas: area.bookings.map(b => ({
-            id: b.id, fecha: b.fecha, inicio: B.minToStr(b.start_min), fin: B.minToStr(b.end_min),
+            id: b.id, fecha: b.date, inicio: B.minToStr(b.start_min), fin: B.minToStr(b.end_min),
             pista: b.court_name, jugadores: b.players.map(p => p.name),
             plazas_libres: b.open_spots,
+            anulable: cancelHoursLeft(b) >= cfg.cancel_limit_h,
           })),
           ofertas_espera: area.offers.map(w => ({ id: w.id, fecha: w.date, inicio: B.minToStr(w.start_min), pista: w.court_name })),
         });
@@ -323,9 +331,9 @@ function dispatch(name, args, ctx) {
         if (!b || b.status !== 'active') return toolResult(false, 'No encuentro esa reserva activa.');
         if (b.titular_member_no !== ctx.memberNo) return toolResult(false, 'Esa reserva no es tuya.');
         const c = B.getConfig();
-        const start = new Date(b.date + 'T00:00:00');
-        start.setMinutes(b.start_min);
-        const hoursLeft = (start - new Date()) / 3600000;
+        const hoursLeft = cancelHoursLeft(b);
+        if (hoursLeft < 0)
+          return toolResult(false, 'Esa reserva ya ha empezado o ha terminado; no se puede anular.');
         if (hoursLeft < c.cancel_limit_h)
           return toolResult(false, `Ya no se puede anular online (límite: ${c.cancel_limit_h} h antes). Contacta con recepción.`);
         const resumen = `${b.court_name} · ${b.date.split('-').reverse().join('/')} · ${B.minToStr(b.start_min)}–${B.minToStr(b.end_min)}`;
@@ -427,7 +435,8 @@ Reglas de actuación:
 3. Para crear una reserva: primero "preparar_reserva", muestra el resumen al socio y pregúntale si lo confirma; solo cuando diga que sí (explícitamente), llama a "confirmar_reserva" con el draft_id.
 4. Para anular: primero "preparar_anulacion", muestra el resumen y pide confirmación explícita; luego "confirmar_anulacion".
 5. Si falta un dato (pista, hora), pregunta antes de llamar a la herramienta.
-6. Respuestas cortas, sin tecnicismos. Las horas en formato HH:MM y las fechas como "viernes 3/10".`;
+6. Para anular: llama a "preparar_anulacion" y deja que la herramienta decida (su mensaje de error es el que vale); no rehúses una anulación por tu cuenta ni calcules tú el límite de horas. El campo "anulable" de mis_reservas te dice de un vistazo cuáles aún se pueden anular.
+7. Respuestas cortas, sin tecnicismos. Las horas en formato HH:MM y las fechas como "viernes 3/10".`;
 }
 
 // ------------------------------------------------------------ llamada al LLM

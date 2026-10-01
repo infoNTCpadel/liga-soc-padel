@@ -291,6 +291,50 @@ process.env.LLM_API_KEY = 'test-key';
     'el ordinal 2 se resolvió al id real de la segunda reserva listada');
 }
 
+// ---- 14. mis_reservas devuelve la fecha real y el flag anulable ----
+{
+  const session = { bookingMemberNo: '8' };
+  // Reserva en D2: lejos del límite -> anulable
+  const seg = B.freeSegments(1, D2).find(g => g.end - g.start >= 60);
+  const bk = B.createBooking({ court_id: 1, court_name: 'Pista 1', date: D2, start_min: seg.start, duration_min: 60, titular_member_no: '8', players: [] });
+  ok(bk.id, 'reserva futura de prueba creada');
+  let seen = null;
+  await Chat.runChat({
+    message: 'mis reservas', session,
+    llm: scripted([
+      call('mis_reservas', {}),
+      (messages) => {
+        seen = JSON.parse(messages[messages.length - 1].content).reservas;
+        return { content: 'listo', toolCalls: [], usage: { in: 1, out: 1 } };
+      },
+    ]),
+  });
+  const mine = (seen || []).find(b => b.id === bk.id);
+  ok(mine && mine.fecha === D2, 'mis_reservas devuelve la fecha real (AAAA-MM-DD)');
+  ok(mine && mine.anulable === true, 'una reserva a 2 días vista sale como anulable');
+  // Reserva dentro del límite de 6 h -> no anulable (inserción directa, hoy dentro de 2 h)
+  const tIn2h = B.nowMin() + 120;
+  const ins = B.bdb.prepare(
+    `INSERT INTO bookings(court_id, court_name, date, start_min, end_min, titular_member_no, titular_name, payment_status, open_spots)
+     VALUES(2, 'Pista 2', ?, ?, ?, '8', 'Ocho Pruebas', 'ok', 0)`).run(B.todayStr(), tIn2h, tIn2h + 60);
+  const nearId = Number(ins.lastInsertRowid);
+  const ctx = { memberNo: '8', courts: [] };
+  const prep = Chat.dispatch('preparar_anulacion', { reserva_id: nearId }, ctx);
+  ok(!prep.ok && prep.error.includes('6 h'), 'una reserva a 2 h vista no se puede anular online (límite 6 h)');
+  await Chat.runChat({
+    message: 'mis reservas otra vez', session,
+    llm: scripted([
+      call('mis_reservas', {}),
+      (messages) => {
+        seen = JSON.parse(messages[messages.length - 1].content).reservas;
+        return { content: 'listo', toolCalls: [], usage: { in: 1, out: 1 } };
+      },
+    ]),
+  });
+  const near = (seen || []).find(b => b.id === nearId);
+  ok(near && near.anulable === false, 'una reserva a 2 h vista sale como no anulable');
+}
+
 console.log(`\n${pass}/${pass + fail} pruebas del chat superadas`);
 process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('ERROR:', e); process.exit(1); });
