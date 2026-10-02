@@ -188,10 +188,9 @@ router.post('/ajustes', (req, res) => {
 });
 
 // ---- Sorteo y calendario (Fase B) ----
-router.get('/sorteo', (req, res) => {
-  const { all, sel } = selTournament(req);
+function renderSorteo(res, tid, extra = {}) {
+  const { all, sel } = selTournament({ query: { t: String(tid) } });
   if (!sel) return res.redirect('/admin/mediodia?error=No hay ninguna edición.');
-  const tid = sel.id;
   const draw = D.drawForTournament(middayDb, tid);
   const approvedCount = middayDb.prepare(
     "SELECT COUNT(*) c FROM midday_pairs WHERE tournament_id = ? AND status = 'approved'").get(tid).c;
@@ -206,10 +205,18 @@ router.get('/sorteo', (req, res) => {
     settings,
     slotLabel: (m) => D.matchSlotLabel(m, settings.slots),
     fmtDate: D.fmtMatchDate,
-    info: req.query.ok || null,
-    error: req.query.error || null,
+    info: null,
+    error: null,
+    bulkResults: {},
+    bulkSummary: null,
     sub: 'mediodia',
+    ...extra,
   });
+}
+router.get('/sorteo', (req, res) => {
+  const { sel } = selTournament(req);
+  if (!sel) return res.redirect('/admin/mediodia?error=No hay ninguna edición.');
+  renderSorteo(res, sel.id, { info: req.query.ok || null, error: req.query.error || null });
 });
 
 router.post('/sorteo/generar', (req, res) => {
@@ -224,15 +231,28 @@ router.post('/sorteo/generar', (req, res) => {
   }
 });
 
-router.post('/sorteo/partido/:id/mover', (req, res) => {
+// Guarda en bloque todos los retoques del calendario (una sola confirmación).
+// Las filas sin fecha se dejan como están; las que no cambian se omiten.
+router.post('/sorteo/guardar-todo', (req, res) => {
   const tid = Number(req.body.t);
-  const force = req.body.force === '1';
-  let slotId = req.body.slot_id, customTime = null;
-  if (slotId === '__custom') { customTime = String(req.body.custom_time || '').trim(); slotId = null; }
-  const r = D.rescheduleMatch(middayDb, Number(req.params.id),
-    String(req.body.date || '').trim(), slotId, req.body.court_no, drawSettings(tid), { force, customTime });
-  res.redirect(`/admin/mediodia/sorteo?t=${tid}&` +
-    (r.ok ? 'ok=Partido reprogramado.' : 'error=' + encodeURIComponent(r.error)));
+  const draw = D.drawForTournament(middayDb, tid);
+  if (!draw || draw.status !== 'draft')
+    return res.redirect(`/admin/mediodia/sorteo?t=${tid}&error=` + encodeURIComponent('No hay sorteo en borrador.'));
+  const force = req.body.force_all === '1';
+  const changes = D.drawMatches(middayDb, draw.id).map(m => {
+    const slotRaw = req.body['slot_' + m.id];
+    return {
+      id: m.id,
+      iso: req.body['date_' + m.id],
+      slotId: slotRaw === '__custom' ? null : slotRaw,
+      customTime: slotRaw === '__custom' ? req.body['ctime_' + m.id] : null,
+      courtNo: req.body['court_' + m.id],
+    };
+  });
+  const r = D.bulkReschedule(middayDb, draw.id, changes, drawSettings(tid), { force });
+  const summary = !r.changed ? 'Sin cambios.' :
+    `${r.ok} partido(s) programado(s)` + (r.errors ? ` · ${r.errors} con error (revísalos abajo)` : '') + '.';
+  renderSorteo(res, tid, { bulkResults: r.results, bulkSummary: summary, info: summary });
 });
 
 // Publica el calendario y avisa por email a las parejas (si hay Brevo configurado).

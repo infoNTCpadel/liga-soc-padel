@@ -88,7 +88,14 @@
 <div class="card">
   <h3>Calendario (<%= matches.length %> partidos)</h3>
   <% if (draw.status === 'draft') { %>
-  <p class="mut small">Revisa y ajusta fecha, franja o pista por partido. Al publicar, las parejas verán este calendario.</p>
+  <form method="post" action="/admin/mediodia/sorteo/guardar-todo">
+  <input type="hidden" name="t" value="<%= sel.id %>">
+  <p class="mut small">Rellena fecha, franja o pista en las filas que quieras cambiar y guárdalo todo de golpe. Las filas sin fecha se dejan como están.</p>
+  <div style="display:flex;gap:10px;align-items:center;margin:8px 0;flex-wrap:wrap">
+    <button class="btn" type="submit">Guardar todos los cambios</button>
+    <label class="small"><input type="checkbox" name="force_all" value="1"> Forzar en las que choquen <span class="mut">(ya hablado con las parejas)</span></label>
+    <% if (bulkSummary) { %><span class="small"><strong><%= bulkSummary %></strong></span><% } %>
+  </div>
   <% } %>
   <% let lastRound = 0; %>
   <% for (const m of matches) { %>
@@ -109,24 +116,30 @@
       <td><%= m.n2a %> / <%= m.n2b %></td>
       <% if (draw.status === 'draft') { %>
       <td>
-        <form method="post" action="/admin/mediodia/sorteo/partido/<%= m.id %>/mover" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
-          <input type="hidden" name="t" value="<%= sel.id %>">
-          <input type="date" name="date" value="<%= m.match_date || '' %>" style="width:9.5em" required>
-          <select name="slot_id">
+        <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+          <input type="date" name="date_<%= m.id %>" value="<%= m.match_date || '' %>" style="width:9.5em" title="Vacío = no cambiar">
+          <select name="slot_<%= m.id %>">
             <% for (const s of settings.slots) { %>
             <option value="<%= s.id %>" <%= m.slot_id === s.id && !m.custom_time ? 'selected' : '' %>><%= s.label %></option>
             <% } %>
             <option value="__custom" <%= m.custom_time ? 'selected' : '' %>>Otra hora…</option>
           </select>
-          <input type="time" name="custom_time" value="<%= m.custom_time || '' %>" style="width:6.5em" title="Hora libre (elige «Otra hora…»)">
-          <input type="number" name="court_no" min="1" max="<%= settings.courts %>" value="<%= m.court_no || 1 %>" style="width:3.5em" title="Pista">
-          <label class="small mut" title="Pasa por alto las preferencias de las parejas (franjas, días vetados, descanso mínimo)"><input type="checkbox" name="force" value="1"> Forzar</label>
-          <button class="btn small ghost" type="submit" title="Guardar cambio">✓</button>
-        </form>
+          <input type="time" name="ctime_<%= m.id %>" value="<%= m.custom_time || '' %>" style="width:6.5em" title="Hora libre (elige «Otra hora…»)">
+          <input type="number" name="court_<%= m.id %>" min="1" max="<%= settings.courts %>" value="<%= m.court_no || '' %>" placeholder="—" style="width:3.5em" title="Pista">
+        </div>
+        <% const br = (bulkResults || {})[m.id]; if (br) { %>
+          <% if (br.ok) { %><span class="badge ok">✓ programado</span><% } else { %><span class="bad small">⚠ <%= br.error %></span><% } %>
+        <% } %>
       </td>
       <% } %>
     </tr>
   <% } %>
   <% if (matches.length) { %></tbody></table><% } %>
+  <% if (draw.status === 'draft') { %>
+  <div style="margin-top:10px">
+    <button class="btn" type="submit">Guardar todos los cambios</button>
+  </div>
+  </form>
+  <% } %>
 </div>
 <% } %>

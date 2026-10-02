@@ -397,10 +397,38 @@ function matchSlotLabel(m, slots) {
   const s = (slots || []).find(x => x.id === (m && m.slot_id));
   return s ? s.label : ((m && m.slot_id) || '—');
 }
+// Guarda en bloque los retoques del admin: changes = [{ id, iso, slotId,
+// customTime, courtNo }]. Las filas sin fecha se dejan como están y las que
+// no cambian se omiten. Devuelve resultados por partido para mostrarlos en
+// la vista (los que van bien y los que dan error).
+function bulkReschedule(mdb, drawId, changes, settings, opts = {}) {
+  const { force = false } = opts;
+  const byId = {};
+  for (const m of mdb.prepare('SELECT * FROM midday_matches WHERE draw_id = ?').all(drawId)) byId[m.id] = m;
+  const results = {};
+  let changed = 0, okCount = 0;
+  for (const c of changes) {
+    const cur = byId[c.id];
+    if (!cur) { results[c.id] = { ok: false, error: 'Partido no encontrado.' }; continue; }
+    const iso = (c.iso || '').trim();
+    if (!iso) continue; // sin fecha = no tocar
+    const cTime = (c.customTime || '').trim() || null;
+    const slotId = cTime ? null : (c.slotId || cur.slot_id);
+    const courtNo = (c.courtNo === undefined || c.courtNo === '' || c.courtNo === null) ? cur.court_no : c.courtNo;
+    const same = cur.match_date === iso && (cur.slot_id || null) === (slotId || null) &&
+      (cur.custom_time || null) === cTime && Number(cur.court_no) === Number(courtNo);
+    if (same) continue;
+    changed++;
+    const r = rescheduleMatch(mdb, c.id, iso, slotId, courtNo, settings, { force, customTime: cTime });
+    results[c.id] = r;
+    if (r.ok) okCount++;
+  }
+  return { results, changed, ok: okCount, errors: changed - okCount };
+}
 module.exports = {
   parseISODate, addDaysISO, diffDaysISO, weekdayNum, isWeekdayISO, fmtMatchDate,
   potSizes, buildPots, circleRounds, interleavePots,
   buildDraw, deleteDraw, getDraw, drawForTournament, drawPots, drawMatches, pairMatches,
-  canPlayOn, scheduleDraw, rescheduleMatch, drawWarnings, matchSlotLabel,
+  canPlayOn, scheduleDraw, rescheduleMatch, bulkReschedule, drawWarnings, matchSlotLabel,
   publishDraw, setDrawEmailSummary, sendMiddayEmail,
 };

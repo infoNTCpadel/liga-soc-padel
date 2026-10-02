@@ -308,6 +308,26 @@ ok(all5.every(m => m.match_date && m.slot_id && m.court_no), 'todo programado (f
   // hora libre inválida → error
   const rBadTime = mc ? D.rescheduleMatch(mdb, mc.id, mc.match_date, null, 4, st5, { customTime: '25:99' }) : { ok: true };
   ok(!rBadTime.ok, 'hora libre inválida → error');
+  // 8b. Guardado en bloque: omite sin-cambios y sin-fecha; veto blando sin force → error en resultados
+  const b1 = mdb.prepare(`SELECT * FROM midday_matches WHERE draw_id = ? AND id NOT IN (?, ?, ?) AND match_date IS NOT NULL LIMIT 1`).get(dr5.id, mb.id, mc.id, mc2.id);
+  const b2 = mdb.prepare(`SELECT * FROM midday_matches WHERE draw_id = ? AND id NOT IN (?, ?, ?, ?) AND match_date IS NOT NULL LIMIT 1`).get(dr5.id, mb.id, mc.id, mc2.id, b1.id);
+  let fd = D.addDaysISO(mb.match_date, 210);
+  while (!D.isWeekdayISO(fd)) fd = D.addDaysISO(fd, 1); // día laborable fuera del calendario
+  const rb1 = D.bulkReschedule(mdb, dr5.id, [
+    { id: b1.id, iso: b1.match_date, slotId: b1.slot_id, customTime: b1.custom_time, courtNo: b1.court_no }, // sin cambios
+    { id: b2.id, iso: '', slotId: 's1', courtNo: 1 }, // sin fecha
+    { id: mb.id, iso: fd, slotId: 's1', customTime: null, courtNo: 1 }, // vetado para pB
+  ], st5, {});
+  ok(rb1.changed === 1 && !(b1.id in rb1.results) && !(b2.id in rb1.results),
+    'bulk omite filas sin cambios y sin fecha');
+  ok(rb1.ok === 0 && rb1.errors === 1 && rb1.results[mb.id] && !rb1.results[mb.id].ok && rb1.results[mb.id].soft,
+    `bulk: cambio vetado sin force → error blando en resultados ("${rb1.results[mb.id] && rb1.results[mb.id].error}")`);
+  const rb2 = D.bulkReschedule(mdb, dr5.id, [
+    { id: mb.id, iso: fd, slotId: 's1', customTime: null, courtNo: 1 },
+  ], st5, { force: true });
+  ok(rb2.ok === 1 && rb2.errors === 0, 'bulk con force → se aplica');
+  const mbBulk = mdb.prepare('SELECT * FROM midday_matches WHERE id = ?').get(mb.id);
+  ok(mbBulk.match_date === fd && mbBulk.manual === 1, 'bulk actualiza fecha y marca manual');
 }
 
 // ---------- 9. Avisos: partidos sin programar + restricciones duras ----------
@@ -440,6 +460,24 @@ async function httpDraw() {
     hok(r.status === 302, 'generar sorteo → 302');
     r = await httpreq({ port: PORT, host: 'otro.test', path: '/admin/mediodia/sorteo', cookie: adminCookie });
     hok(r.status === 200 && r.body.includes('Ronda 1') && r.body.includes('Bombo 1'), 'sorteo muestra rondas y bombos');
+
+    // guardado en bloque: mover un partido de fecha de golpe (forzar global)
+    const { DatabaseSync: DS2 } = require('node:sqlite');
+    const hdb2 = new DS2(path.join(HTTP_DIR, 'midday.db'));
+    const hm = hdb2.prepare(`SELECT m.id, d.id AS did FROM midday_matches m JOIN midday_draws d ON d.id = m.draw_id WHERE d.tournament_id = ? LIMIT 1`).get(ED_ID);
+    hdb2.close();
+    const bd = new Date(); bd.setDate(bd.getDate() + 200);
+    while (bd.getDay() === 0 || bd.getDay() === 6) bd.setDate(bd.getDate() + 1);
+    const bdate = bd.toISOString().slice(0, 10);
+    const bulkBody = new URLSearchParams({ t: String(ED_ID), force_all: '1',
+      ['date_' + hm.id]: bdate, ['slot_' + hm.id]: 's1', ['ctime_' + hm.id]: '', ['court_' + hm.id]: '1' }).toString();
+    r = await httpreq({ port: PORT, host: 'otro.test', path: '/admin/mediodia/sorteo/guardar-todo', method: 'POST',
+      body: bulkBody, cookie: adminCookie });
+    hok(r.status === 200 && r.body.includes('programado'), 'guardar-todo en bloque → 200 con resumen');
+    const hdb3 = new DS2(path.join(HTTP_DIR, 'midday.db'));
+    const hm2 = hdb3.prepare(`SELECT match_date, manual FROM midday_matches WHERE id = ?`).get(hm.id);
+    hdb3.close();
+    hok(hm2.match_date === bdate && hm2.manual === 1, 'guardar-todo aplica el cambio en la BD');
 
     // pareja: sin publicar no ve partidos
     const { DatabaseSync } = require('node:sqlite');
