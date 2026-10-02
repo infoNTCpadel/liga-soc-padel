@@ -1,0 +1,25 @@
+<h1>Mis partidos</h1>
+<div class="card">
+  <h3><%= pair.player1_name %> y <%= pair.player2_name %></h3>
+  <p class="mut">Nivel medio: <strong><%= String(pair.level_avg).replace('.', ',') %></strong> ·
+  Estado: <strong><%= pair.status === 'approved' ? 'Confirmada ✓' : pair.status === 'rejected' ? 'Rechazada' : 'Pendiente de revisión' %></strong></p>
+</div>
+
+<div class="card">
+  <h3>Calendario</h3>
+  <% if (pair.status !== 'approved') { %>
+    <p class="mut">Vuestra inscripción aún está <strong>pendiente de revisión</strong> por el club.
+    Cuando se confirme y se cierre la inscripción (<%= deadline %>), aquí veréis vuestros partidos con día y hora.</p>
+  <% } else { %>
+    <p class="mut">El calendario de la fase liga se publicará al cerrar la inscripción (<%= deadline %>).
+    Os avisaremos por email.</p>
+  <% } %>
+</div>
+
+<div class="card">
+  <h3>Vuestra disponibilidad registrada</h3>
+  <p class="mut">Franjas: <strong><%= slotSummary %></strong></p>
+  <p class="mut">Días vetados: <strong><%= weekdaysOff %></strong></p>
+  <p class="mut">Fechas sueltas vetadas: <strong><%= pair.blackoutDates.length ? pair.blackoutDates.join(', ') : '—' %></strong></p>
+  <p class="mut small">¿Hay algún cambio? Escribid al club y lo actualizamos.</p>
+</div>

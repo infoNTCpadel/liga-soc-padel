@@ -107,9 +107,12 @@ function res_render(res, view, data = {}) {
 
 // Dominio propio para las reservas (p. ej. kanbeplay.padelvalles.com).
 const BOOKING_HOST = (process.env.BOOKING_HOST || '').toLowerCase();
+// Dominio propio para la competición de mediodía (p. ej. kanbe-mediodia.padelvalles.com).
+const MIDDAY_HOST = (process.env.MIDDAY_HOST || '').toLowerCase();
 
 app.use((req, res, next) => {
   res.locals.isBookingHost = BOOKING_HOST !== '' && req.hostname.toLowerCase() === BOOKING_HOST;
+  res.locals.isMiddayHost = MIDDAY_HOST !== '' && req.hostname.toLowerCase() === MIDDAY_HOST;
   res.locals.bookingMemberNo = req.session.bookingMemberNo || null;
   res.renderPage = (v, d) => res_render(res, v, d); next();
 });
@@ -123,6 +126,18 @@ if (BOOKING_HOST) {
   });
 }
 
+// Si MIDDAY_HOST está configurado, ese dominio sirve la app de MEDIODÍA PADEL
+// en la raíz: sus rutas (/inscripcion, /acceso, /mis-partidos, /salir, /)
+// tienen prioridad sobre las de la liga social en ese host. El resto de
+// rutas (/admin, /admin/mediodia, estáticos…) siguen funcionando igual.
+const middayPublicRouter = require('./routes/midday-public');
+if (MIDDAY_HOST) {
+  app.use((req, res, next) => {
+    if (req.hostname.toLowerCase() === MIDDAY_HOST) return middayPublicRouter(req, res, next);
+    next();
+  });
+}
+
 app.use('/', require('./routes/public'));
 app.use('/pareja', require('./routes/pair'));
 app.use('/admin', require('./routes/admin'));
@@ -130,6 +145,8 @@ app.use('/recepcion', require('./routes/recepcion'));
 app.use('/reservar', require('./routes/reservas'));
 app.use('/admin/reservas', require('./routes/reservas-admin'));
 app.use('/recepcion/reservas', require('./routes/reservas-recepcion'));
+app.use('/mediodia', middayPublicRouter); // vista previa desde el dominio principal
+app.use('/admin/mediodia', require('./routes/midday-admin'));
 
 // 404
 app.use((req, res) => res.status(404).renderPage('public/404', {}));

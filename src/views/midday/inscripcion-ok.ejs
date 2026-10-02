@@ -1,0 +1,10 @@
+<div class="card center">
+  <h1>¡Pareja inscrita! ☀️</h1>
+  <p class="mut"><strong><%= pair.player1_name %></strong> y <strong><%= pair.player2_name %></strong>
+  (nivel medio <%= String(pair.level_avg).replace('.', ',') %>)</p>
+  <p>Vuestra inscripción está <strong>pendiente de revisión</strong> por el club. Guardad bien vuestro código de acceso:</p>
+  <p class="code big"><%= pair.code %></p>
+  <p class="mut small">Con este código podréis ver vuestros partidos cuando se publique el calendario.</p>
+  <p><a class="btn" href="/mediodia/acceso">Acceder con mi código</a>
+     <a class="btn ghost" href="/mediodia">Volver al inicio</a></p>
+</div>

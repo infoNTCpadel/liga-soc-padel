@@ -1,0 +1,12 @@
+<div class="card center" style="max-width:480px;margin:2em auto">
+  <h1>Acceso parejas</h1>
+  <p class="mut">Introduce el código de 6 caracteres que recibiste al inscribirte.</p>
+  <% if (error) { %><div class="alert error"><%= error %></div><% } %>
+  <form method="post" action="/mediodia/acceso">
+    <div class="field"><label>Código de acceso</label>
+      <input type="text" name="code" required maxlength="6" autocomplete="off"
+             style="text-transform:uppercase;letter-spacing:.3em;text-align:center;font-size:1.4rem">
+    </div>
+    <p><button class="btn big" type="submit">Entrar</button></p>
+  </form>
+</div>

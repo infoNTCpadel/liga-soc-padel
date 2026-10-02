@@ -1,0 +1,48 @@
+<div class="midday-hero">
+  <div class="midday-sun">☀️</div>
+  <h1>MEDIODÍA PADEL</h1>
+  <p class="tagline">La competición para los que juegan al mediodía.<br>Juega, come y vuelve al trabajo.</p>
+  <div class="midday-cta">
+    <% if (open) { %>
+      <a class="btn big" href="/mediodia/inscripcion">Inscribir a mi pareja</a>
+      <p class="mut small">Inscripción abierta hasta el <strong><%= deadline %></strong></p>
+    <% } else { %>
+      <p class="mut">La inscripción está cerrada. El calendario se publicará próximamente.</p>
+    <% } %>
+  </div>
+</div>
+
+<div class="card">
+  <h3>¿Cómo funciona?</h3>
+  <ol class="steps">
+    <li><strong>Te inscribes con tu pareja</strong> indicando en qué franja puedes jugar
+      (<%= slots.map(s => s.label).join(' o ') %>, de lunes a viernes) y qué días no puedes de ninguna manera.</li>
+    <li><strong>Fase liga estilo Champions</strong>: las parejas se reparten en bombos por nivel y cada una juega
+      un mínimo de 6 partidos contra rivales de todos los niveles. La organización asigna día y hora: tú solo tienes que venir a jugar.</li>
+    <li><strong>Playoffs</strong>: los mejores de la fase liga pasan directos al cuadro final y los siguientes
+      juegan una eliminatoria previa. Sin grupos cerrados, sin calendarios imposibles.</li>
+  </ol>
+</div>
+
+<div class="row2">
+  <div class="card">
+    <h3>Datos de la competición</h3>
+    <p class="mut">🕐 Franjas: <strong><%= slots.map(s => s.label).join(' · ') %></strong> (lun–vie)</p>
+    <p class="mut">🎾 Pistas de mediodía: <strong><%= courts %></strong></p>
+    <p class="mut">📅 Cierre de inscripción: <strong><%= deadline %></strong></p>
+  </div>
+  <div class="card">
+    <h3>Inscritas</h3>
+    <p class="bignum"><%= counts.approved + counts.pending %></p>
+    <p class="mut"><%= counts.approved %> confirmadas · <%= counts.pending %> pendientes de revisión</p>
+    <% if (open) { %><a class="btn" href="/mediodia/inscripcion">Apuntarme</a><% } %>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Niveles dispares, bienvenidos</h3>
+  <p class="mut">Al mediodía juega de todo: gente de empresa, jugadores no habituales, niveles muy distintos.
+  Por eso usamos bombos por nivel como la Champions: cada pareja se mide con rivales de todos los niveles
+  y la clasificación final decide quién sigue. Todo el mundo juega hasta el final.</p>
+  <p><a class="btn ghost" href="/mediodia/acceso">Ya estoy inscrito: ver mis partidos</a></p>
+</div>

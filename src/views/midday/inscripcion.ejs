@@ -1,0 +1,98 @@
+<% if (!open) { %>
+<div class="alert error">La inscripción está cerrada. Si tienes cualquier duda, contacta con el club.</div>
+<% } else { %>
+<h1>Inscripción · MEDIODÍA PADEL</h1>
+<p class="mut">Inscripción abierta hasta el <strong><%= deadline %></strong>. Al enviar recibiréis un
+<strong>código de acceso</strong> para ver vuestros partidos.</p>
+
+<% if (errors.length) { %><div class="alert error"><ul><% for (const e of errors) { %><li><%= e %></li><% } %></ul></div><% } %>
+
+<form method="post" action="/mediodia/inscripcion">
+  <% for (const n of [1, 2]) { const f = (k) => form[`p${n}_${k}`] || ''; const opts = n === 1 ? levelOpts1 : levelOpts2; %>
+  <div class="card">
+    <h3>Jugador <%= n %></h3>
+    <div class="row2">
+      <div class="field"><label>Nombre y apellidos *</label><input type="text" name="p<%= n %>_name" required value="<%= f('name') %>"></div>
+      <div class="field"><label>Móvil * <span class="hint">para avisos de partidos</span></label><input type="tel" name="p<%= n %>_phone" required value="<%= f('phone') %>" data-suggest="<%= n %>"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Email * <span class="hint">para avisos por correo</span></label><input type="email" name="p<%= n %>_email" required value="<%= f('email') %>" data-suggest="<%= n %>"></div>
+      <div class="field"><label>Nivel (1 – 7) *</label>
+        <select name="p<%= n %>_level" id="level<%= n %>" required>
+          <option value="">—</option>
+          <% for (const o of opts) { %><option value="<%= o.value %>" <%= o.selected ? 'selected' : '' %>><%= o.label %></option><% } %>
+        </select>
+        <span class="hint" id="suggest<%= n %>"></span>
+      </div>
+    </div>
+  </div>
+  <% } %>
+
+  <div class="card">
+    <h3>¿En qué franja podéis jugar?</h3>
+    <p class="mut small">Marca para <strong>cada franja</strong> si es vuestra preferida, si os va bien o si es imposible.</p>
+    <% for (const s of slots) { const v = form[`slot_${s.id}`] || 'ok'; %>
+    <div class="field"><label><%= s.label %></label>
+      <label><input type="radio" name="slot_<%= s.id %>" value="pref" <%= v === 'pref' ? 'checked' : '' %>> Preferida ★</label>
+      <label><input type="radio" name="slot_<%= s.id %>" value="ok" <%= v === 'ok' ? 'checked' : '' %>> Me va bien ✓</label>
+      <label><input type="radio" name="slot_<%= s.id %>" value="no" <%= v === 'no' ? 'checked' : '' %>> Imposible ✗</label>
+    </div>
+    <% } %>
+  </div>
+
+  <div class="card">
+    <h3>¿Qué días NO podéis jugar de ninguna manera?</h3>
+    <div class="field">
+      <% for (const w of weekdays) { %>
+      <label><input type="checkbox" name="off_<%= w.id %>" value="1" <%= form[`off_${w.id}`] ? 'checked' : '' %>> <%= w.name %></label>
+      <% } %>
+    </div>
+    <p class="mut small">Sábados y domingos no se juega nunca.</p>
+    <div class="field"><label>Fechas sueltas vetadas <span class="hint">viajes, puentes… sepáralas por comas: 2026-11-05, 2026-12-24</span></label>
+      <input type="text" name="blackout" value="<%= form.blackout || '' %>" placeholder="AAAA-MM-DD, AAAA-MM-DD">
+    </div>
+    <div class="field"><label>Notas <span class="hint">opcional: cualquier cosa que debamos saber</span></label>
+      <input type="text" name="notes" value="<%= form.notes || '' %>">
+    </div>
+  </div>
+
+  <div class="card">
+    <label><input type="checkbox" name="normativa" value="1"> Acepto la normativa de la competición *</label>
+    <p class="mut small">La organización asignará día y hora a cada partido dentro de vuestra disponibilidad.
+    Si no os presentáis a una fecha asignada sin avisar con antelación, el partido se dará por perdido.</p>
+  </div>
+
+  <p><button class="btn big" type="submit">Inscribir a la pareja</button></p>
+</form>
+
+<script>
+(function () {
+  const done = {};
+  document.querySelectorAll('[data-suggest]').forEach(function (el) {
+    el.addEventListener('blur', function () {
+      const n = el.getAttribute('data-suggest');
+      if (done[n]) return;
+      const card = el.closest('.card');
+      const email = card.querySelector('input[name="p' + n + '_email"]').value.trim();
+      const phone = card.querySelector('input[name="p' + n + '_phone"]').value.trim();
+      if (!email && !phone) return;
+      fetch('/mediodia/api/nivel-sugerido?email=' + encodeURIComponent(email) + '&phone=' + encodeURIComponent(phone))
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (!d || d.level == null) return;
+          done[n] = true;
+          const hint = document.getElementById('suggest' + n);
+          const label = String(d.level).replace('.', ',');
+          hint.innerHTML = 'Nivel sugerido: <strong>' + label + '</strong> (' + d.source + ') ' +
+            '<button type="button" class="btn small ghost" id="use' + n + '">Usar</button>';
+          document.getElementById('use' + n).addEventListener('click', function () {
+            document.getElementById('level' + n).value = d.level;
+            hint.innerHTML = '';
+          });
+        })
+        .catch(function () {});
+    });
+  });
+})();
+</script>
+<% } %>

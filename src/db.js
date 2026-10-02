@@ -353,10 +353,65 @@ function setAdminHash(h) { metaSet('admin_password_hash', h); }
 function getReceptionHash() { return metaGet('reception_password_hash'); }
 function setReceptionHash(h) { metaSet('reception_password_hash', h); }
 
+// ---- competición paralela: MEDIODÍA PADEL ----
+// BD propia (`midday.db`): NO comparte tablas con la liga social.
+// La liga social ni se entera de que existe. Desde aquí solo se LEE
+// meta.db (socios) y la temporada activa (para sugerir niveles).
+const midday = new DatabaseSync(path.join(DATA_DIR, 'midday.db'));
+midday.exec('PRAGMA journal_mode = WAL;');
+midday.exec(`
+CREATE TABLE IF NOT EXISTS midday_pairs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT NOT NULL UNIQUE,              -- código de acceso de la pareja
+  player1_name TEXT NOT NULL,
+  player1_email TEXT NOT NULL DEFAULT '',
+  player1_phone TEXT NOT NULL DEFAULT '',
+  player2_name TEXT NOT NULL,
+  player2_email TEXT NOT NULL DEFAULT '',
+  player2_phone TEXT NOT NULL DEFAULT '',
+  level1 REAL NOT NULL DEFAULT 1,
+  level2 REAL NOT NULL DEFAULT 1,
+  level_avg REAL NOT NULL DEFAULT 1,
+  slot_prefs TEXT NOT NULL DEFAULT '{}',  -- JSON: {"s1":"pref"|"ok"|"no"}
+  weekdays_off TEXT NOT NULL DEFAULT '[]',-- JSON: ["mon","tue",...]
+  blackout_dates TEXT NOT NULL DEFAULT '[]', -- JSON: ["2026-11-05",...]
+  status TEXT NOT NULL DEFAULT 'pending', -- pending | approved | rejected
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS midday_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+`);
+
+const MIDDAY_DEFAULTS = {
+  comp_name: 'MEDIODÍA PADEL',
+  slots: '[{"id":"s1","label":"13:00"},{"id":"s2","label":"14:30"}]',
+  inscription_open: '1',
+  inscription_deadline: '2026-10-20',
+  courts_midday: '4',
+  min_days_between: '4',
+};
+for (const [k, v] of Object.entries(MIDDAY_DEFAULTS)) {
+  if (!midday.prepare('SELECT 1 FROM midday_settings WHERE key = ?').get(k))
+    midday.prepare('INSERT INTO midday_settings(key, value) VALUES(?, ?)').run(k, v);
+}
+
+function middayGet(key, fallback = null) {
+  const r = midday.prepare('SELECT value FROM midday_settings WHERE key = ?').get(key);
+  return r ? r.value : fallback;
+}
+function middaySet(key, value) {
+  midday.prepare('INSERT INTO midday_settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+    .run(key, String(value));
+}
+
 module.exports = {
   db, getSetting, setSetting, getAdminHash, setAdminHash,
   getReceptionHash, setReceptionHash,
   listSeasons, getActiveSeason, getActiveSeasonId,
   createSeason, activateSeason, renameSeason, deleteSeason,
   seasonDb, metaDb: meta,
+  middayDb: midday, middayGet, middaySet,
 };

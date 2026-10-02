@@ -14,6 +14,10 @@
       <span><strong><%= clubName %></strong><small><%= seasonName %></small></span>
     </a>
     <nav class="nav">
+      <% if (locals.isMiddayHost) { %>
+      <a href="/mediodia" class="<%= section==='midday' && !locals.sub ? 'on' : '' %>">Inicio</a>
+      <a href="/mediodia/inscripcion" class="<%= locals.sub==='inscripcion' ? 'on' : '' %>">Inscripción</a>
+      <% } else { %>
       <a href="/" class="<%= section==='public' && !locals.sub ? 'on' : '' %>">Inicio</a>
       <a href="/normativa">Normativa</a>
       <a href="/inscripcion">Inscripción</a>
@@ -23,6 +27,7 @@
       <% } %>
       <a href="/ranking">Ranking</a>
       <a href="/playoffs">Playoffs</a>
+      <% } %>
     </nav>
     <div class="userbox">
       <% if (isAdmin) { %>
@@ -31,6 +36,11 @@
       <% } else if (pairId) { %>
         <a class="btn small" href="/pareja">Mi pareja</a>
         <a class="btn small ghost" href="/salir">Salir</a>
+      <% } else if (locals.isMiddayHost && locals.middayPairId) { %>
+        <a class="btn small" href="/mediodia/mis-partidos">Mis partidos</a>
+        <a class="btn small ghost" href="/mediodia/salir">Salir</a>
+      <% } else if (locals.isMiddayHost) { %>
+        <a class="btn small" href="/mediodia/acceso">Acceso parejas</a>
       <% } else if (locals.isBookingHost && locals.bookingMemberNo) { %>
         <a class="btn small" href="/reservar/mis">Mis reservas</a>
         <a class="btn small ghost" href="/reservar/salir">Salir</a>
@@ -58,6 +68,7 @@
     <a href="/admin/pistas">Pistas</a>
     <a href="/admin/cuadrante">Cuadrante</a>
     <a href="/admin/reservas">Reservas</a>
+    <a href="/admin/mediodia">Mediodía</a>
     <a href="/admin/playoffs">Playoffs</a>
     <a href="/admin/cambios">Cambios</a>
     <a href="/admin/ajustes">Ajustes</a>

@@ -172,3 +172,14 @@ input[type=checkbox] { width: 1.15rem; height: 1.15rem; accent-color: var(--lime
 }
 .season-tag { background: #123a2b; color: #8be9b6; font-weight: 600; font-size: .78rem; padding: 3px 12px; border-radius: 20px; border: 1px solid #1f5c41; white-space: nowrap; }
 @media (max-width: 760px) { .season-tag { display: none; } }
+
+/* MEDIODÍA PADEL — marca propia (acento cálido de mediodía) */
+.midday-hero { text-align: center; padding: 34px 10px 14px; }
+.midday-sun { font-size: 3rem; line-height: 1; }
+.midday-hero h1 { font-size: 2.4rem; letter-spacing: .05em; margin: .25em 0 .3em; color: var(--amber); }
+.midday-hero .tagline { color: var(--mut); font-size: 1.12rem; max-width: 580px; margin: 0 auto 18px; }
+.midday-cta { margin: 16px 0 8px; }
+.steps { margin: .5em 0; padding-left: 1.4em; }
+.steps li { margin-bottom: .7em; }
+.bignum { font-size: 2.6rem; font-weight: 700; color: var(--amber); margin: .1em 0; }
+.code.big { font-size: 1.9rem; letter-spacing: .35em; padding: 14px 18px 14px 26px; display: inline-block; }
