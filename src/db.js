@@ -484,6 +484,22 @@ if (!middayCols('midday_matches').includes('manual'))
   midday.exec('ALTER TABLE midday_matches ADD COLUMN manual INTEGER NOT NULL DEFAULT 0');
 if (!middayCols('midday_matches').includes('custom_time'))
   midday.exec('ALTER TABLE midday_matches ADD COLUMN custom_time TEXT');
+// Resultados de Mediodía (parejas): marcadores por sets + validación.
+{
+  const cols = middayCols('midday_matches');
+  const add = [
+    ['s1a', 'INTEGER NULL'], ['s1b', 'INTEGER NULL'],
+    ['s2a', 'INTEGER NULL'], ['s2b', 'INTEGER NULL'],
+    ['stb_a', 'INTEGER NULL'], ['stb_b', 'INTEGER NULL'],
+    ['winner_id', 'INTEGER NULL'], ['wo_winner_id', 'INTEGER NULL'],
+    ['submitted_by', 'INTEGER NULL'], ['submitted_at', 'TEXT NULL'],
+    ['validation', "TEXT NOT NULL DEFAULT 'none'"],
+    ['validation_deadline', 'TEXT NULL'],
+    ['notes', "TEXT NOT NULL DEFAULT ''"],
+  ];
+  for (const [col, def] of add)
+    if (!cols.includes(col)) midday.exec(`ALTER TABLE midday_matches ADD COLUMN ${col} ${def}`);
+}
 
 // Próximo lunes (AAAA-MM-DD) estrictamente posterior a hoy:
 // fecha de inicio por defecto de la competición.

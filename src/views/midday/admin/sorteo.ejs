@@ -68,9 +68,22 @@
   </div>
 </div>
 
-<% if (warnings && (warnings.unscheduled.length || warnings.hard.length)) { %>
+<% if (warnings && (warnings.unscheduled.length || warnings.hard.length || warnings.disputed.length)) { %>
 <div class="card">
   <h3>⚠️ Avisos</h3>
+  <% if (warnings.disputed.length) { %>
+    <p class="mut"><strong><%= warnings.disputed.length %> resultado(s) disputado(s)</strong> por las parejas:</p>
+    <ul class="small">
+      <% for (const m of warnings.disputed) { %>
+      <li>Ronda <%= m.round_no %>: <%= m.n1a %> / <%= m.n1b %> vs <%= m.n2a %> / <%= m.n2b %> · <strong><%= formatScore(m) %></strong>
+        <form method="post" action="/admin/mediodia/sorteo/resultado/<%= m.id %>/resolver" style="display:inline">
+          <input type="hidden" name="t" value="<%= sel.id %>">
+          <button class="btn small" type="submit">Resolver (aceptar resultado)</button>
+        </form>
+      </li>
+      <% } %>
+    </ul>
+  <% } %>
   <% if (warnings.unscheduled.length) { %>
     <p class="mut"><strong><%= warnings.unscheduled.length %> partido(s) sin programar</strong> (sin hueco válido en 12 semanas):</p>
     <ul class="small">
@@ -113,7 +126,19 @@
     <% } %>
     <% lastSection = section; lastRound = m.round_no; %>
     <tr>
-      <td><strong><%= fmtDate(m.match_date) %></strong></td>
+      <td><strong><%= fmtDate(m.match_date) %></strong>
+        <% if (m.winner_id || m.wo_winner_id) { %><br><span class="small"><strong><%= formatScore(m) %></strong>
+          <% if (m.validation === 'pending') { %> <span class="badge warn">pendiente</span><% } %>
+          <% if (m.validation === 'disputed') { %> <span class="badge bad">disputado</span><% } %>
+          <% if (m.validation === 'validated' || m.validation === 'auto') { %> <span class="badge ok">✓</span><% } %></span>
+          <% if (draw.status !== 'draft') { %>
+          <form method="post" action="/admin/mediodia/sorteo/resultado/<%= m.id %>/reabrir" style="display:inline" onsubmit="return confirm('¿Borrar el resultado y reabrir el partido?')">
+            <input type="hidden" name="t" value="<%= sel.id %>">
+            <button class="btn small ghost" type="submit" title="Borrar el resultado">Reabrir</button>
+          </form>
+          <% } %>
+        <% } %>
+      </td>
       <td><%= slotLabel(m) %></td>
       <td><%= m.court_no ? 'Pista ' + m.court_no : '—' %></td>
       <td><%= m.n1a %> / <%= m.n1b %></td>

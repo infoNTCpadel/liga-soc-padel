@@ -3,8 +3,9 @@ const express = require('express');
 const session = require('express-session');
 const path = require('path');
 const ejs = require('ejs');
-const { db, getSetting, getActiveSeason } = require('./db');
+const { db, getSetting, getActiveSeason, middayDb } = require('./db');
 const { autoValidateExpired } = require('./lib/league');
+const { autoValidateMidday } = require('./lib/midday-draw');
 const L = require('./lib/league');
 
 const app = express();
@@ -36,6 +37,7 @@ app.use(session({
 // Validación automática de resultados pendientes (>24h) en cada petición.
 app.use((req, res, next) => {
   try { autoValidateExpired(db); } catch (e) { console.error('autoValidate:', e.message); }
+  try { autoValidateMidday(middayDb); } catch (e) { console.error('autoValidateMidday:', e.message); }
   next();
 });
 

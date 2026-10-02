@@ -402,6 +402,61 @@ ok(all5.every(m => m.match_date && m.slot_id && m.court_no), 'todo programado (f
 }
 console.log(`lib: ${pass} OK, ${fail} fallos`);
 
+// ---------- 10b. Resultados de parejas: subir, validar, disputar, auto ----------
+{
+  const r = M.createTournament(mdb, 'Ed resultados', null, DB.MIDDAY_DEFAULTS);
+  M.setTournamentStatus(mdb, r.id, 'active');
+  const ins = mdb.prepare(`INSERT INTO midday_pairs(code, tournament_id, player1_name, player1_phone, player2_name, player2_phone, level1, level2, level_avg, status) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved')`);
+  const a = Number(ins.run('RA1', r.id, 'Ana', '600000001', 'Luis', '600000002', 3, 3, 3).lastInsertRowid);
+  const b = Number(ins.run('RB1', r.id, 'Mar', '600000003', 'Pau', '600000004', 3, 3, 3).lastInsertRowid);
+  const dr = Number(mdb.prepare(`INSERT INTO midday_draws(tournament_id, status) VALUES(?, 'published')`).run(r.id).lastInsertRowid);
+  const mk = (round, date) => Number(mdb.prepare(
+    `INSERT INTO midday_matches(draw_id, tournament_id, round_no, pair1_id, pair2_id, match_date, slot_id, court_no)
+     VALUES(?, ?, ?, ?, ?, ?, 's1', 1)`).run(dr, r.id, round, a, b, date).lastInsertRowid);
+  const mt = mk(1, '2026-11-03');
+
+  ok(D.deduceWinner(6, 4, 6, 3, 'none').winnerIsMe === true, 'deduce 6-4 6-3 → gano yo');
+  ok(D.deduceWinner(4, 6, 3, 6, 'none').winnerIsMe === false, 'deduce 4-6 3-6 → gana rival');
+  ok(D.deduceWinner(6, 4, 3, 6, 'stb', 10, 8).winnerIsMe === true, 'deduce con STB 10-8 → gano yo');
+  ok(D.deduceWinner(6, 6, 6, 3, 'none').error, 'set empatado → error');
+  ok(D.deduceWinner(6, 4, 5, 4, 'none').error, 'set sin terminar → error');
+  ok(D.deduceWinner(6, 4, 3, 6, 'none').error, '1-1 sin STB → error');
+  ok(D.deduceWinner(6, 4, 3, 6, 'stb', 10, 10).error, 'STB empatado → error');
+  ok(D.formatScore({ s1a: 6, s1b: 4, s2a: 3, s2b: 6, stb_a: 10, stb_b: 8 }) === '6-4, 3-6, 10-8', 'formatScore con STB');
+  ok(D.formatScore({ wo_winner_id: 5 }) === 'W.O.', 'formatScore W.O.');
+  ok(D.formatScore({}) === '—', 'formatScore sin resultado');
+
+  // La pareja A sube 4-6 3-6 (pierde): se guarda orientado a pair1/pair2, gana B, pendiente
+  ok(D.submitResult(mdb, mt, a, { s1a: 4, s1b: 6, s2a: 3, s2b: 6, mode: 'none', wo: false, notes: '' }).ok, 'submit resultado válido');
+  const m1 = mdb.prepare('SELECT * FROM midday_matches WHERE id = ?').get(mt);
+  ok(m1.winner_id === b && m1.validation === 'pending' && m1.submitted_by === a, 'ganador = B, pendiente de validación');
+  ok(m1.s1a === 4 && m1.s1b === 6 && m1.s2a === 3 && m1.s2b === 6, 'marcador orientado a pair1/pair2');
+  ok(!D.validateResult(mdb, mt, a).ok, 'quien sube no puede validar lo suyo');
+  ok(D.validateResult(mdb, mt, b).ok, 'el rival valida');
+  ok(mdb.prepare('SELECT validation FROM midday_matches WHERE id = ?').get(mt).validation === 'validated', 'queda validado');
+  ok(!D.submitResult(mdb, mt, a, { s1a: 6, s1b: 0, s2a: 6, s2b: 0, mode: 'none', wo: false }).ok, 'con resultado no se puede resubir');
+
+  const mt2 = mk(2, '2026-11-10');
+  ok(D.submitResult(mdb, mt2, b, { s1a: 6, s1b: 4, s2a: 6, s2b: 2, mode: 'none', wo: false }).ok, 'submit segundo partido');
+  ok(D.disputeResult(mdb, mt2, a).ok, 'el rival disputa');
+  ok(mdb.prepare('SELECT validation FROM midday_matches WHERE id = ?').get(mt2).validation === 'disputed', 'queda disputado');
+
+  const mt3 = mk(3, '2026-11-17');
+  ok(D.submitResult(mdb, mt3, a, { wo: true, notes: '' }).ok, 'W.O. se registra');
+  const m3 = mdb.prepare('SELECT * FROM midday_matches WHERE id = ?').get(mt3);
+  ok(m3.wo_winner_id === a && m3.winner_id === a && m3.validation === 'pending', 'W.O. a favor de quien lo sube');
+  mdb.prepare(`UPDATE midday_matches SET validation_deadline = datetime('now', '-1 hour') WHERE id = ?`).run(mt3);
+  D.autoValidateMidday(mdb);
+  ok(mdb.prepare('SELECT validation FROM midday_matches WHERE id = ?').get(mt3).validation === 'auto', 'pendiente caducado se valida solo');
+
+  const r2 = M.createTournament(mdb, 'Ed borrador', null, DB.MIDDAY_DEFAULTS);
+  M.setTournamentStatus(mdb, r2.id, 'active');
+  const dr2 = Number(mdb.prepare(`INSERT INTO midday_draws(tournament_id, status) VALUES(?, 'draft')`).run(r2.id).lastInsertRowid);
+  const mt4 = Number(mdb.prepare(`INSERT INTO midday_matches(draw_id, tournament_id, round_no, pair1_id, pair2_id) VALUES(?, ?, 1, ?, ?)`)
+    .run(dr2, r2.id, a, b).lastInsertRowid);
+  ok(!D.submitResult(mdb, mt4, a, { s1a: 6, s1b: 4, s2a: 6, s2b: 4, mode: 'none', wo: false }).ok, 'sin publicar no se puede subir resultado');
+}
+
 // ---------- 10. HTTP: generar → publicar (modo pruebas) → mis-partidos ----------
 function httpreq({ port, host, path = '/', method = 'GET', body = null, cookie = null }) {
   const httpMod = require('http');
@@ -560,6 +615,49 @@ async function httpDraw() {
     }
     r = await httpreq({ port: PORT, host: 'otro.test', path: '/admin/mediodia/sorteo', cookie: adminCookie });
     hok(r.status === 200 && r.body.includes('modo pruebas'), 'panel muestra "modo pruebas" en el resumen de emails');
+
+    // resultados: la pareja sube, el rival valida; teléfonos visibles; editar datos
+    const hdb5 = new DS2(path.join(HTTP_DIR, 'midday.db'));
+    const hp = hdb5.prepare(`SELECT id, code FROM midday_pairs WHERE tournament_id = ? AND status = 'approved' LIMIT 1`).get(ED_ID);
+    const hdraw = hdb5.prepare(`SELECT id FROM midday_draws WHERE tournament_id = ?`).get(ED_ID).id;
+    const hmm = hdb5.prepare(`SELECT id, pair1_id, pair2_id FROM midday_matches WHERE draw_id = ? AND (pair1_id = ? OR pair2_id = ?) AND match_date IS NOT NULL LIMIT 1`).get(hdraw, hp.id, hp.id);
+    hdb5.close();
+    r = await httpreq({ port: PORT, host: 'midday.test', path: '/mediodia/acceso', method: 'POST',
+      body: new URLSearchParams({ code: hp.code }).toString() });
+    const hpCookie = jar(r);
+    hok(r.status === 302 && hpCookie, 'login de pareja (resultados)');
+    r = await httpreq({ port: PORT, host: 'midday.test', path: '/mediodia/mis-partidos', cookie: hpCookie });
+    hok(r.status === 200 && r.body.includes('Subir resultado') && /6\d{7}/.test(r.body), 'mis-partidos: botón de resultado y teléfono del rival');
+    const resBody = new URLSearchParams({ s1a: '6', s1b: '4', s2a: '6', s2b: '3', set3mode: 'none' }).toString();
+    r = await httpreq({ port: PORT, host: 'midday.test', path: '/mediodia/resultado/' + hmm.id, method: 'POST',
+      body: resBody, cookie: hpCookie });
+    hok(r.status === 302, 'subir resultado → 302');
+    const hdb6 = new DS2(path.join(HTTP_DIR, 'midday.db'));
+    const hmres = hdb6.prepare(`SELECT winner_id, validation, submitted_by FROM midday_matches WHERE id = ?`).get(hmm.id);
+    hok(hmres.winner_id === hp.id && hmres.validation === 'pending' && hmres.submitted_by === hp.id, 'resultado guardado pendiente de validación');
+    const rivalId = hmm.pair1_id === hp.id ? hmm.pair2_id : hmm.pair1_id;
+    const rcode = hdb6.prepare(`SELECT code FROM midday_pairs WHERE id = ?`).get(rivalId).code;
+    hdb6.close();
+    r = await httpreq({ port: PORT, host: 'midday.test', path: '/mediodia/acceso', method: 'POST',
+      body: new URLSearchParams({ code: rcode }).toString() });
+    const hrCookie = jar(r);
+    r = await httpreq({ port: PORT, host: 'midday.test', path: '/mediodia/validar/' + hmm.id, method: 'POST',
+      body: '', cookie: hrCookie });
+    hok(r.status === 302, 'el rival valida → 302');
+    const hdb7 = new DS2(path.join(HTTP_DIR, 'midday.db'));
+    hok(hdb7.prepare(`SELECT validation FROM midday_matches WHERE id = ?`).get(hmm.id).validation === 'validated', 'resultado validado en BD');
+    hdb7.close();
+    // mis datos: ver y guardar
+    r = await httpreq({ port: PORT, host: 'midday.test', path: '/mediodia/datos', cookie: hpCookie });
+    hok(r.status === 200 && r.body.includes('Mis datos'), 'página de mis datos');
+    const dbBody = new URLSearchParams({ p1_name: 'Ana Editada', p1_email: 'ana@example.com', p1_phone: '600000011',
+      p2_name: 'Luis', p2_email: 'luis@example.com', p2_phone: '600000002' }).toString();
+    r = await httpreq({ port: PORT, host: 'midday.test', path: '/mediodia/datos', method: 'POST',
+      body: dbBody, cookie: hpCookie });
+    hok(r.status === 302, 'guardar mis datos → 302');
+    const hdb8 = new DS2(path.join(HTTP_DIR, 'midday.db'));
+    hok(hdb8.prepare(`SELECT player1_name, player1_phone FROM midday_pairs WHERE id = ?`).get(hp.id).player1_name === 'Ana Editada', 'datos actualizados en BD');
+    hdb8.close();
 
     // regenerar tras publicar → bloqueado
     r = await httpreq({ port: PORT, host: 'otro.test', path: '/admin/mediodia/sorteo/generar', method: 'POST',

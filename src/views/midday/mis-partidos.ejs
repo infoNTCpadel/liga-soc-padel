@@ -1,9 +1,32 @@
 <h1>Mis partidos</h1>
+
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+<% if (ok) { %><div class="alert ok">Guardado correctamente.</div><% } %>
+
 <div class="card">
   <h3><%= pair.player1_name %> y <%= pair.player2_name %></h3>
   <p class="mut">Nivel medio: <strong><%= String(pair.level_avg).replace('.', ',') %></strong> ·
   Estado: <strong><%= pair.status === 'approved' ? 'Confirmada ✓' : pair.status === 'rejected' ? 'Rechazada' : 'Pendiente de revisión' %></strong></p>
+  <p><a class="btn small ghost" href="/mediodia/datos">Editar mis datos</a>
+  <a class="btn small ghost" href="/mediodia/salir">Salir</a></p>
 </div>
+
+<% if (toValidate.length) { %>
+<div class="card">
+  <h3>Resultados pendientes de tu validación</h3>
+  <p class="mut small">Tu rival ha subido estos marcadores. Revísalos: si no haces nada en 24 h se validan solos.</p>
+  <% for (const m of toValidate) { %>
+    <div class="match">
+      <span class="teams">Ronda <%= m.round_no %> · vs <%= rivalName(m) %></span>
+      <span class="score"><strong><%= formatScore(m) %></strong></span>
+      <span class="acts">
+        <form method="post" action="/mediodia/validar/<%= m.id %>" style="display:inline"><button class="btn small" type="submit">Validar</button></form>
+        <form method="post" action="/mediodia/disputar/<%= m.id %>" style="display:inline"><button class="btn small danger" type="submit">Disputar</button></form>
+      </span>
+    </div>
+  <% } %>
+</div>
+<% } %>
 
 <div class="card">
   <h3>Calendario</h3>
@@ -11,17 +34,55 @@
     <p class="mut">Vuestra inscripción aún está <strong>pendiente de revisión</strong> por el club.
     Cuando se confirme y se cierre la inscripción (<%= deadline %>), aquí veréis vuestros partidos con día y hora.</p>
   <% } else if (myMatches.length) { %>
+    <p class="mut small">Cualquiera de las dos parejas puede subir el resultado, haya ganado o perdido. La otra pareja tiene 24 h para validarlo (si no lo hace, se valida solo).</p>
     <table class="tbl"><thead><tr>
-      <th>Ronda</th><th>Fecha</th><th>Hora</th><th>Pista</th><th>Rival</th>
+      <th>Ronda</th><th>Fecha</th><th>Hora</th><th>Pista</th><th>Rival</th><th>Resultado</th>
     </tr></thead><tbody>
-    <% for (const m of myMatches) { const rival = m.pair1_id === pair.id ? m.n2a + ' / ' + m.n2b : m.n1a + ' / ' + m.n1b; %>
+    <% for (const m of myMatches) {
+      const phones = rivalPhones(m).filter(Boolean);
+      const winner = matchWinnerId(m);
+      const hasResult = !!winner;
+      const mine = winner === pair.id;
+    %>
     <tr>
       <td class="num"><%= m.round_no %></td>
       <td><strong><%= fmtMatchDate(m.match_date) %></strong></td>
       <td><%= slotLabel(m) %></td>
       <td><%= m.court_no ? 'Pista ' + m.court_no : '—' %></td>
-      <td><%= rival %></td>
+      <td><%= rivalName(m) %>
+        <% if (phones.length) { %><br><span class="small">📞 <% phones.forEach((ph, i) => { %><% if (i) { %> / <% } %><a href="tel:<%= ph %>"><%= ph %></a><% }); %></span><% } %>
+      </td>
+      <td>
+        <% if (hasResult) { %>
+          <strong><%= formatScore(m) %></strong>
+          <% if (m.validation === 'pending') { %><br><span class="badge warn">pendiente de validación</span><% } %>
+          <% if (m.validation === 'disputed') { %><br><span class="badge bad">disputado</span><% } %>
+          <% if (m.validation === 'validated' || m.validation === 'auto') { %><br><span class="badge ok"><%= mine ? 'ganado ✓' : 'perdido' %></span><% } %>
+        <% } else { %>
+          <button class="btn small" onclick="document.getElementById('fr<%= m.id %>').style.display='block';this.style.display='none'">Subir resultado</button>
+        <% } %>
+      </td>
     </tr>
+    <% if (!hasResult) { %>
+    <tr id="fr<%= m.id %>" style="display:none"><td colspan="6">
+      <h4>Subir resultado · Ronda <%= m.round_no %> vs <%= rivalName(m) %></h4>
+      <p class="small mut">Columnas «tú – rival». Formato: 2 sets + súper tie-break a 10 (dif. 2) si empatáis a un set.</p>
+      <form method="post" action="/mediodia/resultado/<%= m.id %>">
+        <div class="field"><label>Set 1 (tú – rival)</label><div class="scorein"><input type="number" name="s1a" min="0" max="7" required> <span>–</span> <input type="number" name="s1b" min="0" max="7" required></div></div>
+        <div class="field"><label>Set 2 (tú – rival)</label><div class="scorein"><input type="number" name="s2a" min="0" max="7" required> <span>–</span> <input type="number" name="s2b" min="0" max="7" required></div></div>
+        <div class="field"><label>Desempate</label>
+          <select name="set3mode">
+            <option value="none">No hubo (2 sets)</option>
+            <option value="stb">Súper tie-break a 10</option>
+          </select>
+        </div>
+        <div class="field"><label>Súper tie-break (tú – rival)</label><div class="scorein"><input type="number" name="s3a" min="0" max="30"> <span>–</span> <input type="number" name="s3b" min="0" max="30"></div></div>
+        <div class="field"><label><input type="checkbox" name="wo" value="1"> Rival no presentado (W.O. a nuestro favor)</label></div>
+        <div class="field"><label>Notas (opcional)</label><input type="text" name="notes" maxlength="120"></div>
+        <button class="btn" type="submit">Enviar resultado</button>
+      </form>
+    </td></tr>
+    <% } %>
     <% } %>
     </tbody></table>
   <% } else { %>
@@ -35,5 +96,5 @@
   <p class="mut">Franjas: <strong><%= slotSummary %></strong></p>
   <p class="mut">Días vetados: <strong><%= weekdaysOff %></strong></p>
   <p class="mut">Fechas sueltas vetadas: <strong><%= pair.blackoutDates.length ? pair.blackoutDates.join(', ') : '—' %></strong></p>
-  <p class="mut small">¿Hay algún cambio? Escribid al club y lo actualizamos.</p>
+  <p class="mut small">¿Hay algún cambio? Podéis actualizar vuestros datos (incluida la disponibilidad, hasta que se publique el calendario) en <a href="/mediodia/datos">Editar mis datos</a>.</p>
 </div>

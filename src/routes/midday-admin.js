@@ -205,6 +205,7 @@ function renderSorteo(res, tid, extra = {}) {
     settings,
     slotLabel: (m) => D.matchSlotLabel(m, settings.slots),
     fmtDate: D.fmtMatchDate,
+    formatScore: D.formatScore,
     info: null,
     error: null,
     bulkResults: {},
@@ -253,6 +254,23 @@ router.post('/sorteo/guardar-todo', (req, res) => {
   const summary = !r.changed ? 'Sin cambios.' :
     `${r.ok} partido(s) programado(s)` + (r.errors ? ` · ${r.errors} con error (revísalos abajo)` : '') + '.';
   renderSorteo(res, tid, { bulkResults: r.results, bulkSummary: summary, info: summary });
+});
+
+// Resolver disputa (aceptar el resultado) o reabrir un partido (borrar resultado).
+router.post('/sorteo/resultado/:id/resolver', (req, res) => {
+  const tid = Number(req.body.t);
+  const m = middayDb.prepare('SELECT * FROM midday_matches WHERE id = ?').get(req.params.id);
+  if (m && m.validation === 'disputed')
+    middayDb.prepare("UPDATE midday_matches SET validation = 'validated' WHERE id = ?").run(m.id);
+  res.redirect(`/admin/mediodia/sorteo?t=${tid}`);
+});
+router.post('/sorteo/resultado/:id/reabrir', (req, res) => {
+  const tid = Number(req.body.t);
+  middayDb.prepare(`UPDATE midday_matches SET s1a = NULL, s1b = NULL, s2a = NULL, s2b = NULL,
+    stb_a = NULL, stb_b = NULL, winner_id = NULL, wo_winner_id = NULL, submitted_by = NULL,
+    submitted_at = NULL, validation = 'none', validation_deadline = NULL, notes = '' WHERE id = ?`)
+    .run(req.params.id);
+  res.redirect(`/admin/mediodia/sorteo?t=${tid}`);
 });
 
 // Publica el calendario y avisa por email a las parejas (si hay Brevo configurado).

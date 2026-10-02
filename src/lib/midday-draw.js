@@ -2,6 +2,7 @@
 // revisión del admin, publicación y avisos por email.
 // Opera SOLO sobre midday.db (a través del handle que se le pasa).
 const M = require('./midday');
+const L = require('./league');
 
 // ---------- fechas (AAAA-MM-DD) ----------
 function parseISODate(s) {
@@ -176,7 +177,8 @@ function drawMatches(mdb, drawId) {
 }
 function pairMatches(mdb, drawId, pairId) {
   return mdb.prepare(
-    `SELECT m.*, p1.player1_name n1a, p1.player2_name n1b, p2.player1_name n2a, p2.player2_name n2b
+    `SELECT m.*, p1.player1_name n1a, p1.player2_name n1b, p2.player1_name n2a, p2.player2_name n2b,
+            p1.player1_phone ph1a, p1.player2_phone ph1b, p2.player1_phone ph2a, p2.player2_phone ph2b
      FROM midday_matches m
      JOIN midday_pairs p1 ON p1.id = m.pair1_id
      JOIN midday_pairs p2 ON p2.id = m.pair2_id
@@ -343,7 +345,7 @@ function drawWarnings(mdb, drawId, settings) {
       if (allNo) hard.push({ pair: p, reason: 'ha marcado todas las franjas como imposibles' });
     }
   }
-  return { unscheduled, hard };
+  return { unscheduled, hard, disputed: matches.filter(m => m.validation === 'disputed') };
 }
 
 function publishDraw(mdb, drawId) {
@@ -443,11 +445,125 @@ function bulkReschedule(mdb, drawId, changes, settings, opts = {}) {
   }
   return { results, changed, ok: okCount, errors: changed - okCount };
 }
+// ---------- resultados (zona de parejas) ----------
+// Una de las dos parejas sube el marcador («tú – rival»); la otra lo valida
+// en 24 h (si no, se valida solo). Igual que en la liga social.
+function parseScore(v) {
+  if (v === undefined || v === null || v === '') return null;
+  const n = parseInt(v, 10);
+  return Number.isInteger(n) && n >= 0 && n <= 30 ? n : NaN;
+}
+
+// Deduce quién ganó a partir del marcador en columnas «tú – rival».
+// Devuelve { winnerIsMe: true|false } o { error: 'mensaje' }.
+function deduceWinner(s1a, s1b, s2a, s2b, mode, s3a, s3b) {
+  const vals = [s1a, s1b, s2a, s2b].concat(mode !== 'none' ? [s3a, s3b] : []);
+  if (vals.some(v => v == null || Number.isNaN(v))) return { error: 'Revisa el marcador: faltan juegos o hay valores no válidos.' };
+  if (s1a === s1b || s2a === s2b) return { error: 'Un set no puede terminar en empate.' };
+  let setsA = 0, setsB = 0;
+  for (const [a, b] of [[s1a, s1b], [s2a, s2b]]) {
+    if (!L.isSetFinished(a, b)) return { error: 'Los dos primeros sets deben estar terminados (p. ej. 6-4, 7-5 o 7-6).' };
+    if (a > b) setsA++; else setsB++;
+  }
+  let deciderWinner = null;
+  if (mode !== 'none') {
+    if (s3a === s3b) return { error: 'El desempate no puede terminar en empate.' };
+    if (!((s3a >= 10 || s3b >= 10) && Math.abs(s3a - s3b) >= 2))
+      return { error: 'El súper tie-break se juega a 10 puntos con diferencia de 2.' };
+    deciderWinner = s3a > s3b ? 'a' : 'b';
+  } else if (setsA === 1) {
+    return { error: 'Con empate a un set hay que disputar el súper tie-break.' };
+  }
+  const totA = setsA + (deciderWinner === 'a' ? 1 : 0);
+  const totB = setsB + (deciderWinner === 'b' ? 1 : 0);
+  if (totA === totB || Math.max(totA, totB) < 2) return { error: 'El marcador no deja un ganador claro.' };
+  return { winnerIsMe: totA > totB };
+}
+
+// «6-4, 3-6, 10-8» (los sets se guardan orientados a pair1/pair2).
+function formatScore(m) {
+  if (!m) return '—';
+  if (m.wo_winner_id) return 'W.O.';
+  if (m.s1a == null || m.s1b == null) return '—';
+  let s = `${m.s1a}-${m.s1b}, ${m.s2a}-${m.s2b}`;
+  if (m.stb_a != null && m.stb_b != null) s += `, ${m.stb_a}-${m.stb_b}`;
+  return s;
+}
+
+function matchWinnerId(m) {
+  return (m && (m.wo_winner_id || m.winner_id)) || null;
+}
+
+// Sube un resultado. inp: { s1a,s1b,s2a,s2b,mode,s3a,s3b,wo,notes } en
+// columnas «tú – rival» (quien sube = «tú»).
+function submitResult(mdb, matchId, pairId, inp) {
+  const m = mdb.prepare('SELECT * FROM midday_matches WHERE id = ?').get(matchId);
+  if (!m || (m.pair1_id !== pairId && m.pair2_id !== pairId))
+    return { ok: false, error: 'Partido no válido.' };
+  if (m.winner_id || m.wo_winner_id)
+    return { ok: false, error: 'Este partido ya tiene resultado.' };
+  const draw = getDraw(mdb, m.draw_id);
+  if (!draw || draw.status !== 'published')
+    return { ok: false, error: 'El calendario aún no está publicado.' };
+  const notes = (inp.notes || '').trim();
+  if (inp.wo) {
+    mdb.prepare(`UPDATE midday_matches SET winner_id = ?, wo_winner_id = ?, submitted_by = ?,
+                 submitted_at = datetime('now'), validation = 'pending',
+                 validation_deadline = datetime('now', '+1 day'), notes = ? WHERE id = ?`)
+      .run(pairId, pairId, pairId, notes, matchId);
+    return { ok: true };
+  }
+  const dw = deduceWinner(inp.s1a, inp.s1b, inp.s2a, inp.s2b, inp.mode, inp.s3a, inp.s3b);
+  if (dw.error) return { ok: false, error: dw.error };
+  const meIs1 = m.pair1_id === pairId;
+  const otherId = meIs1 ? m.pair2_id : m.pair1_id;
+  const winnerId = dw.winnerIsMe ? pairId : otherId;
+  if (!winnerId) return { ok: false, error: 'El partido aún no tiene rival asignado.' };
+  // Convertir «tú – rival» a columnas pair1/pair2.
+  const s1a = meIs1 ? inp.s1a : inp.s1b, s1b = meIs1 ? inp.s1b : inp.s1a;
+  const s2a = meIs1 ? inp.s2a : inp.s2b, s2b = meIs1 ? inp.s2b : inp.s2a;
+  const stb_a = inp.mode !== 'none' ? (meIs1 ? inp.s3a : inp.s3b) : null;
+  const stb_b = inp.mode !== 'none' ? (meIs1 ? inp.s3b : inp.s3a) : null;
+  mdb.prepare(`UPDATE midday_matches SET s1a = ?, s1b = ?, s2a = ?, s2b = ?, stb_a = ?, stb_b = ?,
+               winner_id = ?, submitted_by = ?, submitted_at = datetime('now'),
+               validation = 'pending', validation_deadline = datetime('now', '+1 day'), notes = ?
+               WHERE id = ?`)
+    .run(s1a, s1b, s2a, s2b, stb_a, stb_b, winnerId, pairId, notes, matchId);
+  return { ok: true };
+}
+
+function validateResult(mdb, matchId, pairId) {
+  const m = mdb.prepare('SELECT * FROM midday_matches WHERE id = ?').get(matchId);
+  if (!m || (m.pair1_id !== pairId && m.pair2_id !== pairId))
+    return { ok: false, error: 'Partido no válido.' };
+  if (m.validation !== 'pending' || m.submitted_by === pairId)
+    return { ok: false, error: 'No hay ningún resultado pendiente de tu validación.' };
+  mdb.prepare("UPDATE midday_matches SET validation = 'validated' WHERE id = ?").run(matchId);
+  return { ok: true };
+}
+
+function disputeResult(mdb, matchId, pairId) {
+  const m = mdb.prepare('SELECT * FROM midday_matches WHERE id = ?').get(matchId);
+  if (!m || (m.pair1_id !== pairId && m.pair2_id !== pairId))
+    return { ok: false, error: 'Partido no válido.' };
+  if (m.validation !== 'pending' || m.submitted_by === pairId)
+    return { ok: false, error: 'No hay ningún resultado pendiente de tu validación.' };
+  mdb.prepare("UPDATE midday_matches SET validation = 'disputed' WHERE id = ?").run(matchId);
+  return { ok: true };
+}
+
+// Validación automática: pendientes de más de 24 h se validan solos.
+function autoValidateMidday(mdb) {
+  mdb.prepare(`UPDATE midday_matches SET validation = 'auto'
+               WHERE validation = 'pending' AND validation_deadline IS NOT NULL
+               AND validation_deadline <= datetime('now')`).run();
+}
 module.exports = {
   parseISODate, addDaysISO, diffDaysISO, weekdayNum, isWeekdayISO, fmtMatchDate,
   potSizes, buildPots, circleRounds, interleavePots,
   buildDraw, deleteDraw, getDraw, drawForTournament, drawPots, drawMatches, pairMatches,
   canPlayOn, scheduleDraw, rescheduleMatch, bulkReschedule, drawWarnings, matchSlotLabel, compareForReview,
-  normalizeSlotInput,
+  normalizeSlotInput, parseScore, deduceWinner, formatScore, matchWinnerId,
+  submitResult, validateResult, disputeResult, autoValidateMidday,
   publishDraw, setDrawEmailSummary, sendMiddayEmail,
 };

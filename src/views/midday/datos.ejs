@@ -1,0 +1,66 @@
+<h1>Mis datos</h1>
+<p class="mut">Podéis corregir vuestros datos cuando queráis. Es importante que el <strong>teléfono</strong> esté al día para que los rivales puedan localizaros.</p>
+
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+<% if (ok) { %><div class="alert ok">Datos actualizados correctamente.</div><% } %>
+
+<form method="post" action="/mediodia/datos">
+  <% [1, 2].forEach((n) => {
+    const v = (k) => form ? (form[`p${n}_${k}`] || '') : pair[`player${n}_${k}`];
+  %>
+  <div class="card">
+    <h3>Jugador <%= n %></h3>
+    <div class="row2">
+      <div class="field"><label>Nombre y apellidos *</label><input type="text" name="p<%= n %>_name" required value="<%= v('name') %>"></div>
+      <div class="field"><label>Móvil *</label><input type="tel" name="p<%= n %>_phone" required value="<%= v('phone') %>"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Email</label><input type="email" name="p<%= n %>_email" value="<%= v('email') %>"></div>
+      <% if (canEditSport) { %>
+      <div class="field"><label>Nivel (1 – 7) *</label>
+        <select name="p<%= n %>_level" required>
+          <% for (const o of (n === 1 ? levelOpts1 : levelOpts2)) { %>
+          <option value="<%= o.value %>" <%= o.selected ? 'selected' : '' %>><%= o.label %></option>
+          <% } %>
+        </select>
+      </div>
+      <% } %>
+    </div>
+  </div>
+  <% }); %>
+
+  <% if (canEditSport) { %>
+  <div class="card">
+    <h3>¿En qué franja podéis jugar?</h3>
+    <p class="mut small">Marca para <strong>cada franja</strong> si es vuestra preferida, si os va bien o si es imposible.</p>
+    <% for (const s of slots) { const pv = form ? (form[`slot_${s.id}`] || 'ok') : (pair.slotPrefs[s.id] || 'ok'); %>
+    <div class="field"><label><%= s.label %></label>
+      <label><input type="radio" name="slot_<%= s.id %>" value="pref" <%= pv === 'pref' ? 'checked' : '' %>> Preferida ★</label>
+      <label><input type="radio" name="slot_<%= s.id %>" value="ok" <%= pv === 'ok' ? 'checked' : '' %>> Me va bien ✓</label>
+      <label><input type="radio" name="slot_<%= s.id %>" value="no" <%= pv === 'no' ? 'checked' : '' %>> Imposible ✗</label>
+    </div>
+    <% } %>
+  </div>
+
+  <div class="card">
+    <h3>¿Qué días NO podéis jugar de ninguna manera?</h3>
+    <div class="field">
+      <% for (const w of weekdays) { const checked = form ? !!form[`off_${w.id}`] : pair.weekdaysOff.includes(w.id); %>
+      <label><input type="checkbox" name="off_<%= w.id %>" value="1" <%= checked ? 'checked' : '' %>> <%= w.name %></label>
+      <% } %>
+    </div>
+    <p class="mut small">Sábados y domingos no se juega nunca.</p>
+    <div class="field"><label>Fechas sueltas vetadas <span class="hint">sepáralas por comas: 2026-11-05, 2026-12-24</span></label>
+      <input type="text" name="blackout" value="<%= form ? (form.blackout || '') : pair.blackoutDates.join(', ') %>" placeholder="AAAA-MM-DD, AAAA-MM-DD">
+    </div>
+    <div class="field"><label>Notas <span class="hint">opcional</span></label>
+      <input type="text" name="notes" value="<%= form ? (form.notes || '') : (pair.notes || '') %>">
+    </div>
+  </div>
+  <% } else { %>
+  <p class="mut small">El calendario ya está publicado: el nivel y la disponibilidad ya no se pueden cambiar desde aquí. Para cualquier cambio, escribid al club.</p>
+  <% } %>
+
+  <p><button class="btn" type="submit">Guardar cambios</button>
+  <a class="btn ghost" href="/mediodia/mis-partidos">Volver</a></p>
+</form>
