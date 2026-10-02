@@ -1,5 +1,5 @@
 <% if (!open) { %>
-<div class="alert error">La inscripción está cerrada. Si tienes cualquier duda, contacta con el club.</div>
+<div class="alert error"><% if (noTournament) { %>Ahora mismo no hay ninguna edición abierta. Vuelve pronto.<% } else { %>La inscripción está cerrada. Si tienes cualquier duda, contacta con el club.<% } %></div>
 <% } else { %>
 <h1>Inscripción · MEDIODÍA PADEL</h1>
 <p class="mut">Inscripción abierta hasta el <strong><%= deadline %></strong>. Al enviar recibiréis un

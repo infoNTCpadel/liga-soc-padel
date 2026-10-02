@@ -125,34 +125,58 @@ function validateInscription(body, slots) {
 
 // ---- operaciones sobre midday.db ----
 function createPair(mdb, data) {
+  let tid = data.tournament_id != null ? Number(data.tournament_id) : null;
+  if (!tid) {
+    const cur = currentTournament(mdb);
+    if (!cur) throw new Error('No hay ninguna edición abierta para inscribir la pareja.');
+    tid = cur.id;
+  }
   const code = genCode(mdb);
   const r = mdb.prepare(
-    `INSERT INTO midday_pairs(code, player1_name, player1_email, player1_phone,
+    `INSERT INTO midday_pairs(code, tournament_id, player1_name, player1_email, player1_phone,
        player2_name, player2_email, player2_phone, level1, level2, level_avg,
        slot_prefs, weekdays_off, blackout_dates, notes)
-     VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(code, data.player1_name, data.player1_email, data.player1_phone,
+     VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(code, tid, data.player1_name, data.player1_email, data.player1_phone,
     data.player2_name, data.player2_email, data.player2_phone,
     data.level1, data.level2, data.level_avg,
     data.slot_prefs, data.weekdays_off, data.blackout_dates, data.notes);
-  return { id: Number(r.lastInsertRowid), code };
+  return { id: Number(r.lastInsertRowid), code, tournament_id: tid };
 }
 
-// Evita inscribir dos veces a la misma pareja (mismos dos móviles).
-function pairExists(mdb, phone1, phone2) {
+// Evita inscribir dos veces a la misma pareja (mismos dos móviles) dentro de una edición.
+function pairExists(mdb, phone1, phone2, tournamentId = null) {
+  let tid = tournamentId != null ? Number(tournamentId) : null;
+  if (!tid) {
+    const cur = currentTournament(mdb);
+    if (!cur) return false;
+    tid = cur.id;
+  }
   const [a, b] = [phone1, phone2].sort();
   return !!mdb.prepare(
     `SELECT 1 FROM midday_pairs
-     WHERE status != 'rejected'
+     WHERE tournament_id = ? AND status != 'rejected'
        AND ((player1_phone < player2_phone AND player1_phone = ? AND player2_phone = ?)
          OR (player2_phone < player1_phone AND player2_phone = ? AND player1_phone = ?)
          OR (player1_phone = player2_phone AND player1_phone = ?))
      LIMIT 1`
-  ).get(a, b, a, b, a);
+  ).get(tid, a, b, a, b, a);
 }
 
-function listPairs(mdb) {
-  return mdb.prepare('SELECT * FROM midday_pairs ORDER BY created_at, id').all().map(decorate);
+function listPairs(mdb, tournamentId = null) {
+  let tid = tournamentId != null ? Number(tournamentId) : null;
+  if (!tid) {
+    const cur = currentTournament(mdb);
+    if (!cur) return [];
+    tid = cur.id;
+  }
+  return mdb.prepare('SELECT * FROM midday_pairs WHERE tournament_id = ? ORDER BY created_at, id')
+    .all(tid).map(decorate);
+}
+
+function countPairs(mdb, tournamentId) {
+  return mdb.prepare('SELECT COUNT(*) c FROM midday_pairs WHERE tournament_id = ?')
+    .get(tournamentId).c;
 }
 
 function getPair(mdb, id) {
@@ -206,6 +230,135 @@ function fmtWeekdaysOff(ids) {
   return WEEKDAYS.filter(w => (ids || []).includes(w.id)).map(w => w.name).join(', ') || '—';
 }
 
+// ---- ediciones (torneos) ----
+// status: inscription (inscripción abierta) | active (en marcha) | finished.
+const TOURNAMENT_STATUSES = ['inscription', 'active', 'finished'];
+const TOURNAMENT_STATUS_NAMES = { inscription: 'Inscripción', active: 'En marcha', finished: 'Finalizada' };
+
+function listTournaments(mdb) {
+  return mdb.prepare('SELECT * FROM midday_tournaments ORDER BY id').all();
+}
+
+function getTournament(mdb, id) {
+  return mdb.prepare('SELECT * FROM midday_tournaments WHERE id = ?').get(id) || null;
+}
+
+// Edición abierta actual: la no finalizada de mayor id (null si no hay).
+function currentTournament(mdb) {
+  return mdb.prepare(
+    "SELECT * FROM midday_tournaments WHERE status != 'finished' ORDER BY id DESC LIMIT 1").get() || null;
+}
+
+// Crea una edición nueva copiando los ajustes de copyFromId (o de la edición
+// abierta actual). La nueva queda en 'inscription' y solo puede haber una
+// edición abierta a la vez: las demás no finalizadas se finalizan.
+function createTournament(mdb, name, copyFromId, defaults) {
+  const nm = String(name || '').trim();
+  if (!nm) return { ok: false, error: 'El nombre de la edición no puede estar vacío.' };
+  let srcId = copyFromId != null && copyFromId !== '' ? Number(copyFromId) : null;
+  if (srcId && !getTournament(mdb, srcId))
+    return { ok: false, error: 'La edición de origen no existe.' };
+  if (!srcId) {
+    const cur = currentTournament(mdb);
+    srcId = cur ? cur.id : null;
+  }
+  const r = mdb.prepare("INSERT INTO midday_tournaments(name, status) VALUES(?, 'inscription')").run(nm);
+  const tid = Number(r.lastInsertRowid);
+  mdb.prepare("UPDATE midday_tournaments SET status = 'finished' WHERE id != ? AND status != 'finished'").run(tid);
+  const ins = mdb.prepare('INSERT INTO midday_settings(tournament_id, key, value) VALUES(?, ?, ?)');
+  if (srcId) {
+    for (const row of mdb.prepare('SELECT key, value FROM midday_settings WHERE tournament_id = ?').all(srcId))
+      ins.run(tid, row.key, row.value);
+  } else if (defaults) {
+    for (const [k, v] of Object.entries(defaults)) ins.run(tid, k, String(v));
+  }
+  return { ok: true, id: tid };
+}
+
+function renameTournament(mdb, id, name) {
+  const nm = String(name || '').trim();
+  if (!nm) return false;
+  return mdb.prepare('UPDATE midday_tournaments SET name = ? WHERE id = ?').run(nm, id).changes > 0;
+}
+
+// Transiciones válidas: inscription → active | finished; active → finished.
+// Al pasar a inscription/active, las demás ediciones abiertas se finalizan.
+function setTournamentStatus(mdb, id, status) {
+  const t = getTournament(mdb, id);
+  if (!t) return { ok: false, error: 'La edición no existe.' };
+  if (!TOURNAMENT_STATUSES.includes(status)) return { ok: false, error: 'Estado no válido.' };
+  if (t.status === status) return { ok: true };
+  const allowed = { inscription: ['active', 'finished'], active: ['finished'], finished: [] };
+  if (!allowed[t.status].includes(status))
+    return { ok: false, error: `No se puede pasar de "${TOURNAMENT_STATUS_NAMES[t.status]}" a "${TOURNAMENT_STATUS_NAMES[status]}".` };
+  if (status === 'inscription' || status === 'active')
+    mdb.prepare("UPDATE midday_tournaments SET status = 'finished' WHERE id != ? AND status != 'finished'").run(id);
+  mdb.prepare('UPDATE midday_tournaments SET status = ? WHERE id = ?').run(status, id);
+  return { ok: true };
+}
+
+// Solo se puede eliminar una edición sin parejas.
+function deleteTournament(mdb, id) {
+  const t = getTournament(mdb, id);
+  if (!t) return { ok: false, error: 'La edición no existe.' };
+  if (countPairs(mdb, id) > 0)
+    return { ok: false, error: 'No se puede eliminar: la edición tiene parejas inscritas.' };
+  mdb.prepare('DELETE FROM midday_settings WHERE tournament_id = ?').run(id);
+  mdb.prepare('DELETE FROM midday_tournaments WHERE id = ?').run(id);
+  return { ok: true };
+}
+
+// ---- datos de prueba ----
+const TEST_FIRST = ['Ana', 'Luis', 'María', 'Jorge', 'Carmen', 'Pablo', 'Lucía', 'Miguel',
+  'Sara', 'David', 'Elena', 'Javier', 'Marta', 'Diego', 'Paula', 'Andrés', 'Laura', 'Sergio'];
+const TEST_LAST = ['López', 'Gil', 'Ruiz', 'Martí', 'Sanz', 'Torres', 'Vidal', 'Ferrer',
+  'Roca', 'Sala', 'Puig', 'Costa', 'Sánchez', 'Pérez', 'Gómez', 'Fernández'];
+
+function generateTestPairs(mdb, tournamentId, n = 8) {
+  const tid = Number(tournamentId);
+  if (!getTournament(mdb, tid)) throw new Error('La edición no existe.');
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const base = countTestPairs(mdb, tid);
+  const created = [];
+  for (let i = 0; i < n; i++) {
+    const p1 = `${pick(TEST_FIRST)} ${pick(TEST_LAST)}`;
+    let p2 = `${pick(TEST_FIRST)} ${pick(TEST_LAST)}`;
+    if (p2 === p1) p2 = p2 + ' II';
+    const phone = () => '6' + String(Math.floor(Math.random() * 90000000) + 10000000);
+    let ph1 = phone(), ph2 = phone(), guard = 0;
+    while (pairExists(mdb, ph1, ph2, tid) && guard++ < 30) { ph1 = phone(); ph2 = phone(); }
+    const lvl = () => Math.min(7, Math.round((2 + Math.random() * 4.25) * 4) / 4);
+    const l1 = lvl(), l2 = lvl();
+    const slotPrefs = {};
+    for (const s of ['s1', 's2']) slotPrefs[s] = ['pref', 'ok', 'ok', 'no'][Math.floor(Math.random() * 4)];
+    if (!Object.values(slotPrefs).some(v => v !== 'no')) slotPrefs.s1 = 'ok';
+    const weekdaysOff = Math.random() < 0.4 ? [WEEKDAY_IDS[Math.floor(Math.random() * WEEKDAY_IDS.length)]] : [];
+    const seq = base + i + 1;
+    const r = mdb.prepare(
+      `INSERT INTO midday_pairs(code, tournament_id, player1_name, player1_email, player1_phone,
+         player2_name, player2_email, player2_phone, level1, level2, level_avg,
+         slot_prefs, weekdays_off, blackout_dates, status, is_test)
+       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`
+    ).run(genCode(mdb), tid, p1, `prueba${seq}a@ejemplo.com`, ph1,
+      p2, `prueba${seq}b@ejemplo.com`, ph2,
+      l1, l2, Math.round(((l1 + l2) / 2) * 100) / 100,
+      JSON.stringify(slotPrefs), JSON.stringify(weekdaysOff), '[]',
+      Math.random() < 0.5 ? 'approved' : 'pending');
+    created.push({ id: Number(r.lastInsertRowid) });
+  }
+  return created;
+}
+
+function deleteTestPairs(mdb, tournamentId) {
+  return mdb.prepare('DELETE FROM midday_pairs WHERE tournament_id = ? AND is_test = 1')
+    .run(tournamentId).changes;
+}
+
+function countTestPairs(mdb, tournamentId) {
+  return mdb.prepare('SELECT COUNT(*) c FROM midday_pairs WHERE tournament_id = ? AND is_test = 1')
+    .get(tournamentId).c;
+}
+
 // ---- sugerencia de nivel (SOLO LECTURA sobre meta.db y la temporada activa) ----
 // Prioridad: 1) socios del club (escala 1–7 oficial), 2) liga social (0–6 → convertido).
 function suggestLevel(metaDb, seasonDb, email, phone) {
@@ -237,7 +390,11 @@ module.exports = {
   WEEKDAYS, WEEKDAY_IDS, SLOT_VALUES,
   validEmail, normEmail, genCode, playtomicToMidday, validLevel,
   parseSlots, parseBlackout, validateInscription,
-  createPair, pairExists, listPairs, getPair, getPairByCode,
+  createPair, pairExists, listPairs, countPairs, getPair, getPairByCode,
   setStatus, deletePair, updateLevels,
   fmtSlotPrefs, fmtWeekdaysOff, suggestLevel,
+  TOURNAMENT_STATUSES, TOURNAMENT_STATUS_NAMES,
+  listTournaments, getTournament, currentTournament,
+  createTournament, renameTournament, setTournamentStatus, deleteTournament,
+  generateTestPairs, deleteTestPairs, countTestPairs,
 };

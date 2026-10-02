@@ -14,31 +14,39 @@ router.use((req, res, next) => {
   next();
 });
 
-function slots() { return M.parseSlots(middayGet('slots', '[]')); }
+function slots(tid) { return M.parseSlots(middayGet('slots', '[]', tid)); }
 function fmtDate(iso) {
   if (!iso) return '';
   const [y, m, d] = iso.split('-');
   return `${d}/${m}/${y}`;
 }
-function inscriptionOpen() {
-  if (middayGet('inscription_open', '1') !== '1') return false;
-  const deadline = middayGet('inscription_deadline', '');
+function currentTid() {
+  const t = M.currentTournament(middayDb);
+  return t ? t.id : null;
+}
+function inscriptionOpen(tid) {
+  if (tid == null) return false;
+  if (middayGet('inscription_open', '1', tid) !== '1') return false;
+  const deadline = middayGet('inscription_deadline', '', tid);
   if (!deadline) return true;
   return new Date().toISOString().slice(0, 10) <= deadline;
 }
 
 // ---- Portada ----
 router.get('/', (req, res) => {
-  const counts = {
-    approved: middayDb.prepare("SELECT COUNT(*) c FROM midday_pairs WHERE status = 'approved'").get().c,
-    pending: middayDb.prepare("SELECT COUNT(*) c FROM midday_pairs WHERE status = 'pending'").get().c,
-  };
+  const tid = currentTid();
+  const t = tid ? M.getTournament(middayDb, tid) : null;
+  const counts = tid ? {
+    approved: middayDb.prepare("SELECT COUNT(*) c FROM midday_pairs WHERE tournament_id = ? AND status = 'approved'").get(tid).c,
+    pending: middayDb.prepare("SELECT COUNT(*) c FROM midday_pairs WHERE tournament_id = ? AND status = 'pending'").get(tid).c,
+  } : { approved: 0, pending: 0 };
   res.renderPage('midday/landing', {
+    tournament: t,
     counts,
-    open: inscriptionOpen(),
-    deadline: fmtDate(middayGet('inscription_deadline', '')),
-    slots: slots(),
-    courts: middayGet('courts_midday', '4'),
+    open: inscriptionOpen(tid),
+    deadline: fmtDate(middayGet('inscription_deadline', '', tid)),
+    slots: slots(tid),
+    courts: middayGet('courts_midday', '4', tid),
   });
 });
 
@@ -59,10 +67,13 @@ function levelOptions(selected) {
 }
 
 router.get('/inscripcion', (req, res) => {
+  const tid = currentTid();
+  const open = inscriptionOpen(tid);
   res.renderPage('midday/inscripcion', {
-    open: inscriptionOpen(),
-    deadline: fmtDate(middayGet('inscription_deadline', '')),
-    slots: slots(),
+    open,
+    noTournament: tid == null,
+    deadline: fmtDate(middayGet('inscription_deadline', '', tid)),
+    slots: slots(tid),
     weekdays: M.WEEKDAYS,
     form: {},
     levelOpts1: levelOptions(null),
@@ -74,26 +85,29 @@ router.get('/inscripcion', (req, res) => {
 
 router.post('/inscripcion', (req, res) => {
   const b = req.body || {};
+  const tid = currentTid();
   const again = (errors) => res.renderPage('midday/inscripcion', {
-    open: true, deadline: fmtDate(middayGet('inscription_deadline', '')),
-    slots: slots(), weekdays: M.WEEKDAYS, form: b,
+    open: inscriptionOpen(tid), noTournament: tid == null,
+    deadline: fmtDate(middayGet('inscription_deadline', '', tid)),
+    slots: slots(tid), weekdays: M.WEEKDAYS, form: b,
     levelOpts1: levelOptions(b.p1_level), levelOpts2: levelOptions(b.p2_level),
     errors,
     sub: 'inscripcion',
   });
-  if (!inscriptionOpen()) return again(['La inscripción está cerrada.']);
+  if (tid == null) return again(['Ahora mismo no hay ninguna edición abierta. Vuelve pronto.']);
+  if (!inscriptionOpen(tid)) return again(['La inscripción está cerrada.']);
 
-  const sl = slots();
+  const sl = slots(tid);
   const v = M.validateInscription(b, sl);
   if (!v.ok) return again(v.errors);
 
   const ph1 = v.data.player1_phone, ph2 = v.data.player2_phone;
-  if (M.pairExists(middayDb, ph1, ph2))
-    return again(['Esta pareja ya está inscrita (mismos móviles). Si es un error, contacta con el club.']);
+  if (M.pairExists(middayDb, ph1, ph2, tid))
+    return again(['Esta pareja ya está inscrita en esta edición (mismos móviles). Si es un error, contacta con el club.']);
 
   let created;
   try {
-    created = M.createPair(middayDb, v.data);
+    created = M.createPair(middayDb, { ...v.data, tournament_id: tid });
   } catch (e) {
     console.error('midday inscripción', e);
     return again(['Ha ocurrido un error al guardar la inscripción. Inténtalo de nuevo.']);
@@ -131,12 +145,15 @@ router.get('/salir', (req, res) => {
 // ---- Mis partidos (Fase A: preferencias + aviso de calendario) ----
 router.get('/mis-partidos', requirePair, (req, res) => {
   const pair = res.locals.middayPair;
+  const tid = pair.tournament_id;
+  const sl = slots(tid);
   res.renderPage('midday/mis-partidos', {
     pair,
-    slots: slots(),
-    slotSummary: M.fmtSlotPrefs(pair.slotPrefs, slots()),
+    tournament: M.getTournament(middayDb, tid),
+    slots: sl,
+    slotSummary: M.fmtSlotPrefs(pair.slotPrefs, sl),
     weekdaysOff: M.fmtWeekdaysOff(pair.weekdaysOff),
-    deadline: fmtDate(middayGet('inscription_deadline', '')),
+    deadline: fmtDate(middayGet('inscription_deadline', '', tid)),
   });
 });
 

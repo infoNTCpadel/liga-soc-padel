@@ -1,8 +1,9 @@
-<h1>MEDIODÍA PADEL · Ajustes</h1>
+<h1>MEDIODÍA PADEL · Ajustes · <%= sel.name %></h1>
 <% if (info) { %><div class="alert ok"><%= info %></div><% } %>
 <% if (errors.length) { %><div class="alert error"><ul><% for (const e of errors) { %><li><%= e %></li><% } %></ul></div><% } %>
 
 <form method="post" action="/admin/mediodia/ajustes">
+  <input type="hidden" name="t" value="<%= sel.id %>">
   <div class="card">
     <div class="field"><label>Nombre de la competición</label>
       <input type="text" name="comp_name" value="<%= form.comp_name %>"></div>
@@ -21,5 +22,5 @@
     </div>
   </div>
   <p><button class="btn big" type="submit">Guardar ajustes</button>
-     <a class="btn ghost" href="/admin/mediodia">Volver a parejas</a></p>
+     <a class="btn ghost" href="/admin/mediodia?t=<%= sel.id %>">Volver a parejas</a></p>
 </form>

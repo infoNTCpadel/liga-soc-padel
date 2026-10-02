@@ -359,10 +359,28 @@ function setReceptionHash(h) { metaSet('reception_password_hash', h); }
 // meta.db (socios) y la temporada activa (para sugerir niveles).
 const midday = new DatabaseSync(path.join(DATA_DIR, 'midday.db'));
 midday.exec('PRAGMA journal_mode = WAL;');
+
+// ---- ediciones (torneos) de MEDIODÍA PADEL ----
+// status: inscription (inscripción abierta) | active (competición en marcha) | finished.
+midday.exec(`
+CREATE TABLE IF NOT EXISTS midday_tournaments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'inscription',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`);
+if (!midday.prepare('SELECT 1 FROM midday_tournaments LIMIT 1').get())
+  midday.prepare("INSERT INTO midday_tournaments(name, status) VALUES('Edición 1', 'inscription')").run();
+
+function middayCols(table) {
+  return midday.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
+}
+
 midday.exec(`
 CREATE TABLE IF NOT EXISTS midday_pairs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  code TEXT NOT NULL UNIQUE,              -- código de acceso de la pareja
+  code TEXT NOT NULL UNIQUE,
   player1_name TEXT NOT NULL,
   player1_email TEXT NOT NULL DEFAULT '',
   player1_phone TEXT NOT NULL DEFAULT '',
@@ -372,18 +390,49 @@ CREATE TABLE IF NOT EXISTS midday_pairs (
   level1 REAL NOT NULL DEFAULT 1,
   level2 REAL NOT NULL DEFAULT 1,
   level_avg REAL NOT NULL DEFAULT 1,
-  slot_prefs TEXT NOT NULL DEFAULT '{}',  -- JSON: {"s1":"pref"|"ok"|"no"}
-  weekdays_off TEXT NOT NULL DEFAULT '[]',-- JSON: ["mon","tue",...]
-  blackout_dates TEXT NOT NULL DEFAULT '[]', -- JSON: ["2026-11-05",...]
-  status TEXT NOT NULL DEFAULT 'pending', -- pending | approved | rejected
+  slot_prefs TEXT NOT NULL DEFAULT '{}',
+  weekdays_off TEXT NOT NULL DEFAULT '[]',
+  blackout_dates TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'pending',
   notes TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE TABLE IF NOT EXISTS midday_settings (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);
 `);
+// Migración Fase A → ediciones: tournament_id en parejas (las existentes van a la edición 1).
+if (!middayCols('midday_pairs').includes('tournament_id'))
+  midday.exec('ALTER TABLE midday_pairs ADD COLUMN tournament_id INTEGER NOT NULL DEFAULT 1');
+// Datos de prueba: is_test en parejas.
+if (!middayCols('midday_pairs').includes('is_test'))
+  midday.exec('ALTER TABLE midday_pairs ADD COLUMN is_test INTEGER NOT NULL DEFAULT 0');
+
+// Migración Fase A → ediciones: settings con ámbito por edición.
+// La tabla antigua era (key PK, value); la nueva es (tournament_id, key PK, value).
+if (!middayCols('midday_settings').includes('tournament_id')) {
+  if (middayCols('midday_settings').length > 0) {
+    midday.exec(`
+    CREATE TABLE midday_settings_new (
+      tournament_id INTEGER NOT NULL,
+      key TEXT NOT NULL,
+      value TEXT NOT NULL,
+      PRIMARY KEY (tournament_id, key)
+    );
+    INSERT INTO midday_settings_new(tournament_id, key, value)
+      SELECT 1, key, value FROM midday_settings;
+    DROP TABLE midday_settings;
+    ALTER TABLE midday_settings_new RENAME TO midday_settings;
+  `);
+  } else {
+    // BD nueva: crear el esquema con ámbito directamente.
+    midday.exec(`
+    CREATE TABLE midday_settings (
+      tournament_id INTEGER NOT NULL,
+      key TEXT NOT NULL,
+      value TEXT NOT NULL,
+      PRIMARY KEY (tournament_id, key)
+    );
+  `);
+  }
+}
 
 const MIDDAY_DEFAULTS = {
   comp_name: 'MEDIODÍA PADEL',
@@ -393,18 +442,39 @@ const MIDDAY_DEFAULTS = {
   courts_midday: '4',
   min_days_between: '4',
 };
-for (const [k, v] of Object.entries(MIDDAY_DEFAULTS)) {
-  if (!midday.prepare('SELECT 1 FROM midday_settings WHERE key = ?').get(k))
-    midday.prepare('INSERT INTO midday_settings(key, value) VALUES(?, ?)').run(k, v);
+
+// Edición abierta actual: la no finalizada de mayor id (null si no hay).
+function middayOpenTournamentId() {
+  const r = midday.prepare(
+    "SELECT id FROM midday_tournaments WHERE status != 'finished' ORDER BY id DESC LIMIT 1").get();
+  return r ? r.id : null;
+}
+function middaySeedDefaults(tid) {
+  for (const [k, v] of Object.entries(MIDDAY_DEFAULTS)) {
+    if (!midday.prepare('SELECT 1 FROM midday_settings WHERE tournament_id = ? AND key = ?').get(tid, k))
+      midday.prepare('INSERT INTO midday_settings(tournament_id, key, value) VALUES(?, ?, ?)').run(tid, k, v);
+  }
+}
+{
+  const tid = middayOpenTournamentId();
+  if (tid) middaySeedDefaults(tid);
 }
 
-function middayGet(key, fallback = null) {
-  const r = midday.prepare('SELECT value FROM midday_settings WHERE key = ?').get(key);
+// Ajustes con ámbito de edición. tournamentId=null → edición abierta actual;
+// si no hay edición abierta, get devuelve fallback y set no hace nada.
+function middayGet(key, fallback = null, tournamentId = null) {
+  const tid = tournamentId != null ? tournamentId : middayOpenTournamentId();
+  if (tid == null) return fallback;
+  const r = midday.prepare('SELECT value FROM midday_settings WHERE tournament_id = ? AND key = ?').get(tid, key);
   return r ? r.value : fallback;
 }
-function middaySet(key, value) {
-  midday.prepare('INSERT INTO midday_settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
-    .run(key, String(value));
+function middaySet(key, value, tournamentId = null) {
+  const tid = tournamentId != null ? tournamentId : middayOpenTournamentId();
+  if (tid == null) return false;
+  midday.prepare(`INSERT INTO midday_settings(tournament_id, key, value) VALUES(?, ?, ?)
+    ON CONFLICT(tournament_id, key) DO UPDATE SET value = excluded.value`)
+    .run(tid, key, String(value));
+  return true;
 }
 
 module.exports = {
@@ -413,5 +483,5 @@ module.exports = {
   listSeasons, getActiveSeason, getActiveSeasonId,
   createSeason, activateSeason, renameSeason, deleteSeason,
   seasonDb, metaDb: meta,
-  middayDb: midday, middayGet, middaySet,
+  middayDb: midday, middayGet, middaySet, middayOpenTournamentId, MIDDAY_DEFAULTS,
 };

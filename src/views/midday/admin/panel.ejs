@@ -1,9 +1,81 @@
 <h1>MEDIODÍA PADEL · Parejas</h1>
 <% if (info) { %><div class="alert ok"><%= info %></div><% } %>
-<p><a class="btn ghost" href="/admin/mediodia/ajustes">⚙️ Ajustes de la competición</a></p>
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+
+<div class="card">
+  <h3>Edición</h3>
+  <form method="get" action="/admin/mediodia" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <select name="t" onchange="this.form.submit()">
+      <% for (const t of tournaments) { %>
+      <option value="<%= t.id %>" <%= sel && t.id === sel.id ? 'selected' : '' %>>
+        <%= t.name %> · <%= statusNames[t.status] || t.status %>
+      </option>
+      <% } %>
+    </select>
+    <a class="btn ghost" href="/admin/mediodia/ajustes?t=<%= sel ? sel.id : '' %>">⚙️ Ajustes de esta edición</a>
+  </form>
+  <% if (sel) { %>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:12px">
+    <form method="post" action="/admin/mediodia/ediciones/<%= sel.id %>/renombrar" style="display:flex;gap:6px;align-items:center">
+      <input type="text" name="name" value="<%= sel.name %>" style="width:14em" maxlength="60">
+      <button class="btn small ghost" type="submit">Renombrar</button>
+    </form>
+    <form method="post" action="/admin/mediodia/ediciones/<%= sel.id %>/estado" style="display:flex;gap:6px;align-items:center">
+      <% if (sel.status === 'inscription') { %>
+        <button class="btn small" type="submit" name="status" value="active">▶ Iniciar competición</button>
+      <% } %>
+      <% if (sel.status !== 'finished') { %>
+        <button class="btn small warn" type="submit" name="status" value="finished"
+                onclick="return confirm('¿Finalizar esta edición?')">■ Finalizar edición</button>
+      <% } %>
+      <% if (sel.status === 'finished') { %><span class="mut small">Edición finalizada (solo lectura).</span><% } %>
+    </form>
+    <form method="post" action="/admin/mediodia/ediciones/<%= sel.id %>/eliminar"
+          onsubmit="return confirm('¿Eliminar esta edición? Solo es posible si no tiene parejas.')">
+      <button class="btn small danger" type="submit">Eliminar edición</button>
+    </form>
+  </div>
+  <% } %>
+  <details style="margin-top:12px">
+    <summary class="small" style="cursor:pointer">＋ Nueva edición</summary>
+    <form method="post" action="/admin/mediodia/ediciones/nueva" style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+      <input type="text" name="name" placeholder="Nombre (p. ej. Invierno 2027)" style="width:16em" maxlength="60" required>
+      <label class="small">Copiar ajustes de
+        <select name="copy_from">
+          <option value="">— edición actual —</option>
+          <% for (const t of tournaments) { %>
+          <option value="<%= t.id %>"><%= t.name %></option>
+          <% } %>
+        </select>
+      </label>
+      <button class="btn small" type="submit">Crear edición</button>
+    </form>
+    <p class="mut small">La nueva edición queda en estado «Inscripción» y las demás se finalizan: solo hay una edición abierta a la vez.</p>
+  </details>
+</div>
+
+<% if (sel) { %>
+<div class="card">
+  <h3>Datos de prueba <span class="mut small">— solo para probar, no son inscripciones reales</span></h3>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <form method="post" action="/admin/mediodia/pruebas/generar">
+      <input type="hidden" name="t" value="<%= sel.id %>">
+      <input type="number" name="n" value="8" min="1" max="30" style="width:4em" title="Nº de parejas">
+      <button class="btn small ghost" type="submit">Generar parejas de prueba</button>
+    </form>
+    <% if (testCount) { %>
+    <form method="post" action="/admin/mediodia/pruebas/eliminar"
+          onsubmit="return confirm('¿Eliminar las <%= testCount %> parejas de prueba de esta edición?')">
+      <input type="hidden" name="t" value="<%= sel.id %>">
+      <button class="btn small danger" type="submit">Eliminar datos de prueba (<%= testCount %>)</button>
+    </form>
+    <% } %>
+  </div>
+</div>
+<% } %>
 
 <% if (!pairs.length) { %>
-<div class="card"><p class="mut">Aún no hay parejas inscritas.</p></div>
+<div class="card"><p class="mut">Aún no hay parejas inscritas en esta edición.</p></div>
 <% } else { %>
 <table class="tbl">
   <thead><tr>
@@ -12,11 +84,13 @@
   <tbody>
   <% for (const p of pairs) { %>
   <tr>
-    <td><strong><%= p.player1_name %></strong> y <strong><%= p.player2_name %></strong><br>
+    <td><strong><%= p.player1_name %></strong> y <strong><%= p.player2_name %></strong>
+      <% if (p.is_test) { %><span class="badge" style="background:#f5c518;color:#222">PRUEBA</span><% } %><br>
       <span class="mut small"><%= p.player1_phone %> · <%= p.player2_phone %></span><br>
       <span class="code"><%= p.code %></span></td>
     <td>
       <form method="post" action="/admin/mediodia/parejas/<%= p.id %>/nivel" style="display:flex;gap:4px;align-items:center">
+        <input type="hidden" name="t" value="<%= sel.id %>">
         <input type="number" name="level1" step="0.25" min="1" max="7" value="<%= p.level1 %>" style="width:4.2em" title="Nivel jugador 1">
         <input type="number" name="level2" step="0.25" min="1" max="7" value="<%= p.level2 %>" style="width:4.2em" title="Nivel jugador 2">
         <button class="btn small ghost" type="submit" title="Guardar niveles">✓</button>
@@ -33,17 +107,20 @@
     <td>
       <div class="acts">
         <% if (p.status !== 'approved') { %>
-        <form method="post" action="/admin/mediodia/parejas/<%= p.id %>/aprobar"><button class="btn small" type="submit">Aprobar</button></form>
+        <form method="post" action="/admin/mediodia/parejas/<%= p.id %>/aprobar">
+          <input type="hidden" name="t" value="<%= sel.id %>"><button class="btn small" type="submit">Aprobar</button></form>
         <% } %>
         <% if (p.status !== 'rejected') { %>
-        <form method="post" action="/admin/mediodia/parejas/<%= p.id %>/rechazar"><button class="btn small warn" type="submit">Rechazar</button></form>
+        <form method="post" action="/admin/mediodia/parejas/<%= p.id %>/rechazar">
+          <input type="hidden" name="t" value="<%= sel.id %>"><button class="btn small warn" type="submit">Rechazar</button></form>
         <% } %>
         <% if (p.status !== 'pending') { %>
-        <form method="post" action="/admin/mediodia/parejas/<%= p.id %>/pendiente"><button class="btn small ghost" type="submit">A pendiente</button></form>
+        <form method="post" action="/admin/mediodia/parejas/<%= p.id %>/pendiente">
+          <input type="hidden" name="t" value="<%= sel.id %>"><button class="btn small ghost" type="submit">A pendiente</button></form>
         <% } %>
         <form method="post" action="/admin/mediodia/parejas/<%= p.id %>/eliminar"
               onsubmit="return confirm('¿Eliminar esta pareja? No se puede deshacer.')">
-          <button class="btn small danger" type="submit">Eliminar</button>
+          <input type="hidden" name="t" value="<%= sel.id %>"><button class="btn small danger" type="submit">Eliminar</button>
         </form>
       </div>
     </td>

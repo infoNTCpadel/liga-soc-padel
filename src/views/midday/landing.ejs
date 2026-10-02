@@ -1,9 +1,12 @@
 <div class="midday-hero">
   <div class="midday-sun">☀️</div>
   <h1>MEDIODÍA PADEL</h1>
+  <% if (tournament) { %><p class="tagline"><strong><%= tournament.name %></strong></p><% } %>
   <p class="tagline">La competición para los que juegan al mediodía.<br>Juega, come y vuelve al trabajo.</p>
   <div class="midday-cta">
-    <% if (open) { %>
+    <% if (!tournament) { %>
+      <p class="mut">La próxima edición está en preparación. Vuelve pronto.</p>
+    <% } else if (open) { %>
       <a class="btn big" href="/mediodia/inscripcion">Inscribir a mi pareja</a>
       <p class="mut small">Inscripción abierta hasta el <strong><%= deadline %></strong></p>
     <% } else { %>
