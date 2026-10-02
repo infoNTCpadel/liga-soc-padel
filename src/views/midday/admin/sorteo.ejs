@@ -75,7 +75,7 @@
     <p class="mut"><strong><%= warnings.unscheduled.length %> partido(s) sin programar</strong> (sin hueco válido en 12 semanas):</p>
     <ul class="small">
       <% for (const m of warnings.unscheduled) { %>
-      <li>Ronda <%= m.round_no %>: <%= m.n1a %> / <%= m.n1b %> vs <%= m.n2a %> / <%= m.n2b %></li>
+      <li>Ronda <%= m.round_no %>: <%= m.n1a %> / <%= m.n1b %> vs <%= m.n2a %> / <%= m.n2b %><br><span class="mut">→ <%= m.reason %></span></li>
       <% } %>
     </ul>
   <% } %>

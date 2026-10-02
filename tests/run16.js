@@ -298,6 +298,8 @@ ok(all5.every(m => m.match_date && m.slot_id && m.court_no), 'todo programado (f
   const hardPid = mdb.prepare(`SELECT id FROM midday_pairs WHERE code = 'W8' AND tournament_id = ?`).get(r6.id).id;
   ok(w.hard.some(h => h.pair.id === hardPid), 'aviso de restricción dura para la pareja sin franjas');
   ok(w.unscheduled.length > 0, `partidos sin programar con 1 pista (${w.unscheduled.length})`);
+  ok(w.unscheduled.every(m => typeof m.reason === 'string' && m.reason.length > 10),
+    'cada partido sin programar trae su motivo explicado');
   // capacidad: como mucho 1 partido por (fecha, franja)
   const seen = new Set(); let clash = false;
   for (const m of mdb.prepare(`SELECT * FROM midday_matches WHERE draw_id = ? AND match_date IS NOT NULL`).all(dr.id)) {
@@ -306,6 +308,26 @@ ok(all5.every(m => m.match_date && m.slot_id && m.court_no), 'todo programado (f
     seen.add(k);
   }
   ok(!clash, 'con 1 pista no hay choques');
+}
+{ // Diagnóstico dirigido: dos parejas con franjas disjuntas no pueden enfrentarse
+  const r7 = M.createTournament(mdb, 'Ed diag', null, DB.MIDDAY_DEFAULTS);
+  M.setTournamentStatus(mdb, r7.id, 'active');
+  DB.middaySet('start_date', DB.nextMondayISO(), r7.id);
+  const ins = mdb.prepare(`INSERT INTO midday_pairs(code, tournament_id, player1_name, player1_phone, player2_name, player2_phone,
+    level1, level2, level_avg, slot_prefs, status) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved')`);
+  ins.run('D1', r7.id, 'A1', '600', 'A2', '601', 4, 4, 4, JSON.stringify({ s1: 'no' }));
+  ins.run('D2', r7.id, 'B1', '602', 'B2', '603', 4, 4, 4, JSON.stringify({ s2: 'no' }));
+  ins.run('D3', r7.id, 'C1', '604', 'C2', '605', 4, 4, 4, '{}');
+  ins.run('D4', r7.id, 'E1', '606', 'E2', '607', 4, 4, 4, '{}');
+  const dr = D.buildDraw(mdb, r7.id);
+  const w = D.drawWarnings(mdb, dr.id, M.getSettings(mdb, r7.id));
+  const gid = (code) => mdb.prepare('SELECT id FROM midday_pairs WHERE code = ? AND tournament_id = ?').get(code, r7.id).id;
+  const d1 = gid('D1'), d2 = gid('D2');
+  const ab = w.unscheduled.find(m =>
+    (m.pair1_id === d1 && m.pair2_id === d2) || (m.pair1_id === d2 && m.pair2_id === d1));
+  ok(!!ab, 'el partido A1/A2 vs B1/B2 queda sin programar por franjas disjuntas');
+  ok(!!ab && /no comparten franja/.test(ab.reason),
+    'el motivo explica que no hay franja común' + (ab ? ` («${ab.reason.slice(0, 50)}…»)` : ''));
 }
 console.log(`lib: ${pass} OK, ${fail} fallos`);
 

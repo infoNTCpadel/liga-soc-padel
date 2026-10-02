@@ -289,10 +289,35 @@ function rescheduleMatch(mdb, matchId, iso, slotId, courtNo, settings) {
 
 // Avisos para la revisión del admin: partidos sin programar y parejas con
 // restricciones que impiden programar (todas las franjas en 'no').
+// Explica por qué un partido no encontró hueco (para mostrarlo en el panel).
+function diagnoseUnscheduled(p1, p2, settings) {
+  const slots = settings.slots || [];
+  const avail = (p) => slots.filter(s => ((p.slotPrefs || {})[s.id] || 'ok') !== 'no');
+  const aA = avail(p1), aB = avail(p2);
+  const common = aA.filter(s => aB.some(x => x.id === s.id));
+  const lbl = (arr) => arr.length ? arr.map(s => s.label).join(' y ') : 'ninguna';
+  const pn = (p) => `${p.player1_name} / ${p.player2_name}`;
+  if (!common.length)
+    return `${pn(p1)} solo puede en ${lbl(aA)} y ${pn(p2)} solo en ${lbl(aB)}: no comparten franja. Habla con ellos para flexibilizar alguna franja o muévelo a mano.`;
+  const wd = ['mon', 'tue', 'wed', 'thu', 'fri'];
+  const aW = wd.filter(w => !(p1.weekdaysOff || []).includes(w));
+  const bW = wd.filter(w => !(p2.weekdaysOff || []).includes(w));
+  const commonW = aW.filter(w => bW.includes(w));
+  if (!commonW.length)
+    return `${pn(p1)} y ${pn(p2)} no comparten ningún día de semana por sus días vetados.`;
+  return `Con las franjas y días disponibles no se encontró hueco en 12 semanas (descanso mínimo de ${settings.minDays || 0} días entre partidos y ocupación de pistas). Intenta moverlo a mano.`;
+}
 function drawWarnings(mdb, drawId, settings) {
   const draw = getDraw(mdb, drawId);
   const matches = draw ? drawMatches(mdb, drawId) : [];
-  const unscheduled = matches.filter(m => !m.match_date);
+  const pairsById = {};
+  if (draw) for (const p of M.listPairs(mdb, draw.tournament_id)) pairsById[p.id] = p;
+  const unscheduled = matches.filter(m => !m.match_date).map(m => ({
+    ...m,
+    reason: (pairsById[m.pair1_id] && pairsById[m.pair2_id])
+      ? diagnoseUnscheduled(pairsById[m.pair1_id], pairsById[m.pair2_id], settings)
+      : 'Pareja no encontrada.',
+  }));
   const hard = [];
   if (draw && settings.slots.length) {
     for (const p of M.listPairs(mdb, draw.tournament_id)) {
