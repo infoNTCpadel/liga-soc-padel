@@ -204,7 +204,7 @@ router.get('/sorteo', (req, res) => {
     warnings: draw ? D.drawWarnings(middayDb, draw.id, settings) : null,
     approvedCount,
     settings,
-    slotLabel: (id) => { const s = settings.slots.find(x => x.id === id); return s ? s.label : (id || '—'); },
+    slotLabel: (m) => D.matchSlotLabel(m, settings.slots),
     fmtDate: D.fmtMatchDate,
     info: req.query.ok || null,
     error: req.query.error || null,
@@ -226,8 +226,11 @@ router.post('/sorteo/generar', (req, res) => {
 
 router.post('/sorteo/partido/:id/mover', (req, res) => {
   const tid = Number(req.body.t);
+  const force = req.body.force === '1';
+  let slotId = req.body.slot_id, customTime = null;
+  if (slotId === '__custom') { customTime = String(req.body.custom_time || '').trim(); slotId = null; }
   const r = D.rescheduleMatch(middayDb, Number(req.params.id),
-    String(req.body.date || '').trim(), req.body.slot_id, req.body.court_no, drawSettings(tid));
+    String(req.body.date || '').trim(), slotId, req.body.court_no, drawSettings(tid), { force, customTime });
   res.redirect(`/admin/mediodia/sorteo?t=${tid}&` +
     (r.ok ? 'ok=Partido reprogramado.' : 'error=' + encodeURIComponent(r.error)));
 });
@@ -262,7 +265,7 @@ async function sendPublishEmails(tid, drawId) {
   const link = process.env.MIDDAY_HOST
     ? `https://${process.env.MIDDAY_HOST}/mediodia/acceso` : '/mediodia/acceso';
   const settings = drawSettings(tid);
-  const slotLabel = (id) => { const s = settings.slots.find(x => x.id === id); return s ? s.label : (id || '—'); };
+  const slotLabel = (m) => D.matchSlotLabel(m, settings.slots);
   const pairs = M.listPairs(middayDb, tid).filter(p => p.status === 'approved');
   // Modo pruebas: si hay email de pruebas, TODOS los avisos van a esa dirección.
   const testEmail = (middayGet('test_email', '', tid) || '').trim().toLowerCase();
@@ -271,7 +274,7 @@ async function sendPublishEmails(tid, drawId) {
     const ms = D.pairMatches(middayDb, drawId, p.id).filter(m => m.match_date);
     const rows = ms.map(m => {
       const rival = m.pair1_id === p.id ? `${m.n2a} y ${m.n2b}` : `${m.n1a} y ${m.n1b}`;
-      return `<li><strong>Ronda ${m.round_no}</strong> · ${D.fmtMatchDate(m.match_date)} · ${slotLabel(m.slot_id)} · Pista ${m.court_no || '—'} · contra ${rival}</li>`;
+      return `<li><strong>Ronda ${m.round_no}</strong> · ${D.fmtMatchDate(m.match_date)} · ${slotLabel(m)} · Pista ${m.court_no || '—'}${m.manual ? ' · ajustado por ti' : ''} · contra ${rival}</li>`;
     }).join('');
     const html = (testEmail ? `<p><strong>Aviso dirigido a: ${p.player1_name} / ${p.player2_name}</strong></p>` : '') +
       `<p>Hola ${p.player1_name} y ${p.player2_name},</p>` +

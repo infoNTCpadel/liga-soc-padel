@@ -248,8 +248,14 @@ function scheduleDraw(mdb, drawId, settings) {
   return { scheduled: matches.length - unscheduled.length, total: matches.length, unscheduled };
 }
 
-// Reprograma un partido del borrador validando todas las restricciones.
-function rescheduleMatch(mdb, matchId, iso, slotId, courtNo, settings) {
+// Reprograma un partido del borrador validando restricciones.
+// opts: { force } (el admin pasa por alto las preferencias de las parejas,
+//         ya habladas con ellas) y { customTime } ('HH:MM': hora libre fuera
+//         de las franjas configuradas; también es un ajuste manual).
+// Duras (siempre): fecha válida, lun–vie, pista válida y no ocupada.
+// Blandas (se omiten con force): preferencias de franja/días/fechas y descanso mínimo.
+function rescheduleMatch(mdb, matchId, iso, slotId, courtNo, settings, opts = {}) {
+  const { force = false, customTime = null } = opts;
   const mt = mdb.prepare('SELECT * FROM midday_matches WHERE id = ?').get(matchId);
   if (!mt) return { ok: false, error: 'Partido no encontrado.' };
   const draw = getDraw(mdb, mt.draw_id);
@@ -258,7 +264,10 @@ function rescheduleMatch(mdb, matchId, iso, slotId, courtNo, settings) {
   if (!parseISODate(iso)) return { ok: false, error: 'Fecha no válida (AAAA-MM-DD).' };
   if (!isWeekdayISO(iso)) return { ok: false, error: 'Solo se juega de lunes a viernes.' };
   const { slots, courts, minDays } = settings;
-  if (!slots.some(s => s.id === slotId)) return { ok: false, error: 'Franja no válida.' };
+  const cTime = (customTime || '').trim() || null;
+  if (cTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(cTime))
+    return { ok: false, error: 'Hora no válida (formato HH:MM).' };
+  if (!cTime && !slots.some(s => s.id === slotId)) return { ok: false, error: 'Franja no válida.' };
   const cn = Number(courtNo);
   if (!Number.isInteger(cn) || cn < 1 || cn > courts)
     return { ok: false, error: `Pista no válida (1–${courts}).` };
@@ -267,24 +276,32 @@ function rescheduleMatch(mdb, matchId, iso, slotId, courtNo, settings) {
   const p1 = pairsById[mt.pair1_id], p2 = pairsById[mt.pair2_id];
   if (!p1 || !p2) return { ok: false, error: 'Pareja no encontrada.' };
   const pname = (p) => `${p.player1_name} / ${p.player2_name}`;
-  if (!canPlayOn(p1, iso, slotId)) return { ok: false, error: `${pname(p1)} no puede jugar ese día en esa franja.` };
-  if (!canPlayOn(p2, iso, slotId)) return { ok: false, error: `${pname(p2)} no puede jugar ese día en esa franja.` };
-  if (minDays > 0) {
+  const effSlot = cTime ? null : slotId; // con hora libre no se aplican prefs de franja
+  if (!force && !cTime) {
+    if (!canPlayOn(p1, iso, slotId))
+      return { ok: false, soft: true, error: `${pname(p1)} no puede jugar ese día en esa franja. Marca «Programar igualmente» si ya lo has hablado con ellos.` };
+    if (!canPlayOn(p2, iso, slotId))
+      return { ok: false, soft: true, error: `${pname(p2)} no puede jugar ese día en esa franja. Marca «Programar igualmente» si ya lo has hablado con ellos.` };
+  }
+  if (!force && minDays > 0) {
     const others = mdb.prepare(
       `SELECT * FROM midday_matches WHERE draw_id = ? AND id != ? AND match_date IS NOT NULL
        AND (pair1_id IN (?, ?) OR pair2_id IN (?, ?))`).all(draw.id, matchId, p1.id, p2.id, p1.id, p2.id);
     for (const o of others) {
       if (Math.abs(diffDaysISO(o.match_date, iso)) < minDays)
-        return { ok: false, error: `Choca con el descanso mínimo de ${minDays} días (hay partido el ${fmtMatchDate(o.match_date)}).` };
+        return { ok: false, soft: true, error: `Choca con el descanso mínimo de ${minDays} días (hay partido el ${fmtMatchDate(o.match_date)}). Marca «Programar igualmente» para pasarlo por alto.` };
     }
   }
+  // Pista ocupada: mismo día, misma pista y misma hora efectiva (franja u hora libre).
+  const keyOf = (m) => (m.slot_id || '') + '|' + (m.custom_time || '');
+  const myKey = (effSlot || '') + '|' + (cTime || '');
   const clash = mdb.prepare(
-    'SELECT 1 FROM midday_matches WHERE draw_id = ? AND id != ? AND match_date = ? AND slot_id = ? AND court_no = ?'
-  ).get(draw.id, matchId, iso, slotId, cn);
-  if (clash) return { ok: false, error: 'Esa pista ya está ocupada en esa fecha y franja.' };
-  mdb.prepare('UPDATE midday_matches SET match_date = ?, slot_id = ?, court_no = ? WHERE id = ?')
-    .run(iso, slotId, cn, matchId);
-  return { ok: true };
+    'SELECT slot_id, custom_time FROM midday_matches WHERE draw_id = ? AND id != ? AND match_date = ? AND court_no = ?'
+  ).all(draw.id, matchId, iso, cn).some(m => keyOf(m) === myKey);
+  if (clash) return { ok: false, error: 'Esa pista ya está ocupada en esa fecha y hora.' };
+  mdb.prepare('UPDATE midday_matches SET match_date = ?, slot_id = ?, custom_time = ?, court_no = ?, manual = 1 WHERE id = ?')
+    .run(iso, effSlot, cTime, cn, matchId);
+  return { ok: true, forced: force || !!cTime };
 }
 
 // Avisos para la revisión del admin: partidos sin programar y parejas con
@@ -374,10 +391,16 @@ async function sendMiddayEmail(to, subject, html) {
   return { ok: true };
 }
 
+// Etiqueta de hora de un partido: hora libre manual o etiqueta de la franja.
+function matchSlotLabel(m, slots) {
+  if (m && m.custom_time) return m.custom_time;
+  const s = (slots || []).find(x => x.id === (m && m.slot_id));
+  return s ? s.label : ((m && m.slot_id) || '—');
+}
 module.exports = {
   parseISODate, addDaysISO, diffDaysISO, weekdayNum, isWeekdayISO, fmtMatchDate,
   potSizes, buildPots, circleRounds, interleavePots,
   buildDraw, deleteDraw, getDraw, drawForTournament, drawPots, drawMatches, pairMatches,
-  canPlayOn, scheduleDraw, rescheduleMatch, drawWarnings,
+  canPlayOn, scheduleDraw, rescheduleMatch, drawWarnings, matchSlotLabel,
   publishDraw, setDrawEmailSummary, sendMiddayEmail,
 };

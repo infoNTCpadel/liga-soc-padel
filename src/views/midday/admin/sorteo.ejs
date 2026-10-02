@@ -100,9 +100,9 @@
         <% if (draw.status === 'draft') { %><th>Ajustar</th><% } %>
       </tr></thead><tbody>
     <% } %>
-    <tr>
-      <td><strong><%= fmtDate(m.match_date) %></strong></td>
-      <td><%= slotLabel(m.slot_id) %></td>
+    <tr<%= m.manual ? ' class="manual"' : '' %>>
+      <td><strong><%= fmtDate(m.match_date) %></strong><% if (m.manual) { %> <span class="badge warn">manual</span><% } %></td>
+      <td><%= slotLabel(m) %></td>
       <td><%= m.court_no ? 'Pista ' + m.court_no : '—' %></td>
       <td><%= m.n1a %> / <%= m.n1b %></td>
       <td class="mut">vs</td>
@@ -114,10 +114,13 @@
           <input type="date" name="date" value="<%= m.match_date || '' %>" style="width:9.5em" required>
           <select name="slot_id">
             <% for (const s of settings.slots) { %>
-            <option value="<%= s.id %>" <%= m.slot_id === s.id ? 'selected' : '' %>><%= s.label %></option>
+            <option value="<%= s.id %>" <%= m.slot_id === s.id && !m.custom_time ? 'selected' : '' %>><%= s.label %></option>
             <% } %>
+            <option value="__custom" <%= m.custom_time ? 'selected' : '' %>>Otra hora…</option>
           </select>
+          <input type="time" name="custom_time" value="<%= m.custom_time || '' %>" style="width:6.5em" title="Hora libre (elige «Otra hora…»)">
           <input type="number" name="court_no" min="1" max="<%= settings.courts %>" value="<%= m.court_no || 1 %>" style="width:3.5em" title="Pista">
+          <label class="small mut" title="Pasa por alto las preferencias de las parejas (franjas, días vetados, descanso mínimo)"><input type="checkbox" name="force" value="1"> Forzar</label>
           <button class="btn small ghost" type="submit" title="Guardar cambio">✓</button>
         </form>
       </td>

@@ -18,7 +18,7 @@
     <tr>
       <td class="num"><%= m.round_no %></td>
       <td><strong><%= fmtMatchDate(m.match_date) %></strong></td>
-      <td><%= slotLabel(m.slot_id) %></td>
+      <td><%= slotLabel(m) %></td>
       <td><%= m.court_no ? 'Pista ' + m.court_no : '—' %></td>
       <td><%= rival %></td>
     </tr>

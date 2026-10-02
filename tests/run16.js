@@ -279,6 +279,35 @@ ok(all5.every(m => m.match_date && m.slot_id && m.court_no), 'todo programado (f
   const fc3 = freeCourt(mb.match_date, 's1', mb.id);
   const rSlot = fc3 ? D.rescheduleMatch(mdb, mb.id, mb.match_date, 's1', fc3, st5) : { ok: true, error: '' };
   ok(!rSlot.ok && /no puede jugar/.test(rSlot.error || ''), `mover a franja vetada → error ("${rSlot.error}")`);
+  // forzar: el mismo movimiento vetado con force → se aplica y queda marcado
+  const rForce = fc3 ? D.rescheduleMatch(mdb, mb.id, mb.match_date, 's1', fc3, st5, { force: true }) : { ok: false };
+  ok(rForce.ok, `forzar movimiento a franja vetada → se aplica${rForce.error ? ` (${rForce.error})` : ''}`);
+  const mForced = mdb.prepare('SELECT * FROM midday_matches WHERE id = ?').get(mb.id);
+  ok(mForced.manual === 1 && mForced.slot_id === 's1', 'partido forzado queda marcado como manual');
+  ok(D.matchSlotLabel(mForced, st5.slots).includes('13'), `etiqueta de franja con slot → "${D.matchSlotLabel(mForced, st5.slots)}"`);
+  // hora libre: 12:30 fuera de las franjas configuradas (pista 4 libre ese día)
+  let mc = null;
+  for (const c of mdb.prepare(`SELECT * FROM midday_matches WHERE draw_id = ? AND match_date IS NOT NULL`).all(dr5.id)) {
+    const taken = mdb.prepare(`SELECT 1 FROM midday_matches WHERE draw_id = ? AND id != ? AND match_date = ? AND court_no = 4`).get(dr5.id, c.id, c.match_date);
+    if (!taken) { mc = c; break; }
+  }
+  const rCustom = mc ? D.rescheduleMatch(mdb, mc.id, mc.match_date, null, 4, st5, { customTime: '12:30' }) : { ok: false };
+  ok(rCustom.ok, `hora libre 12:30 → se aplica${rCustom.error ? ` (${rCustom.error})` : ''}`);
+  const mCustom = mc ? mdb.prepare('SELECT * FROM midday_matches WHERE id = ?').get(mc.id) : null;
+  ok(mCustom && mCustom.custom_time === '12:30' && mCustom.slot_id === null && mCustom.manual === 1, 'hora libre guardada con manual=1');
+  ok(mCustom && D.matchSlotLabel(mCustom, st5.slots) === '12:30', 'etiqueta muestra la hora libre');
+  // choque con la misma hora libre → error; otra hora libre en la misma pista → ok
+  const mc2 = mc ? mdb.prepare(`SELECT * FROM midday_matches WHERE draw_id = ? AND id != ? AND match_date IS NOT NULL LIMIT 1`).get(dr5.id, mc.id) : null;
+  let rClashC = { ok: true }, rFreeC = { ok: false };
+  if (mc && mc2) {
+    rClashC = D.rescheduleMatch(mdb, mc2.id, mc.match_date, null, 4, st5, { force: true, customTime: '12:30' });
+    rFreeC = D.rescheduleMatch(mdb, mc2.id, mc.match_date, null, 4, st5, { force: true, customTime: '13:45' });
+  }
+  ok(!rClashC.ok && /ocupada/.test(rClashC.error || ''), `misma hora libre y pista → error ("${rClashC.error}")`);
+  ok(rFreeC.ok, 'otra hora libre en la misma pista → se aplica');
+  // hora libre inválida → error
+  const rBadTime = mc ? D.rescheduleMatch(mdb, mc.id, mc.match_date, null, 4, st5, { customTime: '25:99' }) : { ok: true };
+  ok(!rBadTime.ok, 'hora libre inválida → error');
 }
 
 // ---------- 9. Avisos: partidos sin programar + restricciones duras ----------

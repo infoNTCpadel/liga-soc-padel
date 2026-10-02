@@ -150,7 +150,7 @@ router.get('/mis-partidos', requirePair, (req, res) => {
   const pair = res.locals.middayPair;
   const tid = pair.tournament_id;
   const sl = slots(tid);
-  const slotLabel = (id) => { const s = sl.find(x => x.id === id); return s ? s.label : (id || '—'); };
+  const slotLabel = (m) => D.matchSlotLabel(m, sl);
   const draw = D.drawForTournament(middayDb, tid);
   const published = !!(draw && draw.status === 'published');
   const myMatches = published ? D.pairMatches(middayDb, draw.id, pair.id) : [];

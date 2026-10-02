@@ -479,6 +479,11 @@ CREATE TABLE IF NOT EXISTS midday_matches (
 );
 CREATE INDEX IF NOT EXISTS idx_midday_matches_draw ON midday_matches(draw_id);
 `);
+// Ajuste manual del admin: marca + hora libre (migración idempotente).
+if (!middayCols('midday_matches').includes('manual'))
+  midday.exec('ALTER TABLE midday_matches ADD COLUMN manual INTEGER NOT NULL DEFAULT 0');
+if (!middayCols('midday_matches').includes('custom_time'))
+  midday.exec('ALTER TABLE midday_matches ADD COLUMN custom_time TEXT');
 
 // Próximo lunes (AAAA-MM-DD) estrictamente posterior a hoy:
 // fecha de inicio por defecto de la competición.
