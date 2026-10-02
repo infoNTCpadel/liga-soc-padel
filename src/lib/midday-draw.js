@@ -279,9 +279,9 @@ function rescheduleMatch(mdb, matchId, iso, slotId, courtNo, settings, opts = {}
   const effSlot = cTime ? null : slotId; // con hora libre no se aplican prefs de franja
   if (!force && !cTime) {
     if (!canPlayOn(p1, iso, slotId))
-      return { ok: false, soft: true, error: `${pname(p1)} no puede jugar ese día en esa franja. Marca «Programar igualmente» si ya lo has hablado con ellos.` };
+      return { ok: false, soft: true, error: `${pname(p1)} no puede jugar ese día en esa franja. Marca «Forzar en las que choquen» si ya lo has hablado con ellos.` };
     if (!canPlayOn(p2, iso, slotId))
-      return { ok: false, soft: true, error: `${pname(p2)} no puede jugar ese día en esa franja. Marca «Programar igualmente» si ya lo has hablado con ellos.` };
+      return { ok: false, soft: true, error: `${pname(p2)} no puede jugar ese día en esa franja. Marca «Forzar en las que choquen» si ya lo has hablado con ellos.` };
   }
   if (!force && minDays > 0) {
     const others = mdb.prepare(
@@ -289,7 +289,7 @@ function rescheduleMatch(mdb, matchId, iso, slotId, courtNo, settings, opts = {}
        AND (pair1_id IN (?, ?) OR pair2_id IN (?, ?))`).all(draw.id, matchId, p1.id, p2.id, p1.id, p2.id);
     for (const o of others) {
       if (Math.abs(diffDaysISO(o.match_date, iso)) < minDays)
-        return { ok: false, soft: true, error: `Choca con el descanso mínimo de ${minDays} días (hay partido el ${fmtMatchDate(o.match_date)}). Marca «Programar igualmente» para pasarlo por alto.` };
+        return { ok: false, soft: true, error: `Choca con el descanso mínimo de ${minDays} días (hay partido el ${fmtMatchDate(o.match_date)}). Marca «Forzar en las que choquen» para pasarlo por alto.` };
     }
   }
   // Pista ocupada: mismo día, misma pista y misma hora efectiva (franja u hora libre).
