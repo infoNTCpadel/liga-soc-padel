@@ -129,7 +129,7 @@
             <% } %>
             <option value="__custom" <%= m.custom_time ? 'selected' : '' %>>Otra hora…</option>
           </select>
-          <input type="time" name="ctime_<%= m.id %>" value="<%= m.custom_time || '' %>" style="width:6.5em" title="Hora libre (elige «Otra hora…»)">
+          <input type="time" name="ctime_<%= m.id %>" value="<%= m.custom_time || '' %>" style="width:6.5em" title="Hora libre: si escribes aquí se usa esta hora" oninput="this.form['slot_<%= m.id %>'].value='__custom'">
           <input type="number" name="court_<%= m.id %>" min="1" max="<%= settings.courts %>" value="<%= m.court_no || '' %>" placeholder="—" style="width:3.5em" title="Pista">
         </div>
         <% const br = (bulkResults || {})[m.id]; if (br) { %>

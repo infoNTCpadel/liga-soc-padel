@@ -240,12 +240,12 @@ router.post('/sorteo/guardar-todo', (req, res) => {
     return res.redirect(`/admin/mediodia/sorteo?t=${tid}&error=` + encodeURIComponent('No hay sorteo en borrador.'));
   const force = req.body.force_all === '1';
   const changes = D.drawMatches(middayDb, draw.id).map(m => {
-    const slotRaw = req.body['slot_' + m.id];
+    const norm = D.normalizeSlotInput(req.body['slot_' + m.id], req.body['ctime_' + m.id]);
     return {
       id: m.id,
       iso: req.body['date_' + m.id],
-      slotId: slotRaw === '__custom' ? null : slotRaw,
-      customTime: slotRaw === '__custom' ? req.body['ctime_' + m.id] : null,
+      slotId: norm.slotId,
+      customTime: norm.customTime,
       courtNo: req.body['court_' + m.id],
     };
   });

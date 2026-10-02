@@ -336,6 +336,20 @@ ok(all5.every(m => m.match_date && m.slot_id && m.court_no), 'todo programado (f
     { id: 4, round_no: 3, match_date: null },
   ].sort(D.compareForReview).map(m => m.id);
   ok(JSON.stringify(ord) === JSON.stringify([2, 4, 3, 1]), 'sin programar primero, luego por ronda y fecha');
+  // 8d. La hora escrita manda sobre la franja del desplegable
+  const n1 = D.normalizeSlotInput('s1', '14:45');
+  ok(n1.slotId === null && n1.customTime === '14:45', 'hora escrita tiene prioridad sobre la franja');
+  const n2 = D.normalizeSlotInput('s2', '');
+  ok(n2.slotId === 's2' && n2.customTime === null, 'sin hora escrita se usa la franja');
+  const n3 = D.normalizeSlotInput('__custom', '12:30');
+  ok(n3.slotId === null && n3.customTime === '12:30', 'opción Otra hora… con hora');
+  const bp = mdb.prepare(`SELECT * FROM midday_matches WHERE draw_id = ? AND id NOT IN (?, ?, ?, ?, ?) AND match_date IS NOT NULL LIMIT 1`).get(dr5.id, mb.id, mc.id, mc2.id, b1.id, b2.id);
+  const rbp = D.bulkReschedule(mdb, dr5.id, [
+    { id: bp.id, iso: bp.match_date, slotId: 's1', customTime: '14:45', courtNo: bp.court_no },
+  ], st5, { force: true });
+  const bpAfter = mdb.prepare('SELECT * FROM midday_matches WHERE id = ?').get(bp.id);
+  ok(rbp.ok === 1 && bpAfter.custom_time === '14:45' && bpAfter.slot_id === null,
+    'bulk: la hora escrita se guarda aunque el desplegable tenga franja');
 }
 
 // ---------- 9. Avisos: partidos sin programar + restricciones duras ----------

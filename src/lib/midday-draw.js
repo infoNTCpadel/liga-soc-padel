@@ -391,6 +391,14 @@ async function sendMiddayEmail(to, subject, html) {
   return { ok: true };
 }
 
+// Normaliza franja/hora libre del formulario: si hay una hora escrita,
+// manda ella sobre el desplegable (evita que se ignore por no haber
+// elegido «Otra hora…»).
+function normalizeSlotInput(slotRaw, customRaw) {
+  const cTime = String(customRaw || '').trim();
+  if (slotRaw === '__custom' || cTime) return { slotId: null, customTime: cTime || null };
+  return { slotId: slotRaw || null, customTime: null };
+}
 // Orden de revisión para el admin: primero los sin programar (los que
 // necesitan su atención), luego por ronda y fecha.
 function compareForReview(a, b) {
@@ -440,5 +448,6 @@ module.exports = {
   potSizes, buildPots, circleRounds, interleavePots,
   buildDraw, deleteDraw, getDraw, drawForTournament, drawPots, drawMatches, pairMatches,
   canPlayOn, scheduleDraw, rescheduleMatch, bulkReschedule, drawWarnings, matchSlotLabel, compareForReview,
+  normalizeSlotInput,
   publishDraw, setDrawEmailSummary, sendMiddayEmail,
 };
