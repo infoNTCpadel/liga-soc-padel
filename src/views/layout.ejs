@@ -60,21 +60,62 @@
   <span class="season-tag" title="Temporada activa: solo esta temporada es visible para los jugadores">📅 <%= activeSeason ? activeSeason.name : '' %></span>
   <nav class="anav">
     <a href="/admin">Panel</a>
-    <a href="/admin/inscripciones">Inscripciones</a>
-    <a href="/admin/preguntas">Preguntas</a>
-    <a href="/admin/parejas">Parejas</a>
-    <a href="/admin/grupos">Grupos</a>
-    <a href="/admin/partidos">Partidos</a>
-    <a href="/admin/pistas">Pistas</a>
-    <a href="/admin/cuadrante">Cuadrante</a>
-    <a href="/admin/reservas">Reservas</a>
-    <a href="/admin/mediodia">Mediodía</a>
-    <a href="/admin/playoffs">Playoffs</a>
-    <a href="/admin/cambios">Cambios</a>
-    <a href="/admin/ajustes">Ajustes</a>
-    <a href="/admin/temporadas">Temporadas</a>
+    <details class="navdrop">
+      <summary>Competición</summary>
+      <div class="dropmenu">
+        <a href="/admin/inscripciones">Inscripciones</a>
+        <a href="/admin/parejas">Parejas</a>
+        <a href="/admin/grupos">Grupos</a>
+        <a href="/admin/partidos">Partidos</a>
+        <a href="/admin/playoffs">Playoffs</a>
+        <a href="/admin/cambios">Cambios</a>
+        <a href="/admin/preguntas">Preguntas</a>
+        <a href="/admin/pistas">Pistas</a>
+        <a href="/admin/cuadrante">Cuadrante</a>
+      </div>
+    </details>
+    <details class="navdrop">
+      <summary>Mediodía</summary>
+      <div class="dropmenu">
+        <a href="/admin/mediodia">Ediciones y parejas</a>
+        <a href="/admin/mediodia/ajustes">Ajustes</a>
+      </div>
+    </details>
+    <details class="navdrop">
+      <summary>Club</summary>
+      <div class="dropmenu">
+        <a href="/admin/reservas/dia">Reservas del día</a>
+        <a href="/admin/reservas/parrilla">Parrilla</a>
+        <a href="/admin/reservas/socios">Socios</a>
+        <a href="/admin/reservas/bloqueos">Bloqueos</a>
+        <a href="/admin/reservas/config">Configuración</a>
+        <a href="/recepcion">Recepción</a>
+      </div>
+    </details>
+    <details class="navdrop">
+      <summary>Sistema</summary>
+      <div class="dropmenu">
+        <a href="/admin/temporadas">Temporadas</a>
+        <a href="/admin/ajustes">Ajustes</a>
+      </div>
+    </details>
   </nav>
 </div></div>
+<script>
+// Menús de la barra de organización: solo uno abierto a la vez + resalta la página actual.
+(function () {
+  var drops = document.querySelectorAll('.navdrop');
+  drops.forEach(function (d) {
+    d.addEventListener('toggle', function () {
+      if (d.open) drops.forEach(function (o) { if (o !== d) o.open = false; });
+    });
+  });
+  var path = location.pathname;
+  document.querySelectorAll('.anav a').forEach(function (a) {
+    if (a.getAttribute('href') === path) a.classList.add('cur');
+  });
+})();
+</script>
 <% } %>
 <% if (section === 'recepcion') { %>
 <div class="adminbar"><div class="wrap adminbar-in">

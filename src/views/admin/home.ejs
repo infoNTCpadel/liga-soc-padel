@@ -12,6 +12,50 @@
 <% if (stats.disputed) { %><div class="alert error">Hay <%= stats.disputed %> resultado(s) disputado(s): revísalos en <a href="/admin/partidos">Partidos</a>.</div><% } %>
 <% if (stats.pending) { %><div class="alert info">Hay <%= stats.pending %> inscripción(es) pendientes de revisión: <a href="/admin/inscripciones?status=pending">revisar</a>.</div><% } %>
 
+<div class="dash-sec">
+<h2>Competición</h2>
+<div class="dashgrid">
+  <a class="dashcard" href="/admin/inscripciones"><span class="nbadge <%= stats.pending ? '' : 'zero' %>"><%= stats.pending %></span><b>Inscripciones</b><span class="desc">Revisar altas, pagos y duplicados</span></a>
+  <a class="dashcard" href="/admin/parejas"><b>Parejas</b><span class="desc">Listado, edición y altas manuales</span></a>
+  <a class="dashcard" href="/admin/grupos"><b>Grupos</b><span class="desc">Composición y sorteo por rondas</span></a>
+  <a class="dashcard" href="/admin/partidos"><span class="nbadge <%= (stats.toValidate + stats.disputed) ? '' : 'zero' %>"><%= stats.toValidate + stats.disputed %></span><b>Partidos</b><span class="desc">Resultados, validaciones y disputas</span></a>
+  <a class="dashcard" href="/admin/playoffs"><b>Playoffs</b><span class="desc">Cuadros finales por categoría</span></a>
+  <a class="dashcard" href="/admin/cambios"><span class="nbadge <%= stats.changes ? '' : 'zero' %>"><%= stats.changes %></span><b>Cambios</b><span class="desc">Solicitudes de cambio de pareja</span></a>
+  <a class="dashcard" href="/admin/cuadrante"><b>Cuadrante</b><span class="desc">Vista global de la competición</span></a>
+  <a class="dashcard" href="/admin/preguntas"><b>Preguntas</b><span class="desc">Dudas recibidas de los jugadores</span></a>
+  <a class="dashcard" href="/admin/pistas"><b>Pistas</b><span class="desc">Configuración de pistas del club</span></a>
+</div>
+</div>
+
+<div class="dash-sec">
+<h2>Mediodía</h2>
+<div class="dashgrid">
+  <a class="dashcard" href="/admin/mediodia"><span class="nbadge <%= middayStats.pending ? '' : 'zero' %>"><%= middayStats.pending %></span><b>Ediciones y parejas</b><span class="desc"><%= middayStats.total %> parejas en la edición abierta</span></a>
+  <a class="dashcard" href="/admin/mediodia/ajustes"><b>Ajustes</b><span class="desc">Franjas, plazos y parámetros por edición</span></a>
+</div>
+</div>
+
+<div class="dash-sec">
+<h2>Club</h2>
+<div class="dashgrid">
+  <a class="dashcard" href="/admin/reservas/dia"><b>Reservas del día</b><span class="desc">Ocupación y gestión de hoy</span></a>
+  <a class="dashcard" href="/admin/reservas/parrilla"><b>Parrilla</b><span class="desc">Calendario semanal de pistas</span></a>
+  <a class="dashcard" href="/admin/reservas/socios"><b>Socios</b><span class="desc">Alta, niveles e importación de la liga</span></a>
+  <a class="dashcard" href="/admin/reservas/bloqueos"><b>Bloqueos</b><span class="desc">Franjas no reservables</span></a>
+  <a class="dashcard" href="/admin/reservas/config"><b>Configuración</b><span class="desc">Reglas y límites de reserva</span></a>
+  <a class="dashcard" href="/recepcion"><b>Recepción</b><span class="desc">Verificación de socios y cobros</span></a>
+</div>
+</div>
+
+<div class="dash-sec">
+<h2>Sistema</h2>
+<div class="dashgrid">
+  <a class="dashcard" href="/admin/temporadas"><b>Temporadas</b><span class="desc">Crear, activar y archivar temporadas</span></a>
+  <a class="dashcard" href="/admin/ajustes"><b>Ajustes</b><span class="desc">Parámetros generales de la liga</span></a>
+</div>
+</div>
+
+<div class="dash-sec">
 <h2>Estado de la competición</h2>
 <% for (const r of rounds) { %>
 <div class="card">
@@ -31,4 +75,5 @@
 <div class="card">
   <h3>Playoffs <%- playoffsGenerated ? '<span class="badge ok">generados</span>' : '' %></h3>
   <p><a class="btn small" href="/admin/playoffs">Gestionar playoffs</a></p>
+</div>
 </div>

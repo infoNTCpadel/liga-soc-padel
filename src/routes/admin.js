@@ -4,7 +4,8 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const router = express.Router();
 const { db, getSetting, setSetting, getAdminHash, setAdminHash, getReceptionHash, setReceptionHash,
-  listSeasons, getActiveSeason, activateSeason, createSeason, renameSeason, deleteSeason } = require('../db');
+  listSeasons, getActiveSeason, activateSeason, createSeason, renameSeason, deleteSeason,
+  middayDb, middayOpenTournamentId } = require('../db');
 const L = require('../lib/league');
 const { advanceWinner } = require('./pair');
 
@@ -73,8 +74,21 @@ router.get('/', (req, res) => {
     }
     return { n, closed: getSetting(`round${n}_closed`, '0') === '1', info };
   });
-  res.renderPage('admin/home', { stats, rounds, playoffsGenerated: getSetting('playoffs_generated', '0') === '1' });
+  const middayStats = getMiddayStats();
+  res.renderPage('admin/home', { stats, rounds, playoffsGenerated: getSetting('playoffs_generated', '0') === '1', middayStats });
 });
+
+// Estadísticas de MEDIODÍA PADEL para el panel (edición abierta; 0 si no hay).
+function getMiddayStats() {
+  try {
+    const tid = middayOpenTournamentId();
+    if (!tid) return { pending: 0, total: 0 };
+    return {
+      pending: middayDb.prepare("SELECT COUNT(*) c FROM midday_pairs WHERE tournament_id = ? AND status = 'pending'").get(tid).c,
+      total: middayDb.prepare('SELECT COUNT(*) c FROM midday_pairs WHERE tournament_id = ?').get(tid).c,
+    };
+  } catch (e) { return { pending: 0, total: 0 }; }
+}
 
 // ================= INSCRIPCIONES =================
 router.get('/inscripciones', (req, res) => {
