@@ -97,18 +97,23 @@
     <% if (bulkSummary) { %><span class="small"><strong><%= bulkSummary %></strong></span><% } %>
   </div>
   <% } %>
-  <% let lastRound = 0; %>
+  <% let lastRound = 0, lastSection = ''; %>
   <% for (const m of matches) { %>
-    <% if (m.round_no !== lastRound) { lastRound = m.round_no; %>
-      <% if (m.round_no > 1) { %></tbody></table><% } %>
-      <h4 class="small" style="margin-top:14px">Ronda <%= m.round_no %></h4>
+    <% const section = m.match_date ? 'done' : 'pending'; %>
+    <% if (section !== lastSection || m.round_no !== lastRound) { %>
+      <% if (lastSection) { %></tbody></table><% } %>
+      <% if (section !== lastSection) { %>
+      <h4 class="small" style="margin-top:14px"><%= section === 'pending' ? '⏳ Pendientes de programar' : '✓ Programados' %></h4>
+      <% } %>
+      <p class="mut small" style="margin:6px 0 2px">Ronda <%= m.round_no %></p>
       <table class="tbl"><thead><tr>
         <th>Fecha</th><th>Franja</th><th>Pista</th><th>Pareja A</th><th></th><th>Pareja B</th>
         <% if (draw.status === 'draft') { %><th>Ajustar</th><% } %>
       </tr></thead><tbody>
     <% } %>
-    <tr<%= m.manual ? ' class="manual"' : '' %>>
-      <td><strong><%= fmtDate(m.match_date) %></strong><% if (m.manual) { %> <span class="badge warn">manual</span><% } %></td>
+    <% lastSection = section; lastRound = m.round_no; %>
+    <tr>
+      <td><strong><%= fmtDate(m.match_date) %></strong></td>
       <td><%= slotLabel(m) %></td>
       <td><%= m.court_no ? 'Pista ' + m.court_no : '—' %></td>
       <td><%= m.n1a %> / <%= m.n1b %></td>

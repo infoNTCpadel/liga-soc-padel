@@ -328,6 +328,14 @@ ok(all5.every(m => m.match_date && m.slot_id && m.court_no), 'todo programado (f
   ok(rb2.ok === 1 && rb2.errors === 0, 'bulk con force → se aplica');
   const mbBulk = mdb.prepare('SELECT * FROM midday_matches WHERE id = ?').get(mb.id);
   ok(mbBulk.match_date === fd && mbBulk.manual === 1, 'bulk actualiza fecha y marca manual');
+  // 8c. Orden de revisión: sin programar primero, luego por ronda y fecha
+  const ord = [
+    { id: 1, round_no: 2, match_date: '2026-11-10' },
+    { id: 2, round_no: 1, match_date: null },
+    { id: 3, round_no: 1, match_date: '2026-11-03' },
+    { id: 4, round_no: 3, match_date: null },
+  ].sort(D.compareForReview).map(m => m.id);
+  ok(JSON.stringify(ord) === JSON.stringify([2, 4, 3, 1]), 'sin programar primero, luego por ronda y fecha');
 }
 
 // ---------- 9. Avisos: partidos sin programar + restricciones duras ----------
@@ -478,6 +486,16 @@ async function httpDraw() {
     const hm2 = hdb3.prepare(`SELECT match_date, manual FROM midday_matches WHERE id = ?`).get(hm.id);
     hdb3.close();
     hok(hm2.match_date === bdate && hm2.manual === 1, 'guardar-todo aplica el cambio en la BD');
+
+    // sin programar salen al principio de la vista
+    const hdb4 = new DS2(path.join(HTTP_DIR, 'midday.db'));
+    const hm3 = hdb4.prepare(`SELECT id FROM midday_matches WHERE draw_id = (SELECT id FROM midday_draws WHERE tournament_id = ?) AND match_date IS NOT NULL LIMIT 1`).get(ED_ID);
+    hdb4.prepare(`UPDATE midday_matches SET match_date = NULL, slot_id = NULL, court_no = NULL WHERE id = ?`).run(hm3.id);
+    hdb4.close();
+    r = await httpreq({ port: PORT, host: 'otro.test', path: '/admin/mediodia/sorteo?t=' + ED_ID, cookie: adminCookie });
+    const iPend = r.body.indexOf('Pendientes de programar');
+    const iProg = r.body.indexOf('Programados');
+    hok(r.status === 200 && iPend !== -1 && iProg !== -1 && iPend < iProg, 'sin programar salen al principio');
 
     // pareja: sin publicar no ve partidos
     const { DatabaseSync } = require('node:sqlite');

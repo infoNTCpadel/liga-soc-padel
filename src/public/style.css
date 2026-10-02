@@ -205,6 +205,3 @@ input[type=checkbox] { width: 1.15rem; height: 1.15rem; accent-color: var(--lime
 .nbadge.zero { background: transparent; border: 1px solid var(--line); color: var(--mut); }
 .dash-sec { margin-top: 22px; }
 .dash-sec > h2 { margin-bottom: 2px; }
-
-/* Partidos tocados a mano por el admin en el sorteo */
-.tbl tr.manual td { background: rgba(198, 241, 53, .05); }

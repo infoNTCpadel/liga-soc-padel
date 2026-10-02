@@ -391,6 +391,16 @@ async function sendMiddayEmail(to, subject, html) {
   return { ok: true };
 }
 
+// Orden de revisión para el admin: primero los sin programar (los que
+// necesitan su atención), luego por ronda y fecha.
+function compareForReview(a, b) {
+  const pa = a.match_date ? 1 : 0, pb = b.match_date ? 1 : 0;
+  if (pa !== pb) return pa - pb;
+  if (a.round_no !== b.round_no) return a.round_no - b.round_no;
+  const da = a.match_date || '', db = b.match_date || '';
+  if (da !== db) return da < db ? -1 : 1;
+  return a.id - b.id;
+}
 // Etiqueta de hora de un partido: hora libre manual o etiqueta de la franja.
 function matchSlotLabel(m, slots) {
   if (m && m.custom_time) return m.custom_time;
@@ -429,6 +439,6 @@ module.exports = {
   parseISODate, addDaysISO, diffDaysISO, weekdayNum, isWeekdayISO, fmtMatchDate,
   potSizes, buildPots, circleRounds, interleavePots,
   buildDraw, deleteDraw, getDraw, drawForTournament, drawPots, drawMatches, pairMatches,
-  canPlayOn, scheduleDraw, rescheduleMatch, bulkReschedule, drawWarnings, matchSlotLabel,
+  canPlayOn, scheduleDraw, rescheduleMatch, bulkReschedule, drawWarnings, matchSlotLabel, compareForReview,
   publishDraw, setDrawEmailSummary, sendMiddayEmail,
 };

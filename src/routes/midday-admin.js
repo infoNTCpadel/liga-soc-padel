@@ -199,7 +199,7 @@ function renderSorteo(res, tid, extra = {}) {
     tournaments: all, sel, statusNames: M.TOURNAMENT_STATUS_NAMES,
     draw,
     pots: draw ? D.drawPots(middayDb, draw.id) : [],
-    matches: draw ? D.drawMatches(middayDb, draw.id) : [],
+    matches: draw ? D.drawMatches(middayDb, draw.id).sort(D.compareForReview) : [],
     warnings: draw ? D.drawWarnings(middayDb, draw.id, settings) : null,
     approvedCount,
     settings,
@@ -294,7 +294,7 @@ async function sendPublishEmails(tid, drawId) {
     const ms = D.pairMatches(middayDb, drawId, p.id).filter(m => m.match_date);
     const rows = ms.map(m => {
       const rival = m.pair1_id === p.id ? `${m.n2a} y ${m.n2b}` : `${m.n1a} y ${m.n1b}`;
-      return `<li><strong>Ronda ${m.round_no}</strong> · ${D.fmtMatchDate(m.match_date)} · ${slotLabel(m)} · Pista ${m.court_no || '—'}${m.manual ? ' · ajustado manualmente' : ''} · contra ${rival}</li>`;
+      return `<li><strong>Ronda ${m.round_no}</strong> · ${D.fmtMatchDate(m.match_date)} · ${slotLabel(m)} · Pista ${m.court_no || '—'} · contra ${rival}</li>`;
     }).join('');
     const html = (testEmail ? `<p><strong>Aviso dirigido a: ${p.player1_name} / ${p.player2_name}</strong></p>` : '') +
       `<p>Hola ${p.player1_name} y ${p.player2_name},</p>` +
