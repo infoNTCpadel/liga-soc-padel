@@ -10,6 +10,20 @@
   <% if (pair.status !== 'approved') { %>
     <p class="mut">Vuestra inscripción aún está <strong>pendiente de revisión</strong> por el club.
     Cuando se confirme y se cierre la inscripción (<%= deadline %>), aquí veréis vuestros partidos con día y hora.</p>
+  <% } else if (myMatches.length) { %>
+    <table class="tbl"><thead><tr>
+      <th>Ronda</th><th>Fecha</th><th>Hora</th><th>Pista</th><th>Rival</th>
+    </tr></thead><tbody>
+    <% for (const m of myMatches) { const rival = m.pair1_id === pair.id ? m.n2a + ' / ' + m.n2b : m.n1a + ' / ' + m.n1b; %>
+    <tr>
+      <td class="num"><%= m.round_no %></td>
+      <td><strong><%= fmtMatchDate(m.match_date) %></strong></td>
+      <td><%= slotLabel(m.slot_id) %></td>
+      <td><%= m.court_no ? 'Pista ' + m.court_no : '—' %></td>
+      <td><%= rival %></td>
+    </tr>
+    <% } %>
+    </tbody></table>
   <% } else { %>
     <p class="mut">El calendario de la fase liga se publicará al cerrar la inscripción (<%= deadline %>).
     Os avisaremos por email.</p>

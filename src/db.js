@@ -441,7 +441,56 @@ const MIDDAY_DEFAULTS = {
   inscription_deadline: '2026-10-20',
   courts_midday: '4',
   min_days_between: '4',
+  test_email: '',
 };
+
+// ---- Fase B: sorteo por bombos + calendario ----
+// midday_draws: un sorteo por edición (draft = borrador, published = publicado).
+// midday_draw_pots: qué pareja va en cada bombo del sorteo.
+// midday_matches: partidos del sorteo (ronda, parejas, fecha/franja/pista;
+// score1/score2 quedan NULL para registrar resultados más adelante).
+midday.exec(`
+CREATE TABLE IF NOT EXISTS midday_draws (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tournament_id INTEGER NOT NULL,
+  params TEXT NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'draft',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS midday_draw_pots (
+  draw_id INTEGER NOT NULL,
+  pair_id INTEGER NOT NULL,
+  pot_no INTEGER NOT NULL,
+  PRIMARY KEY (draw_id, pair_id)
+);
+CREATE TABLE IF NOT EXISTS midday_matches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  draw_id INTEGER NOT NULL,
+  tournament_id INTEGER NOT NULL,
+  round_no INTEGER NOT NULL,
+  pair1_id INTEGER NOT NULL,
+  pair2_id INTEGER NOT NULL,
+  match_date TEXT,
+  slot_id TEXT,
+  court_no INTEGER,
+  score1 TEXT NULL,
+  score2 TEXT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_midday_matches_draw ON midday_matches(draw_id);
+`);
+
+// Próximo lunes (AAAA-MM-DD) estrictamente posterior a hoy:
+// fecha de inicio por defecto de la competición.
+function nextMondayISO(from) {
+  const base = from ? new Date(from + 'T12:00:00') : new Date();
+  const d = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+  let add = (8 - d.getDay()) % 7;
+  if (add === 0) add = 7;
+  d.setDate(d.getDate() + add);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
 
 // Edición abierta actual: la no finalizada de mayor id (null si no hay).
 function middayOpenTournamentId() {
@@ -454,6 +503,9 @@ function middaySeedDefaults(tid) {
     if (!midday.prepare('SELECT 1 FROM midday_settings WHERE tournament_id = ? AND key = ?').get(tid, k))
       midday.prepare('INSERT INTO midday_settings(tournament_id, key, value) VALUES(?, ?, ?)').run(tid, k, v);
   }
+  // start_date no está en MIDDAY_DEFAULTS porque depende del día: próximo lunes.
+  if (!midday.prepare("SELECT 1 FROM midday_settings WHERE tournament_id = ? AND key = 'start_date'").get(tid))
+    midday.prepare('INSERT INTO midday_settings(tournament_id, key, value) VALUES(?, ?, ?)').run(tid, 'start_date', nextMondayISO());
 }
 {
   const tid = middayOpenTournamentId();
@@ -483,5 +535,5 @@ module.exports = {
   listSeasons, getActiveSeason, getActiveSeasonId,
   createSeason, activateSeason, renameSeason, deleteSeason,
   seasonDb, metaDb: meta,
-  middayDb: midday, middayGet, middaySet, middayOpenTournamentId, MIDDAY_DEFAULTS,
+  middayDb: midday, middayGet, middaySet, middayOpenTournamentId, MIDDAY_DEFAULTS, nextMondayISO,
 };

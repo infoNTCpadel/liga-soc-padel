@@ -20,6 +20,12 @@
       <div class="field"><label>Días mínimos entre partidos de una pareja</label>
         <input type="number" name="min_days_between" min="0" max="30" value="<%= form.min_days_between %>"></div>
     </div>
+    <div class="row2">
+      <div class="field"><label>Fecha de inicio de la competición <span class="hint">primer día en el que se pueden programar partidos (lun–vie).</span></label>
+        <input type="date" name="start_date" value="<%= form.start_date %>"></div>
+      <div class="field"><label>Email de pruebas <span class="hint">si se rellena, al publicar el calendario TODOS los avisos van a esta dirección (modo pruebas).</span></label>
+        <input type="email" name="test_email" value="<%= form.test_email %>" placeholder="tu-email@ejemplo.com"></div>
+    </div>
   </div>
   <p><button class="btn big" type="submit">Guardar ajustes</button>
      <a class="btn ghost" href="/admin/mediodia?t=<%= sel.id %>">Volver a parejas</a></p>

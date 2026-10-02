@@ -5,6 +5,7 @@ const express = require('express');
 const router = express.Router();
 const { middayDb, middayGet, metaDb, getActiveSeasonId, seasonDb } = require('../db');
 const M = require('../lib/midday');
+const D = require('../lib/midday-draw');
 
 router.use((req, res, next) => {
   res.locals.section = 'midday';
@@ -40,6 +41,7 @@ router.get('/', (req, res) => {
     approved: middayDb.prepare("SELECT COUNT(*) c FROM midday_pairs WHERE tournament_id = ? AND status = 'approved'").get(tid).c,
     pending: middayDb.prepare("SELECT COUNT(*) c FROM midday_pairs WHERE tournament_id = ? AND status = 'pending'").get(tid).c,
   } : { approved: 0, pending: 0 };
+  const draw = tid ? D.drawForTournament(middayDb, tid) : null;
   res.renderPage('midday/landing', {
     tournament: t,
     counts,
@@ -47,6 +49,7 @@ router.get('/', (req, res) => {
     deadline: fmtDate(middayGet('inscription_deadline', '', tid)),
     slots: slots(tid),
     courts: middayGet('courts_midday', '4', tid),
+    drawPublished: !!(draw && draw.status === 'published'),
   });
 });
 
@@ -142,11 +145,15 @@ router.get('/salir', (req, res) => {
   res.redirect('/mediodia');
 });
 
-// ---- Mis partidos (Fase A: preferencias + aviso de calendario) ----
+// ---- Mis partidos ----
 router.get('/mis-partidos', requirePair, (req, res) => {
   const pair = res.locals.middayPair;
   const tid = pair.tournament_id;
   const sl = slots(tid);
+  const slotLabel = (id) => { const s = sl.find(x => x.id === id); return s ? s.label : (id || '—'); };
+  const draw = D.drawForTournament(middayDb, tid);
+  const published = !!(draw && draw.status === 'published');
+  const myMatches = published ? D.pairMatches(middayDb, draw.id, pair.id) : [];
   res.renderPage('midday/mis-partidos', {
     pair,
     tournament: M.getTournament(middayDb, tid),
@@ -154,6 +161,10 @@ router.get('/mis-partidos', requirePair, (req, res) => {
     slotSummary: M.fmtSlotPrefs(pair.slotPrefs, sl),
     weekdaysOff: M.fmtWeekdaysOff(pair.weekdaysOff),
     deadline: fmtDate(middayGet('inscription_deadline', '', tid)),
+    myMatches,
+    drawPublished: published,
+    fmtMatchDate: D.fmtMatchDate,
+    slotLabel,
   });
 });
 

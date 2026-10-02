@@ -267,12 +267,34 @@ function createTournament(mdb, name, copyFromId, defaults) {
   mdb.prepare("UPDATE midday_tournaments SET status = 'finished' WHERE id != ? AND status != 'finished'").run(tid);
   const ins = mdb.prepare('INSERT INTO midday_settings(tournament_id, key, value) VALUES(?, ?, ?)');
   if (srcId) {
+    // test_email no se copia: es un modo de pruebas que debe activarse a conciencia en cada edición.
     for (const row of mdb.prepare('SELECT key, value FROM midday_settings WHERE tournament_id = ?').all(srcId))
-      ins.run(tid, row.key, row.value);
+      if (row.key !== 'test_email') ins.run(tid, row.key, row.value);
   } else if (defaults) {
     for (const [k, v] of Object.entries(defaults)) ins.run(tid, k, String(v));
   }
+  // start_date depende del día (próximo lunes): se siembra si no viene de la edición origen.
+  try {
+    const { nextMondayISO } = require('../db');
+    if (!mdb.prepare("SELECT 1 FROM midday_settings WHERE tournament_id = ? AND key = 'start_date'").get(tid))
+      ins.run(tid, 'start_date', nextMondayISO());
+  } catch (e) { /* noop */ }
   return { ok: true, id: tid };
+}
+
+// Ajustes de calendario de una edición (lo que necesita el scheduler).
+function getSettings(mdb, tid) {
+  const { nextMondayISO } = require('../db');
+  const get = (k, def) => {
+    const r = mdb.prepare('SELECT value FROM midday_settings WHERE tournament_id = ? AND key = ?').get(tid, k);
+    return r ? r.value : def;
+  };
+  return {
+    slots: parseSlots(get('slots', '[]')),
+    courts: Math.max(1, parseInt(get('courts_midday', '4'), 10) || 4),
+    minDays: Math.max(0, parseInt(get('min_days_between', '4'), 10) || 0),
+    startDate: get('start_date', '') || nextMondayISO(),
+  };
 }
 
 function renameTournament(mdb, id, name) {
@@ -396,5 +418,5 @@ module.exports = {
   TOURNAMENT_STATUSES, TOURNAMENT_STATUS_NAMES,
   listTournaments, getTournament, currentTournament,
   createTournament, renameTournament, setTournamentStatus, deleteTournament,
-  generateTestPairs, deleteTestPairs, countTestPairs,
+  generateTestPairs, deleteTestPairs, countTestPairs, getSettings,
 };

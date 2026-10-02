@@ -9,6 +9,9 @@
     <% } else if (open) { %>
       <a class="btn big" href="/mediodia/inscripcion">Inscribir a mi pareja</a>
       <p class="mut small">Inscripción abierta hasta el <strong><%= deadline %></strong></p>
+    <% } else if (drawPublished) { %>
+      <p class="mut">📅 <strong>El calendario ya está publicado.</strong></p>
+      <p><a class="btn" href="/mediodia/acceso">Ver mis partidos</a></p>
     <% } else { %>
       <p class="mut">La inscripción está cerrada. El calendario se publicará próximamente.</p>
     <% } %>

@@ -1,0 +1,129 @@
+<h1>MEDIODÍA PADEL · Sorteo y calendario · <%= sel.name %></h1>
+<p><a class="btn ghost small" href="/admin/mediodia?t=<%= sel.id %>">← Volver a parejas</a></p>
+<% if (info) { %><div class="alert ok"><%= info %></div><% } %>
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+
+<% if (!draw) { %>
+<div class="card">
+  <h3>Generar sorteo</h3>
+  <p class="mut">Parejas confirmadas en esta edición: <strong><%= approvedCount %></strong> (mínimo 4).</p>
+  <% if (sel.status !== 'active') { %>
+    <p class="alert error">La edición está en estado «<%= statusNames[sel.status] %>»: pásala a «En marcha» para generar el sorteo.</p>
+  <% } else if (approvedCount < 4) { %>
+    <p class="alert error">Faltan parejas confirmadas: se necesitan al menos 4.</p>
+  <% } else { %>
+    <p class="mut">Se reparten las parejas en 4 bombos por nivel, se generan las rondas (mínimo 6 partidos por pareja)
+    y se propone un calendario respetando franjas, días vetados y descanso mínimo. Podrás revisarlo antes de publicarlo.</p>
+    <form method="post" action="/admin/mediodia/sorteo/generar">
+      <input type="hidden" name="t" value="<%= sel.id %>">
+      <button class="btn big" type="submit">🎲 Generar sorteo</button>
+    </form>
+  <% } %>
+</div>
+<% } else { %>
+<div class="card">
+  <h3>Sorteo
+    <% if (draw.status === 'published') { %><span class="badge ok">Publicado</span>
+    <% } else { %><span class="badge warn">Borrador</span><% } %>
+  </h3>
+  <p class="mut small">
+    <%= draw.params.approved || '' %> parejas ·
+    <%= draw.params.rounds || '' %> rondas ·
+    <%= (draw.params.legs || 1) === 2 ? 'ida y vuelta' : 'una vuelta' %> ·
+    bombos <%= (draw.params.pots || []).join('-') %>
+    <% if (draw.params.published_at) { %> · publicado el <%= draw.params.published_at.slice(0, 10).split('-').reverse().join('/') %><% } %>
+  </p>
+  <% if (draw.params.email_summary) { const es = draw.params.email_summary; %>
+    <p class="mut small">📧 Emails al publicar: <%= es.sent %> enviados · <%= es.skipped %> omitidos<% if (es.failed) { %> · <%= es.failed %> con error<% } %><% if (es.testMode) { %> · <strong>modo pruebas → <%= es.testEmail %></strong><% } else if (!es.brevo) { %> (sin Brevo configurado)<% } %></p>
+  <% } %>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <% if (draw.status === 'draft') { %>
+      <form method="post" action="/admin/mediodia/sorteo/generar"
+            onsubmit="return confirm('¿Regenerar el sorteo? Se descartará el borrador actual.')">
+        <input type="hidden" name="t" value="<%= sel.id %>">
+        <button class="btn ghost" type="submit">🎲 Regenerar</button>
+      </form>
+      <form method="post" action="/admin/mediodia/sorteo/publicar"
+            onsubmit="return confirm('¿Publicar el calendario? Las parejas lo verán y se les avisará por email.')">
+        <input type="hidden" name="t" value="<%= sel.id %>">
+        <button class="btn big" type="submit">📢 Publicar calendario</button>
+      </form>
+    <% } %>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Bombos por nivel</h3>
+  <div class="row2" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+    <% for (const pot of pots) { %>
+    <div>
+      <h4 class="small">Bombo <%= pot.pot_no %></h4>
+      <ul class="small" style="margin:0;padding-left:1.1em">
+        <% for (const p of pot.pairs) { %>
+        <li><%= p.player1_name %> / <%= p.player2_name %> <span class="mut">(<%= String(p.level_avg).replace('.', ',') %>)</span></li>
+        <% } %>
+      </ul>
+    </div>
+    <% } %>
+  </div>
+</div>
+
+<% if (warnings && (warnings.unscheduled.length || warnings.hard.length)) { %>
+<div class="card">
+  <h3>⚠️ Avisos</h3>
+  <% if (warnings.unscheduled.length) { %>
+    <p class="mut"><strong><%= warnings.unscheduled.length %> partido(s) sin programar</strong> (sin hueco válido en 12 semanas):</p>
+    <ul class="small">
+      <% for (const m of warnings.unscheduled) { %>
+      <li>Ronda <%= m.round_no %>: <%= m.n1a %> / <%= m.n1b %> vs <%= m.n2a %> / <%= m.n2b %></li>
+      <% } %>
+    </ul>
+  <% } %>
+  <% for (const h of warnings.hard) { %>
+    <p class="mut">🔒 <strong><%= h.pair.player1_name %> / <%= h.pair.player2_name %></strong> <%= h.reason %>.</p>
+  <% } %>
+</div>
+<% } %>
+
+<div class="card">
+  <h3>Calendario (<%= matches.length %> partidos)</h3>
+  <% if (draw.status === 'draft') { %>
+  <p class="mut small">Revisa y ajusta fecha, franja o pista por partido. Al publicar, las parejas verán este calendario.</p>
+  <% } %>
+  <% let lastRound = 0; %>
+  <% for (const m of matches) { %>
+    <% if (m.round_no !== lastRound) { lastRound = m.round_no; %>
+      <% if (m.round_no > 1) { %></tbody></table><% } %>
+      <h4 class="small" style="margin-top:14px">Ronda <%= m.round_no %></h4>
+      <table class="tbl"><thead><tr>
+        <th>Fecha</th><th>Franja</th><th>Pista</th><th>Pareja A</th><th></th><th>Pareja B</th>
+        <% if (draw.status === 'draft') { %><th>Ajustar</th><% } %>
+      </tr></thead><tbody>
+    <% } %>
+    <tr>
+      <td><strong><%= fmtDate(m.match_date) %></strong></td>
+      <td><%= slotLabel(m.slot_id) %></td>
+      <td><%= m.court_no ? 'Pista ' + m.court_no : '—' %></td>
+      <td><%= m.n1a %> / <%= m.n1b %></td>
+      <td class="mut">vs</td>
+      <td><%= m.n2a %> / <%= m.n2b %></td>
+      <% if (draw.status === 'draft') { %>
+      <td>
+        <form method="post" action="/admin/mediodia/sorteo/partido/<%= m.id %>/mover" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+          <input type="hidden" name="t" value="<%= sel.id %>">
+          <input type="date" name="date" value="<%= m.match_date || '' %>" style="width:9.5em" required>
+          <select name="slot_id">
+            <% for (const s of settings.slots) { %>
+            <option value="<%= s.id %>" <%= m.slot_id === s.id ? 'selected' : '' %>><%= s.label %></option>
+            <% } %>
+          </select>
+          <input type="number" name="court_no" min="1" max="<%= settings.courts %>" value="<%= m.court_no || 1 %>" style="width:3.5em" title="Pista">
+          <button class="btn small ghost" type="submit" title="Guardar cambio">✓</button>
+        </form>
+      </td>
+      <% } %>
+    </tr>
+  <% } %>
+  <% if (matches.length) { %></tbody></table><% } %>
+</div>
+<% } %>

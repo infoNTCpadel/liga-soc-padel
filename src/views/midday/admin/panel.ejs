@@ -13,6 +13,7 @@
       <% } %>
     </select>
     <a class="btn ghost" href="/admin/mediodia/ajustes?t=<%= sel ? sel.id : '' %>">⚙️ Ajustes de esta edición</a>
+    <% if (sel) { %><a class="btn ghost" href="/admin/mediodia/sorteo?t=<%= sel.id %>">🎲 Sorteo y calendario</a><% } %>
   </form>
   <% if (sel) { %>
   <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:12px">

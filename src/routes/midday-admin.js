@@ -2,8 +2,9 @@
 // Usa la misma sesión de organización que /admin. Opera SOLO sobre midday.db.
 const express = require('express');
 const router = express.Router();
-const { middayDb, middayGet, middaySet, getAdminHash, MIDDAY_DEFAULTS } = require('../db');
+const { middayDb, middayGet, middaySet, getAdminHash, MIDDAY_DEFAULTS, nextMondayISO } = require('../db');
 const M = require('../lib/midday');
+const D = require('../lib/midday-draw');
 
 function requireAdmin(req, res, next) {
   res.locals.section = 'admin';
@@ -116,6 +117,18 @@ function settingsForm(tid) {
     inscription_deadline: middayGet('inscription_deadline', '', tid),
     courts_midday: middayGet('courts_midday', '4', tid),
     min_days_between: middayGet('min_days_between', '4', tid),
+    start_date: middayGet('start_date', '', tid) || nextMondayISO(),
+    test_email: middayGet('test_email', '', tid),
+  };
+}
+
+// Ajustes que usa el programador del calendario (ámbito: edición).
+function drawSettings(tid) {
+  return {
+    slots: M.parseSlots(middayGet('slots', '[]', tid)),
+    courts: Math.max(1, parseInt(middayGet('courts_midday', '4', tid), 10) || 4),
+    minDays: Math.max(0, parseInt(middayGet('min_days_between', '4', tid), 10) || 0),
+    startDate: middayGet('start_date', '', tid) || nextMondayISO(),
   };
 }
 
@@ -141,6 +154,8 @@ router.post('/ajustes', (req, res) => {
     inscription_deadline: String(b.inscription_deadline || '').trim(),
     courts_midday: String(b.courts_midday || '').trim(),
     min_days_between: String(b.min_days_between || '').trim(),
+    start_date: String(b.start_date || '').trim(),
+    test_email: String(b.test_email || '').trim().toLowerCase(),
   };
 
   const slotLabels = form.slots_text.split(/\n+/).map(s => s.trim()).filter(Boolean);
@@ -151,6 +166,9 @@ router.post('/ajustes', (req, res) => {
   if (!(courts >= 1 && courts <= 20)) errors.push('Nº de pistas: entre 1 y 20.');
   const mindays = parseInt(form.min_days_between, 10);
   if (!(mindays >= 0 && mindays <= 30)) errors.push('Días mínimos entre partidos: entre 0 y 30.');
+  if (!form.start_date) form.start_date = nextMondayISO();
+  if (!D.parseISODate(form.start_date)) errors.push('La fecha de inicio no es válida (AAAA-MM-DD).');
+  if (form.test_email && !M.validEmail(form.test_email)) errors.push('El email de pruebas no es válido.');
 
   if (errors.length)
     return res.renderPage('midday/admin/ajustes', {
@@ -164,7 +182,114 @@ router.post('/ajustes', (req, res) => {
   middaySet('inscription_deadline', form.inscription_deadline, tid);
   middaySet('courts_midday', String(courts), tid);
   middaySet('min_days_between', String(mindays), tid);
+  middaySet('start_date', form.start_date, tid);
+  middaySet('test_email', form.test_email, tid);
   res.redirect('/admin/mediodia/ajustes?t=' + tid + '&ok=Ajustes guardados.');
 });
+
+// ---- Sorteo y calendario (Fase B) ----
+router.get('/sorteo', (req, res) => {
+  const { all, sel } = selTournament(req);
+  if (!sel) return res.redirect('/admin/mediodia?error=No hay ninguna edición.');
+  const tid = sel.id;
+  const draw = D.drawForTournament(middayDb, tid);
+  const approvedCount = middayDb.prepare(
+    "SELECT COUNT(*) c FROM midday_pairs WHERE tournament_id = ? AND status = 'approved'").get(tid).c;
+  const settings = drawSettings(tid);
+  res.renderPage('midday/admin/sorteo', {
+    tournaments: all, sel, statusNames: M.TOURNAMENT_STATUS_NAMES,
+    draw,
+    pots: draw ? D.drawPots(middayDb, draw.id) : [],
+    matches: draw ? D.drawMatches(middayDb, draw.id) : [],
+    warnings: draw ? D.drawWarnings(middayDb, draw.id, settings) : null,
+    approvedCount,
+    settings,
+    slotLabel: (id) => { const s = settings.slots.find(x => x.id === id); return s ? s.label : (id || '—'); },
+    fmtDate: D.fmtMatchDate,
+    info: req.query.ok || null,
+    error: req.query.error || null,
+    sub: 'mediodia',
+  });
+});
+
+router.post('/sorteo/generar', (req, res) => {
+  const tid = Number(req.body.t);
+  try {
+    const r = D.buildDraw(middayDb, tid); // bombos + emparejamientos + calendario propuesto
+    let msg = `Sorteo generado: ${r.pairs} parejas en ${r.rounds} rondas. ${r.scheduled} de ${r.scheduled + r.unscheduled.length} partidos programados.`;
+    if (r.unscheduled.length) msg += ` ${r.unscheduled.length} sin programar: revisa los avisos.`;
+    res.redirect(`/admin/mediodia/sorteo?t=${tid}&ok=` + encodeURIComponent(msg));
+  } catch (e) {
+    res.redirect(`/admin/mediodia/sorteo?t=${tid}&error=` + encodeURIComponent(e.message));
+  }
+});
+
+router.post('/sorteo/partido/:id/mover', (req, res) => {
+  const tid = Number(req.body.t);
+  const r = D.rescheduleMatch(middayDb, Number(req.params.id),
+    String(req.body.date || '').trim(), req.body.slot_id, req.body.court_no, drawSettings(tid));
+  res.redirect(`/admin/mediodia/sorteo?t=${tid}&` +
+    (r.ok ? 'ok=Partido reprogramado.' : 'error=' + encodeURIComponent(r.error)));
+});
+
+// Publica el calendario y avisa por email a las parejas (si hay Brevo configurado).
+router.post('/sorteo/publicar', async (req, res) => {
+  const tid = Number(req.body.t);
+  try {
+    const draw = D.drawForTournament(middayDb, tid);
+    if (!draw || draw.status !== 'draft')
+      return res.redirect(`/admin/mediodia/sorteo?t=${tid}&error=` + encodeURIComponent('No hay sorteo en borrador para publicar.'));
+    const pub = D.publishDraw(middayDb, draw.id);
+    if (!pub.ok)
+      return res.redirect(`/admin/mediodia/sorteo?t=${tid}&error=` + encodeURIComponent(pub.error));
+    const summary = await sendPublishEmails(tid, draw.id);
+    D.setDrawEmailSummary(middayDb, draw.id, { ...summary, at: new Date().toISOString() });
+    let msg = 'Calendario publicado.';
+    if (summary.testMode) msg += ` Modo pruebas: avisos enviados a ${summary.testEmail} (no a los jugadores).`;
+    else if (!summary.brevo) msg += ' Aviso: sin BREVO_API_KEY/MAIL_FROM no se han enviado emails.';
+    else msg += ` Emails: ${summary.sent} enviados, ${summary.skipped} omitidos` +
+      (summary.failed ? `, ${summary.failed} con error` : '') + '.';
+    res.redirect(`/admin/mediodia/sorteo?t=${tid}&ok=` + encodeURIComponent(msg));
+  } catch (e) {
+    console.error('midday publicar', e);
+    res.redirect(`/admin/mediodia/sorteo?t=${tid}&error=` + encodeURIComponent('Error al publicar: ' + e.message));
+  }
+});
+
+async function sendPublishEmails(tid, drawId) {
+  const compName = middayGet('comp_name', 'MEDIODÍA PADEL', tid);
+  const t = M.getTournament(middayDb, tid);
+  const link = process.env.MIDDAY_HOST
+    ? `https://${process.env.MIDDAY_HOST}/mediodia/acceso` : '/mediodia/acceso';
+  const settings = drawSettings(tid);
+  const slotLabel = (id) => { const s = settings.slots.find(x => x.id === id); return s ? s.label : (id || '—'); };
+  const pairs = M.listPairs(middayDb, tid).filter(p => p.status === 'approved');
+  // Modo pruebas: si hay email de pruebas, TODOS los avisos van a esa dirección.
+  const testEmail = (middayGet('test_email', '', tid) || '').trim().toLowerCase();
+  let sent = 0, skipped = 0, failed = 0;
+  for (const p of pairs) {
+    const ms = D.pairMatches(middayDb, drawId, p.id).filter(m => m.match_date);
+    const rows = ms.map(m => {
+      const rival = m.pair1_id === p.id ? `${m.n2a} y ${m.n2b}` : `${m.n1a} y ${m.n1b}`;
+      return `<li><strong>Ronda ${m.round_no}</strong> · ${D.fmtMatchDate(m.match_date)} · ${slotLabel(m.slot_id)} · Pista ${m.court_no || '—'} · contra ${rival}</li>`;
+    }).join('');
+    const html = (testEmail ? `<p><strong>Aviso dirigido a: ${p.player1_name} / ${p.player2_name}</strong></p>` : '') +
+      `<p>Hola ${p.player1_name} y ${p.player2_name},</p>` +
+      `<p>El calendario de <strong>${compName}</strong>${t ? ` (${t.name})` : ''} ya está publicado. Vuestros partidos:</p>` +
+      `<ul>${rows}</ul>` +
+      `<p>Podéis consultarlos cuando queráis con vuestro código <strong>${p.code}</strong> en <a href="${link}">${link}</a>.</p>` +
+      `<p>¡Nos vemos al mediodía!</p>`;
+    const subject = (testEmail ? '[PRUEBA] ' : '') + `${compName} · Calendario publicado`;
+    const recipients = testEmail ? [testEmail] : [p.player1_email, p.player2_email];
+    for (const em of recipients) {
+      if (!M.validEmail(em)) { skipped++; continue; }
+      try {
+        const r = await D.sendMiddayEmail(em, subject, html);
+        if (r.skipped) skipped++; else sent++;
+      } catch (e) { failed++; }
+    }
+  }
+  return { sent, skipped, failed, brevo: !!(process.env.BREVO_API_KEY && process.env.MAIL_FROM), testMode: !!testEmail, testEmail: testEmail || null };
+}
 
 module.exports = router;
