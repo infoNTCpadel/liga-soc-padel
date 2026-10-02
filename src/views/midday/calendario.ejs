@@ -1,0 +1,29 @@
+<h1>Calendario y resultados</h1>
+<% if (tournament) { %><p class="mut"><%= tournament.name %></p><% } %>
+
+<% if (!published) { %>
+  <div class="card"><p class="mut">El calendario se publicará al cerrar la inscripción. Vuelve pronto.</p></div>
+<% } else if (!rounds.length) { %>
+  <div class="card"><p class="mut">Aún no hay partidos programados.</p></div>
+<% } else { %>
+  <% for (const r of rounds) { %>
+  <div class="card">
+    <h3>Ronda <%= r.no %></h3>
+    <table class="tbl"><thead><tr>
+      <th>Fecha</th><th>Hora</th><th>Pista</th><th>Pareja A</th><th></th><th>Pareja B</th><th>Resultado</th>
+    </tr></thead><tbody>
+    <% for (const m of r.matches) { %>
+    <tr>
+      <td><strong><%= fmtMatchDate(m.match_date) %></strong></td>
+      <td><%= slotLabel(m) %></td>
+      <td><%= m.court_no ? 'Pista ' + m.court_no : '—' %></td>
+      <td><%= m.n1a %> / <%= m.n1b %></td>
+      <td class="mut">vs</td>
+      <td><%= m.n2a %> / <%= m.n2b %></td>
+      <td><strong><%= formatScore(m) %></strong></td>
+    </tr>
+    <% } %>
+    </tbody></table>
+  </div>
+  <% } %>
+<% } %>

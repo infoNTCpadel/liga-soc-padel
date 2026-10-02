@@ -1,0 +1,32 @@
+<h1>Clasificación</h1>
+<% if (tournament) { %><p class="mut"><%= tournament.name %> · Fase liga</p><% } %>
+
+<% if (!published) { %>
+  <div class="card"><p class="mut">La clasificación estará disponible cuando se publique el calendario y se jueguen los primeros partidos.</p></div>
+<% } else if (!table.length) { %>
+  <div class="card"><p class="mut">Aún no hay parejas en la clasificación.</p></div>
+<% } else { %>
+  <div class="card">
+    <table class="tbl"><thead><tr>
+      <th>#</th><th>Pareja</th><th>PJ</th><th>PG</th><th>PP</th><th>Pts</th><th>Sets</th><th>Juegos</th>
+    </tr></thead><tbody>
+    <% for (const r of table) { %>
+    <tr>
+      <td class="num"><strong><%= r.position %></strong></td>
+      <td><%= r.pair.player1_name %> / <%= r.pair.player2_name %>
+        <span class="mut small">(<%= String(r.pair.level_avg).replace('.', ',') %>)</span>
+        <% if (r.tieNote) { %><br><span class="badge info"><%= r.tieNote %></span><% } %>
+      </td>
+      <td class="num"><%= r.pj %></td>
+      <td class="num"><%= r.pg %></td>
+      <td class="num"><%= r.pp %></td>
+      <td class="num"><strong><%= r.pts %></strong></td>
+      <td class="num"><%= r.setsW %>-<%= r.setsL %></td>
+      <td class="num"><%= r.gamesW %>-<%= r.gamesL %></td>
+    </tr>
+    <% } %>
+    </tbody></table>
+    <p class="mut small">Victoria: 3 pts · Derrota ganando un set: 2 pts · Derrota sin ganar sets: 1 pt · W.O.: 3-0.
+    Desempates: enfrentamiento directo (entre dos), diferencia de sets, diferencia de juegos.</p>
+  </div>
+<% } %>

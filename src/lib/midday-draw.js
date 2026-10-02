@@ -558,6 +558,47 @@ function autoValidateMidday(mdb) {
                WHERE validation = 'pending' AND validation_deadline IS NOT NULL
                AND validation_deadline <= datetime('now')`).run();
 }
+// ---------- clasificación ----------
+// Tabla única estilo Champions con el mismo sistema de puntos que la liga
+// social (3 victoria, 2 derrota ganando un set, 1 derrota sin sets, 0 no
+// jugado; W.O. 3-0). Los disputados y sin resultado no cuentan.
+function computeStandings(mdb, drawId) {
+  const draw = getDraw(mdb, drawId);
+  if (!draw) return [];
+  const pairs = M.listPairs(mdb, draw.tournament_id).filter(p => p.status === 'approved');
+  const matches = drawMatches(mdb, drawId).map(m => ({ ...m, pair_a_id: m.pair1_id, pair_b_id: m.pair2_id }));
+  const byId = Object.fromEntries(pairs.map(p => [p.id, p]));
+  return L.computeStandings(pairs.map(p => p.id), matches).map(r => ({ ...r, pair: byId[r.pairId] }));
+}
+
+// El admin pone o corrige un resultado: columnas orientadas a pair1/pair2
+// (no «tú-rival»), queda validado directamente.
+function adminSetResult(mdb, matchId, inp) {
+  const m = mdb.prepare('SELECT * FROM midday_matches WHERE id = ?').get(matchId);
+  if (!m) return { ok: false, error: 'Partido no válido.' };
+  const notes = (inp.notes || '').trim();
+  if (inp.wo) {
+    const winnerId = Number(inp.winnerId);
+    if (winnerId !== m.pair1_id && winnerId !== m.pair2_id)
+      return { ok: false, error: 'Indica a favor de qué pareja es el W.O.' };
+    mdb.prepare(`UPDATE midday_matches SET s1a = NULL, s1b = NULL, s2a = NULL, s2b = NULL,
+                 stb_a = NULL, stb_b = NULL, winner_id = ?, wo_winner_id = ?,
+                 submitted_by = NULL, submitted_at = datetime('now'),
+                 validation = 'validated', validation_deadline = NULL, notes = ? WHERE id = ?`)
+      .run(winnerId, winnerId, notes, matchId);
+    return { ok: true };
+  }
+  const dw = deduceWinner(inp.s1a, inp.s1b, inp.s2a, inp.s2b, inp.mode, inp.s3a, inp.s3b);
+  if (dw.error) return { ok: false, error: dw.error };
+  const winnerId = dw.winnerIsMe ? m.pair1_id : m.pair2_id;
+  mdb.prepare(`UPDATE midday_matches SET s1a = ?, s1b = ?, s2a = ?, s2b = ?, stb_a = ?, stb_b = ?,
+               winner_id = ?, wo_winner_id = NULL, submitted_by = NULL, submitted_at = datetime('now'),
+               validation = 'validated', validation_deadline = NULL, notes = ? WHERE id = ?`)
+    .run(inp.s1a, inp.s1b, inp.s2a, inp.s2b,
+      inp.mode !== 'none' ? inp.s3a : null, inp.mode !== 'none' ? inp.s3b : null,
+      winnerId, notes, matchId);
+  return { ok: true };
+}
 module.exports = {
   parseISODate, addDaysISO, diffDaysISO, weekdayNum, isWeekdayISO, fmtMatchDate,
   potSizes, buildPots, circleRounds, interleavePots,
@@ -565,5 +606,6 @@ module.exports = {
   canPlayOn, scheduleDraw, rescheduleMatch, bulkReschedule, drawWarnings, matchSlotLabel, compareForReview,
   normalizeSlotInput, parseScore, deduceWinner, formatScore, matchWinnerId,
   submitResult, validateResult, disputeResult, autoValidateMidday,
+  computeStandings, adminSetResult,
   publishDraw, setDrawEmailSummary, sendMiddayEmail,
 };

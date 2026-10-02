@@ -256,6 +256,21 @@ router.post('/sorteo/guardar-todo', (req, res) => {
   renderSorteo(res, tid, { bulkResults: r.results, bulkSummary: summary, info: summary });
 });
 
+// El admin pone o corrige un resultado (queda validado directamente).
+router.post('/sorteo/resultado/:id/guardar', (req, res) => {
+  const tid = Number(req.body.t);
+  const b = req.body;
+  const r = D.adminSetResult(middayDb, Number(req.params.id), {
+    s1a: D.parseScore(b.s1a), s1b: D.parseScore(b.s1b),
+    s2a: D.parseScore(b.s2a), s2b: D.parseScore(b.s2b),
+    mode: b.set3mode === 'stb' ? 'stb' : 'none',
+    s3a: D.parseScore(b.s3a), s3b: D.parseScore(b.s3b),
+    wo: !!b.wo, winnerId: b.wo_winner, notes: b.notes,
+  });
+  res.redirect(`/admin/mediodia/sorteo?t=${tid}&` +
+    (r.ok ? 'ok=Resultado guardado.' : 'error=' + encodeURIComponent(r.error)));
+});
+
 // Resolver disputa (aceptar el resultado) o reabrir un partido (borrar resultado).
 router.post('/sorteo/resultado/:id/resolver', (req, res) => {
   const tid = Number(req.body.t);

@@ -13,6 +13,9 @@ router.use((req, res, next) => {
   res.locals.clubName = middayGet('comp_name', 'MEDIODÍA PADEL');
   res.locals.seasonName = 'Liga de mediodía';
   res.locals.middayPairId = req.session.middayPairId || null;
+  const tid = currentTid();
+  const draw = tid ? D.drawForTournament(middayDb, tid) : null;
+  res.locals.middayPublished = !!(draw && draw.status === 'published');
   next();
 });
 
@@ -204,6 +207,41 @@ router.post('/disputar/:id', requirePair, (req, res) => {
   const pair = res.locals.middayPair;
   const r = D.disputeResult(middayDb, Number(req.params.id), pair.id);
   res.redirect('/mediodia/mis-partidos?' + (r.ok ? 'ok=1' : 'error=' + encodeURIComponent(r.error)));
+});
+
+// ---- Calendario y resultados (público) ----
+router.get('/calendario', (req, res) => {
+  const tid = currentTid();
+  const draw = tid ? D.drawForTournament(middayDb, tid) : null;
+  const published = !!(draw && draw.status === 'published');
+  const matches = published ? D.drawMatches(middayDb, draw.id) : [];
+  const rounds = [];
+  for (const m of matches) {
+    let r = rounds.find(x => x.no === m.round_no);
+    if (!r) { r = { no: m.round_no, matches: [] }; rounds.push(r); }
+    r.matches.push(m);
+  }
+  res.renderPage('midday/calendario', {
+    tournament: tid ? M.getTournament(middayDb, tid) : null,
+    published, rounds,
+    fmtMatchDate: D.fmtMatchDate,
+    slotLabel: (m) => D.matchSlotLabel(m, slots(tid)),
+    formatScore: D.formatScore,
+    sub: 'calendario',
+  });
+});
+
+// ---- Clasificación (pública) ----
+router.get('/clasificacion', (req, res) => {
+  const tid = currentTid();
+  const draw = tid ? D.drawForTournament(middayDb, tid) : null;
+  const published = !!(draw && draw.status === 'published');
+  const table = published ? D.computeStandings(middayDb, draw.id) : [];
+  res.renderPage('midday/clasificacion', {
+    tournament: tid ? M.getTournament(middayDb, tid) : null,
+    published, table,
+    sub: 'clasificacion',
+  });
 });
 
 // ---- Mis datos: la pareja puede corregir sus datos ----

@@ -17,6 +17,10 @@
       <% if (locals.isMiddayHost) { %>
       <a href="/mediodia" class="<%= section==='midday' && !locals.sub ? 'on' : '' %>">Inicio</a>
       <a href="/mediodia/inscripcion" class="<%= locals.sub==='inscripcion' ? 'on' : '' %>">Inscripción</a>
+      <% if (locals.middayPublished) { %>
+      <a href="/mediodia/calendario" class="<%= locals.sub==='calendario' ? 'on' : '' %>">Calendario</a>
+      <a href="/mediodia/clasificacion" class="<%= locals.sub==='clasificacion' ? 'on' : '' %>">Clasificación</a>
+      <% } %>
       <% } else { %>
       <a href="/" class="<%= section==='public' && !locals.sub ? 'on' : '' %>">Inicio</a>
       <a href="/normativa">Normativa</a>

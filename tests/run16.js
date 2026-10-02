@@ -455,6 +455,25 @@ console.log(`lib: ${pass} OK, ${fail} fallos`);
   const mt4 = Number(mdb.prepare(`INSERT INTO midday_matches(draw_id, tournament_id, round_no, pair1_id, pair2_id) VALUES(?, ?, 1, ?, ?)`)
     .run(dr2, r2.id, a, b).lastInsertRowid);
   ok(!D.submitResult(mdb, mt4, a, { s1a: 6, s1b: 4, s2a: 6, s2b: 4, mode: 'none', wo: false }).ok, 'sin publicar no se puede subir resultado');
+
+  // Clasificación: A 4 pts (1+3), B 3 pts (3+0); el disputado no cuenta
+  const table = D.computeStandings(mdb, dr);
+  ok(table.length === 2, 'clasificación con 2 parejas');
+  ok(table[0].pairId === a && table[0].pts === 4 && table[0].position === 1, 'A primera con 4 pts');
+  ok(table[1].pairId === b && table[1].pts === 3 && table[1].position === 2, 'B segunda con 3 pts');
+  ok(table[0].setsW === 2 && table[0].setsL === 2 && table[0].pj === 2, 'A: 2 partidos, sets 2-2');
+
+  // El admin pone y corrige resultados (quedan validados)
+  const mt5 = mk(4, '2026-11-24');
+  ok(D.adminSetResult(mdb, mt5, { s1a: 6, s1b: 2, s2a: 6, s2b: 1, mode: 'none', wo: false }).ok, 'admin pone resultado');
+  const m5 = mdb.prepare('SELECT * FROM midday_matches WHERE id = ?').get(mt5);
+  ok(m5.winner_id === a && m5.validation === 'validated', 'admin: gana A y queda validado');
+  ok(D.adminSetResult(mdb, mt5, { s1a: 2, s1b: 6, s2a: 1, s2b: 6, mode: 'none', wo: false }).ok, 'admin corrige resultado');
+  ok(mdb.prepare('SELECT winner_id FROM midday_matches WHERE id = ?').get(mt5).winner_id === b, 'tras corregir gana B');
+  ok(D.adminSetResult(mdb, mt5, { wo: true, winnerId: String(b) }).ok, 'admin pone W.O.');
+  ok(mdb.prepare('SELECT wo_winner_id FROM midday_matches WHERE id = ?').get(mt5).wo_winner_id === b, 'W.O. a favor de B');
+  ok(!D.adminSetResult(mdb, mt5, { wo: true, winnerId: '999' }).ok, 'W.O. sin pareja válida → error');
+  ok(!D.adminSetResult(mdb, 999999, { s1a: 6, s1b: 4, s2a: 6, s2b: 4, mode: 'none', wo: false }).ok, 'partido inexistente → error');
 }
 
 // ---------- 10. HTTP: generar → publicar (modo pruebas) → mis-partidos ----------
@@ -658,6 +677,28 @@ async function httpDraw() {
     const hdb8 = new DS2(path.join(HTTP_DIR, 'midday.db'));
     hok(hdb8.prepare(`SELECT player1_name, player1_phone FROM midday_pairs WHERE id = ?`).get(hp.id).player1_name === 'Ana Editada', 'datos actualizados en BD');
     hdb8.close();
+
+    // páginas públicas: calendario y clasificación
+    const hdbC = new DS2(path.join(HTTP_DIR, 'midday.db'));
+    const hsc = hdbC.prepare(`SELECT s1a, s1b FROM midday_matches WHERE id = ?`).get(hmm.id);
+    hdbC.close();
+    r = await httpreq({ port: PORT, host: 'midday.test', path: '/mediodia/calendario' });
+    hok(r.status === 200 && r.body.includes('Ronda 1') && r.body.includes(`${hsc.s1a}-${hsc.s1b}`), 'calendario público con resultados');
+    r = await httpreq({ port: PORT, host: 'midday.test', path: '/mediodia/clasificacion' });
+    hok(r.status === 200 && r.body.includes('Pts') && r.body.includes('Ana'), 'clasificación pública');
+
+    // admin pone un resultado (orientado A–B: gana pair1)
+    const hdb9 = new DS2(path.join(HTTP_DIR, 'midday.db'));
+    const hp1 = hdb9.prepare(`SELECT pair1_id FROM midday_matches WHERE id = ?`).get(hmm.id).pair1_id;
+    hdb9.close();
+    const admBody = new URLSearchParams({ t: String(ED_ID), s1a: '6', s1b: '1', s2a: '6', s2b: '2', set3mode: 'none' }).toString();
+    r = await httpreq({ port: PORT, host: 'otro.test', path: '/admin/mediodia/sorteo/resultado/' + hmm.id + '/guardar', method: 'POST',
+      body: admBody, cookie: adminCookie });
+    hok(r.status === 302, 'admin pone resultado → 302');
+    const hdb10 = new DS2(path.join(HTTP_DIR, 'midday.db'));
+    const hadm = hdb10.prepare(`SELECT winner_id, validation FROM midday_matches WHERE id = ?`).get(hmm.id);
+    hok(hadm.winner_id === hp1 && hadm.validation === 'validated', 'resultado del admin validado en BD');
+    hdb10.close();
 
     // regenerar tras publicar → bloqueado
     r = await httpreq({ port: PORT, host: 'otro.test', path: '/admin/mediodia/sorteo/generar', method: 'POST',
