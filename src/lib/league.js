@@ -263,13 +263,17 @@ function targetGroup(groupNo, totalGroups, position, groupSize) {
 function chunkIntoGroups(sortedIds) {
   const n = sortedIds.length;
   if (n === 0) return [];
-  const numGroups = Math.max(1, Math.round(n / 4));
+  // Mínimo 4 parejas por grupo: si al repartir saliera un grupo de 3,
+  // se reduce el nº de grupos y se redistribuye (algunos quedan de 5 o 6).
+  let numGroups = Math.max(1, Math.round(n / 4));
+  while (numGroups > 1 && n / numGroups < 4) numGroups--;
   const base = Math.floor(n / numGroups);
   const rem = n % numGroups;
   const groups = [];
   let idx = 0;
   for (let g = 0; g < numGroups; g++) {
-    const size = base + (g < rem ? 1 : 0);
+    // Los grupos de 4 van primero (grupo 1 = más nivel); los de 5, al final.
+    const size = base + (g >= numGroups - rem ? 1 : 0);
     groups.push(sortedIds.slice(idx, idx + size));
     idx += size;
   }
