@@ -24,12 +24,12 @@ router.get('/', (req, res) => {
   if (!getReceptionHash() && !req.session.admin) return res.redirect('/recepcion/login');
   const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : B.todayStr();
   const { bookings, blocks } = B.dayDetail(date);
-  const pending = bookings.filter(b => b.status === 'active' && b.payment_status === 'pending');
+  const pending = bookings.filter(b => b.status === 'active' && (b.payment_status === 'pending' || b.charges.some(c => !c.paid)));
   const unpaidCharges = [];
   for (const b of bookings) for (const ch of b.charges) if (!ch.paid) unpaidCharges.push({ ...ch, booking: b });
   res.renderPage('recepcion/reservas', {
     date, bookings, blocks, pending, unpaidCharges, eur, minToStr: B.minToStr,
-    info: req.query.ok || null,
+    info: req.query.ok || null, error: req.query.error || null,
     prev: B.addDays(date, -1), next: B.addDays(date, 1),
   });
 });
@@ -51,8 +51,11 @@ router.post('/:id/cargo', (req, res) => {
   const id = parseInt(req.params.id, 10);
   const b = B.getBooking(id);
   const cents = Math.round(parseFloat(String(req.body.amount || '').replace(',', '.')) * 100) || 0;
-  B.addCharge(id, req.body.label || '', cents);
-  res.redirect('/recepcion/reservas?date=' + (b ? b.date : B.todayStr()) + '&ok=' + encodeURIComponent('Cargo añadido.'));
+  const r = B.addCharge(id, req.body.label || '', cents, req.body.player_id || null);
+  const date = b ? b.date : B.todayStr();
+  res.redirect('/recepcion/reservas?date=' + date + (r.error
+    ? '&error=' + encodeURIComponent(r.error)
+    : '&ok=' + encodeURIComponent('Cargo añadido.')));
 });
 router.post('/cargos/:cid/pagado', (req, res) => {
   const ch = B.bdb.prepare('SELECT booking_id FROM booking_charges WHERE id = ?').get(req.params.cid);

@@ -9,6 +9,7 @@
 </style>
 <h1>Reservas · <%= date.slice(8,10) %>/<%= date.slice(5,7) %>/<%= date.slice(0,4) %></h1>
 <% if (info) { %><div class="alert ok"><%= info %></div><% } %>
+<% if (typeof error !== 'undefined' && error) { %><div class="alert error"><%= error %></div><% } %>
 
 <div class="card">
   <a class="btn small ghost" href="/recepcion/reservas?date=<%= prev %>">← Día anterior</a>
@@ -22,16 +23,32 @@
   <h3 style="color:#a33">Pendientes de pago en recepción (<%= pending.length %>)</h3>
   <% for (const b of pending) { %>
   <div class="card">
-    <p><strong><%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %></strong> · <%= b.court_name %> · Titular: <%= b.titular_name %> (socio <%= b.titular_member_no %>)</p>
+    <p><strong><%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %></strong> · <%= b.court_name %> · Titular: <%= b.titular_name %> (socio <%= b.titular_member_no %>)
+      <% if (b.payment_status === 'pending') { %> <span class="badge warn">Cuota invitado pendiente</span><% } %></p>
     <p class="mut">Jugadores: <%= b.players.map(p => p.name + (p.is_guest ? ' (invitado)' : ' (socio ' + p.member_no + ')')).join(' · ') %></p>
+    <% for (const ch of b.charges.filter(c => !c.paid)) { %>
+      <p style="margin:.2em 0"><span class="badge warn">pdte.</span> <%= ch.label %> · <%= eur(ch.amount_cents) %>
+        <%= ch.player_name ? ' → ' + ch.player_name + (ch.player_guest ? ' (invitado)' : '') : ' → toda la reserva' %>
+        <form method="post" action="/recepcion/reservas/cargos/<%= ch.id %>/pagado" style="display:inline;margin-left:.4em">
+          <input type="hidden" name="paid" value="1"><button class="btn small ghost" type="submit">Cobrar</button></form></p>
+    <% } %>
+    <% if (b.payment_status === 'pending') { %>
     <form method="post" action="/recepcion/reservas/<%= b.id %>/pago" style="display:inline">
       <input type="hidden" name="paid" value="1"><button class="btn small" type="submit">Marcar pagado</button>
     </form>
-    <form method="post" action="/recepcion/reservas/<%= b.id %>/cargo" style="display:inline;margin-left:.5em">
-      <input type="text" name="label" placeholder="Cargo extra (p. ej. luz)" size="18" required>
-      <input type="text" name="amount" placeholder="€" size="5" required>
-      <button class="btn small ghost" type="submit">Añadir cargo</button>
-    </form>
+    <% } %>
+    <details style="margin-top:.4em">
+      <summary style="cursor:pointer;font-size:.85em">Añadir cargo extra (pelotas, raqueta, luz…)</summary>
+      <form method="post" action="/recepcion/reservas/<%= b.id %>/cargo" style="margin-top:.3em">
+        <input type="text" name="label" placeholder="Concepto" size="16" required>
+        <input type="text" name="amount" placeholder="€" size="5" required>
+        <select name="player_id">
+          <option value="">Toda la reserva</option>
+          <% for (const p of b.players) { %><option value="<%= p.id %>"><%= p.name %><%= p.is_guest ? ' (invitado)' : '' %></option><% } %>
+        </select>
+        <button class="btn small ghost" type="submit">Añadir cargo</button>
+      </form>
+    </details>
   </div>
   <% } %>
 </div>
@@ -40,10 +57,12 @@
 <% if (unpaidCharges.length) { %>
 <div class="card">
   <h3>Cargos extra sin cobrar</h3>
-  <table class="tbl"><tr><th>Hora</th><th>Pista</th><th>Concepto</th><th>Importe</th><th></th></tr>
+  <table class="tbl"><tr><th>Hora</th><th>Pista</th><th>Concepto</th><th>Para</th><th>Importe</th><th></th></tr>
   <% for (const ch of unpaidCharges) { %>
   <tr><td><%= minToStr(ch.booking.start_min) %></td><td><%= ch.booking.court_name %></td>
-    <td><%= ch.label %></td><td><%= eur(ch.amount_cents) %></td>
+    <td><%= ch.label %></td>
+    <td class="mut"><%= ch.player_name ? ch.player_name + (ch.player_guest ? ' (inv.)' : '') : 'Toda la reserva' %></td>
+    <td><%= eur(ch.amount_cents) %></td>
     <td><form method="post" action="/recepcion/reservas/cargos/<%= ch.id %>/pagado" style="display:inline">
       <input type="hidden" name="paid" value="1"><button class="btn small" type="submit">Cobrado</button></form></td></tr>
   <% } %>
@@ -79,10 +98,22 @@
         </details>
         <% } %>
       </td>
-      <td><%- b.status === 'cancelled' ? '<span class="mut">Anulada</span>' : (b.payment_status === 'pending' ? '<span class="badge warn">Pendiente</span>' : b.payment_status === 'paid' ? '<span class="badge ok">Pagado</span>' : '<span class="badge ok">OK</span>') %><% if (b.open_spots > 0) { %><br><span class="badge" style="background:#e9f7ef;color:#146c39">Abierto · <%= b.open_spots %></span><% } %></td>
+      <td><%- b.status === 'cancelled' ? '<span class="mut">Anulada</span>' : (b.payment_status === 'pending' ? '<span class="badge warn">Pendiente</span>' : b.payment_status === 'paid' ? '<span class="badge ok">Pagado</span>' : '<span class="badge ok">OK</span>') %><% if (b.open_spots > 0) { %><br><span class="badge" style="background:#e9f7ef;color:#146c39">Abierto · <%= b.open_spots %></span><% } %><% const _uc = b.charges.filter(c => !c.paid); if (_uc.length) { %><br><span class="badge warn" title="<%= _uc.map(c => c.label + ' ' + eur(c.amount_cents)).join(', ') %>">Cargos: <%= _uc.length %></span><% } %></td>
       <td><% if (b.status === 'active') { %>
         <form method="post" action="/recepcion/reservas/<%= b.id %>/anular" style="display:inline" onsubmit="return confirm('¿Anular esta reserva?')">
           <button class="btn small danger" type="submit">Anular</button></form>
+        <details style="margin-top:.3em">
+          <summary style="cursor:pointer;font-size:.85em">＋ cargo</summary>
+          <form method="post" action="/recepcion/reservas/<%= b.id %>/cargo" style="margin-top:.3em">
+            <input type="text" name="label" placeholder="Concepto" size="12" required>
+            <input type="text" name="amount" placeholder="€" size="4" required><br>
+            <select name="player_id" style="margin:.25em 0;max-width:11em">
+              <option value="">Toda la reserva</option>
+              <% for (const p of b.players) { %><option value="<%= p.id %>"><%= p.name %><%= p.is_guest ? ' (inv.)' : '' %></option><% } %>
+            </select>
+            <button class="btn small ghost" type="submit">Añadir</button>
+          </form>
+        </details>
       <% } %></td>
     </tr>
     <% } %>

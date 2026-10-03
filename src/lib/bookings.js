@@ -109,6 +109,7 @@ for (const sql of [
   'ALTER TABLE waitlist ADD COLUMN duration_min INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE bookings ADD COLUMN kind TEXT NOT NULL DEFAULT \'reserva\'',
   'ALTER TABLE court_blocks ADD COLUMN color TEXT NOT NULL DEFAULT \'\'',
+  'ALTER TABLE booking_charges ADD COLUMN booking_player_id INTEGER',
 ]) {
   try { bdb.exec(sql); } catch (e) { /* ya existe */ }
 }
@@ -644,11 +645,17 @@ function recentTitulars(limit = 6) {
      GROUP BY titular_member_no ORDER BY last DESC LIMIT ?`).all(limit);
 }
 
+function chargeList(booking_id) {
+  return bdb.prepare(
+    `SELECT c.*, p.name AS player_name, p.is_guest AS player_guest
+     FROM booking_charges c LEFT JOIN booking_players p ON p.id = c.booking_player_id
+     WHERE c.booking_id = ? ORDER BY c.id`).all(booking_id);
+}
 function getBooking(id) {
   const b = bdb.prepare('SELECT * FROM bookings WHERE id = ?').get(id);
   if (!b) return null;
   b.players = bdb.prepare('SELECT * FROM booking_players WHERE booking_id = ? ORDER BY id').all(id);
-  b.charges = bdb.prepare('SELECT * FROM booking_charges WHERE booking_id = ? ORDER BY id').all(id);
+  b.charges = chargeList(id);
   return b;
 }
 
@@ -983,12 +990,18 @@ function setBookingPaid(id, paid) {
   }
   return recomputePayment(id, true); // vuelve al cálculo automático
 }
-function addCharge(booking_id, label, amount_cents) {
+function addCharge(booking_id, label, amount_cents, player_id) {
   if (!(label || '').trim()) return { error: 'Indica el concepto del cargo.' };
   const cents = Math.round(Number(amount_cents) || 0);
   if (cents < 0) return { error: 'Importe no válido.' };
-  bdb.prepare('INSERT INTO booking_charges(booking_id, label, amount_cents) VALUES(?, ?, ?)')
-    .run(booking_id, label.trim(), cents);
+  let pid = null;
+  if (player_id) {
+    const p = bdb.prepare('SELECT id FROM booking_players WHERE id = ? AND booking_id = ?').get(player_id, booking_id);
+    if (!p) return { error: 'Jugador no válido para esta reserva.' };
+    pid = p.id;
+  }
+  bdb.prepare('INSERT INTO booking_charges(booking_id, label, amount_cents, booking_player_id) VALUES(?, ?, ?, ?)')
+    .run(booking_id, label.trim(), cents, pid);
   return { ok: true };
 }
 function setChargePaid(id, paid) {
@@ -1003,7 +1016,7 @@ function dayDetail(date) {
     `SELECT * FROM bookings WHERE date = ? ORDER BY start_min`).all(date).map(b => ({
     ...b,
     players: bdb.prepare('SELECT * FROM booking_players WHERE booking_id = ? ORDER BY id').all(b.id),
-    charges: bdb.prepare('SELECT * FROM booking_charges WHERE booking_id = ? ORDER BY id').all(b.id),
+    charges: chargeList(b.id),
   }));
   const blocks = dayBlocks(date);
   return { bookings, blocks };
@@ -1172,6 +1185,7 @@ function staffGrid(date, urls, courts) {
       open_spots: b.open_spots, payment_status: b.payment_status,
       kind: b.kind || 'reserva',
       players: (b.players || []).map(p => ({ name: p.name, member_no: p.member_no, is_guest: p.is_guest })),
+      charges: (b.charges || []).map(c => ({ label: c.label, amount_cents: c.amount_cents, paid: c.paid, player_name: c.player_name })),
     }))),
     levelsJson: safeJson(levels),
     recentTitulars: recentTitulars(6),
@@ -1195,7 +1209,7 @@ module.exports = {
   dayHours, validateHoursJson, bookableStarts,
   expireOffers, promoteWaitlist, joinWaitlist, confirmOffer, leaveWaitlist, memberArea,
   validateBlock, affectedBookings, createBlock, deleteBlock, listBlocks,
-  setBookingPaid, addCharge, setChargePaid, deleteCharge, dayDetail, pendingPayments,
+  setBookingPaid, addCharge, setChargePaid, deleteCharge, chargeList, dayDetail, pendingPayments,
   dueReminders, checkReminders, sendEmail,
   levelColor, staffGrid, bookingColor,
 };

@@ -266,6 +266,17 @@ a.chip.free:hover{background:#2b351f;color:var(--lime)}
     h += '<p>' + (b.payment_status === 'paid' ? '<span class="badge ok">Pagado</span>' : b.payment_status === 'pending' ? '<span class="badge warn">Pago pendiente</span>' : '<span class="badge">Sin pago</span>');
     if (b.payment_status === 'pending' && guests.length) h += ' <span class="mut">— ' + guests.map(g => esc(g.name)).join(', ') + '</span>';
     h += '</p>';
+    // Cargos extra (solo lectura; se gestionan en recepción).
+    const chs = b.charges || [];
+    if (chs.length){
+      h += '<ul class="mut" style="font-size:.85em;margin-top:-.4em">';
+      for (const c of chs){
+        h += '<li>' + esc(c.label) + ' · ' + (c.amount_cents / 100).toFixed(2).replace('.', ',') + ' €' +
+          (c.player_name ? ' → ' + esc(c.player_name) : ' → toda la reserva') +
+          (c.paid ? ' <span class="badge ok">cobrado</span>' : ' <span class="badge warn">pdte.</span>') + '</li>';
+      }
+      h += '</ul>';
+    }
     h += '<p class="pmsg mut" style="font-size:.85em"></p>';
     if (b.payment_status === 'pending') h += '<button type="button" class="btn small" data-act="pago" data-paid="1">Marcar pagado</button> ';
     else if (b.payment_status === 'paid') h += '<button type="button" class="btn small ghost" data-act="pago" data-paid="0">Volver a pendiente</button> ';
