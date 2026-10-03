@@ -105,6 +105,13 @@ router.post('/reservas/:id/pago', (req, res) => {
   B.setBookingPaid(parseInt(req.params.id, 10), req.body.paid === '1');
   res.redirect('/admin/reservas/dia?date=' + date + '&ok=' + encodeURIComponent('Pago actualizado.'));
 });
+// Abrir un partido cerrado con jugadores incompletos para buscar jugadores.
+router.post('/reservas/:id/abrir', (req, res) => {
+  const b = B.getBooking(parseInt(req.params.id, 10));
+  const date = b ? b.date : B.todayStr();
+  const r = b ? B.openMatchForPlayers(b.id) : { error: 'No encontrada.' };
+  res.redirect('/admin/reservas/dia?date=' + date + (r.error ? '' : '&ok=' + encodeURIComponent('Partido abierto: otros socios del nivel podrán apuntarse.')));
+});
 router.post('/reservas/:id/cargo', (req, res) => {
   const id = parseInt(req.params.id, 10);
   const b = B.getBooking(id);

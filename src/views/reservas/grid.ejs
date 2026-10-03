@@ -50,6 +50,8 @@ a.chip.free:hover{background:#e9e3ff}
 .chip.busy{background:#f1f0f6;color:#b9b6c9}
 .chip.open{border:1.5px solid #1e8e4d;color:#146c39;background:#e9f7ef}
 a.chip.open:hover{background:#d9f0e3}
+.chip.mine{border:1.5px solid var(--lime);color:#111;background:var(--lime)}
+a.chip.mine:hover{filter:brightness(1.08)}
 .chip.na{background:#faf9fd;color:#d5d2e2}
 .legend{display:flex;gap:1em;flex-wrap:wrap;margin:.7em 0;font-size:.85em;color:#6b6884}
 .legend i{display:inline-block;width:.9em;height:.9em;border-radius:3px;margin-right:.3em;vertical-align:-1px}
@@ -106,18 +108,21 @@ a.chip.free:hover{background:#2b351f;color:var(--lime)}
       %><td><a class="chip free" href="<%= href %>" data-cname="<%= court.name %>" data-qdate="<%= staff ? dateStr : date.slice(8,10) + '/' + date.slice(5,7) %>" data-start="<%= minToStr(row.slot) %>" data-end="<%= minToStr(row.slot + cell.duration) %>" title="<%= cell.duration %> minutos"><%= staff ? 'Libre · ' + cell.duration + ' min' : court.name + ' · libre' %></a></td><%
         } else if ((cell.st === 'open' || cell.st === 'busy') && staff && cell.booking && bmap[cell.booking.id]) {
           const b = bmap[cell.booking.id];
-          const chips = cardChips(b);
           const cc = bookingColor(b);
           const isOpen = b.open_spots > 0;
           const bname = b.titular_name;
       %><td><button type="button" class="chip busy<%= isOpen ? ' is-open' : '' %>" data-bid="<%= b.id %>" style="border-color:<%= cc %>;background:<%= cc %>1f" title="<%= isOpen ? 'Partido abierto · ' : '' %><%= bname %> · <%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %> — pulsa para ver el detalle">
         <span class="rname"><%= bname %></span>
-        <span class="rtime"><%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %><% if (isOpen) { %> · abierto<% } %><% if (b.payment_status === 'pending') { %> <span class="ppend" title="Pago pendiente">●</span><% } %></span>
-        <span class="rchips"><% for (const ch of chips) { %><% if (ch.free) { %><span class="lchip free">+</span><% } else { %><span class="lchip" style="background:<%= levelColor(ch.level) %>"><%= ch.level %></span><% } %><% } %></span>
+        <span class="rtime"><%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %> · <%= b.players.length %>/4<% if (b.payment_status === 'pending') { %> <span class="ppend" title="Pago pendiente">●</span><% } %></span>
       </button></td><%
         } else if (cell.st === 'blocked' && staff) {
           const breason = (cell.block && cell.block.reason) || 'Bloqueo';
       %><td><span class="chip busy" style="border-color:#9aa88f;background:#9aa88f1f;cursor:default" title="<%= breason %>">Bloqueo</span></td><%
+        } else if (!staff && member && cell.booking && cell.booking.titular_member_no === member.member_no) {
+          const mine = cell.booking;
+          const mhref = mine.open_spots > 0 ? '/reservar/abierto/' + mine.id : '/reservar/mis';
+          const mlabel = mine.open_spots > 0 ? 'Mi partido abierto' : 'Mi reserva';
+      %><td><a class="chip mine" href="<%= mhref %>" title="<%= mlabel %> · <%= minToStr(mine.start_min) %>–<%= minToStr(mine.end_min) %>"><%= mlabel %> · <%= minToStr(mine.start_min) %>–<%= minToStr(mine.end_min) %></a></td><%
         } else if (cell.st === 'open') {
           const openHref = staff ? staffDay + '?date=' + date : '/reservar/abierto/' + cell.booking.id;
       %><td><a class="chip open" href="<%= openHref %>"><%= court.name %> · <%= cell.booking.open_spots %> <%= cell.booking.open_spots === 1 ? 'plaza' : 'plazas' %><%= cell.range ? ' · ' + cell.range : '' %></a></td><%
@@ -144,6 +149,9 @@ a.chip.free:hover{background:#2b351f;color:var(--lime)}
   <span><i style="background:#f4f1ff;border:1.5px solid #5b3df0"></i>Libre (pulsa para reservar)</span>
   <span><i style="background:#e9f7ef;border:1.5px solid #1e8e4d"></i>Partido abierto (faltan jugadores)</span>
   <span><i style="background:#f1f0f6"></i>Ocupada</span>
+<% if (member) { %>
+  <span><i style="background:var(--lime);border:1.5px solid var(--lime)"></i>Mi reserva</span>
+<% } %>
 <% } %>
 </div>
 <p class="hint"><%= staff ? 'Pulsa una franja libre para la reserva rápida (2 clics). Pulsa una ocupada para ver el detalle en grande.' : 'Franjas de ' + config.durations.slice().sort((a,b) => b-a)[0] + ' minutos. Al pulsar una franja libre se abre la confirmación rápida (2 clics).' %></p>

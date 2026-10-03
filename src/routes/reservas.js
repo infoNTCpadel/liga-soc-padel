@@ -47,12 +47,13 @@ function pinFail(no) {
 // ---- acceso con PIN ----
 router.get('/entrar', (req, res) => {
   if (me(req)) return res.redirect('/reservar/mis');
-  res.renderPage('reservas/entrar', { error: null, next: req.query.next || '/reservar/mis', member_no: '' });
+  res.renderPage('reservas/entrar', { error: null, next: req.query.next || '/reservar/mis', member_no: '', join: req.query.join === '1' });
 });
 router.post('/entrar', (req, res) => {
   const no = (req.body.member_no || '').trim();
   const next = req.body.next && req.body.next.startsWith('/') ? req.body.next : '/reservar/mis';
-  const render = (error) => res.renderPage('reservas/entrar', { error, next, member_no: no });
+  const join = req.body.join === '1';
+  const render = (error) => res.renderPage('reservas/entrar', { error, next, member_no: no, join });
   const m = B.getMember(no);
   if (!m || !m.active) return render('Nº de socio no encontrado o desactivado.');
   if (!B.hasPin(no)) return render('Aún no tienes PIN: usa "Activar mi acceso" primero.');
@@ -63,6 +64,30 @@ router.post('/entrar', (req, res) => {
   }
   pinFails.delete(no);
   req.session.bookingMemberNo = no;
+  // Venía de un partido abierto con intención de apuntarse: intentarlo ya.
+  const jm = join && /^\/reservar\/abierto\/(\d+)$/.exec(next);
+  if (jm) {
+    const bid = parseInt(jm[1], 10);
+    const fail = (msg) => {
+      const bb = B.getBooking(bid);
+      const lm2 = B.getMember(no);
+      const bk2 = bb && B.getMember(bb.titular_member_no);
+      const vis = bb && bb.status === 'active' && B.openVisibleTo(bb.titular_member_no, bk2 && bk2.level, { member_no: no, level: lm2.level });
+      return res.redirect((vis ? '/reservar/abierto/' + bb.id : '/reservar?date=' + (bb ? bb.date : '')) + '?err=' + encodeURIComponent(msg));
+    };
+    const b = B.getBooking(bid);
+    if (!b || b.status !== 'active' || !(b.open_spots > 0)) return fail('Ese partido ya no está disponible.');
+    const lm = B.getMember(no);
+    const booker = B.getMember(b.titular_member_no);
+    if (!B.openVisibleTo(b.titular_member_no, booker && booker.level, { member_no: no, level: lm.level })) {
+      const mine = lm.level != null ? ' (tu nivel es ' + B.fmtLevel(lm.level) + ')' : '';
+      const theirs = booker && booker.level != null ? ' (este partido es de nivel ' + B.levelRangeText(booker.level) + ')' : '';
+      return fail('No puedes apuntarte a este partido' + mine + theirs + '.');
+    }
+    const r = B.joinOpenMatch(b.id, lm);
+    if (r.error) return fail(r.error);
+    return res.redirect('/reservar/mis?ok=' + encodeURIComponent('Te has apuntado al partido (' + b.date.slice(8, 10) + '/' + b.date.slice(5, 7) + ' ' + B.minToStr(b.start_min) + ').'));
+  }
   res.redirect(next);
 });
 router.get('/activar', (req, res) => {
@@ -336,6 +361,14 @@ router.post('/abierto/:id/cerrar', requireMember, (req, res) => {
   B.closeOpenMatch(b.id);
   res.redirect('/reservar/mis?ok=' + encodeURIComponent('Partido cerrado.'));
 });
+// El socio abre su partido cerrado (sin jugadores completos) para buscar jugadores.
+router.post('/abierto/:id/abrir', requireMember, (req, res) => {
+  const member = me(req);
+  const b = B.getBooking(parseInt(req.params.id, 10));
+  if (!b || b.titular_member_no !== member.member_no || b.status !== 'active') return res.redirect('/reservar/mis');
+  const r = B.openMatchForPlayers(b.id);
+  res.redirect('/reservar/mis?' + (r.error ? 'err=' : 'ok=') + encodeURIComponent(r.error || 'Partido abierto: otros socios del nivel podrán apuntarse.'));
+});
 
 // Buscador de socios (nombre, nº de socio o móvil) para el formulario.
 router.get('/socios/buscar', requireMember, (req, res) => {
@@ -380,7 +413,7 @@ router.get('/ok', requireMember, (req, res) => {
 router.get('/mis', requireMember, (req, res) => {
   const member = me(req);
   res.renderPage('reservas/mis', {
-    error: null, info: req.query.ok || null, area: B.memberArea(member.member_no),
+    error: req.query.err || null, info: req.query.ok || null, area: B.memberArea(member.member_no),
     minToStr: B.minToStr, config: B.getConfig(), member,
   });
 });

@@ -720,6 +720,16 @@ function closeOpenMatch(booking_id) {
   bdb.prepare('UPDATE bookings SET open_spots = 0 WHERE id = ?').run(booking_id);
   return { ok: true };
 }
+// Abrir un partido cerrado para buscar jugadores: plazas = 4 - jugadores.
+function openMatchForPlayers(booking_id) {
+  const b = bdb.prepare('SELECT * FROM bookings WHERE id = ?').get(booking_id);
+  if (!b || b.status !== 'active') return { error: 'Ese partido ya no está disponible.' };
+  if (b.open_spots > 0) return { error: 'Ese partido ya está abierto.' };
+  const total = bdb.prepare('SELECT COUNT(*) c FROM booking_players WHERE booking_id = ?').get(booking_id).c;
+  const spots = Math.max(0, 4 - total);
+  bdb.prepare('UPDATE bookings SET open_spots = ? WHERE id = ?').run(spots, booking_id);
+  return { ok: true, spots };
+}
 // Franja de la parrilla = la duración más larga del ajuste (ej. 75 con 60,75).
 function slotInterval() { return Math.max(...getConfig().durations); }
 // Inicios de franja del día: open, open+franja, ... mientras quepa la duración mínima.
@@ -1117,7 +1127,7 @@ module.exports = {
   createBooking, getBooking, cancelBooking, quickBook, recentTitulars,
   searchMembers, validLevel, setLevel, fmtLevel, levelRangeText,
   addBlock, removeBlock, getBlocks, isBlockedBy, openVisibleTo,
-  joinOpenMatch, syncOpenSpots, closeOpenMatch,
+  joinOpenMatch, syncOpenSpots, closeOpenMatch, openMatchForPlayers,
   slotInterval, slotStarts, slotCell, slotDay, fitDuration,
   dayHours, validateHoursJson, bookableStarts,
   expireOffers, promoteWaitlist, joinWaitlist, confirmOffer, leaveWaitlist, memberArea,

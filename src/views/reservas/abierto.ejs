@@ -21,7 +21,7 @@
       <button class="btn small ghost" type="submit">Cerrar partido</button>
     </form>
   <% } else if (!member) { %>
-    <a class="btn" href="/reservar/entrar?next=<%= encodeURIComponent('/reservar/abierto/' + b.id) %>">Entrar para apuntarme</a>
+    <a class="btn" href="/reservar/entrar?next=<%= encodeURIComponent('/reservar/abierto/' + b.id) %>&join=1">Entrar para apuntarme</a>
   <% } else if (already) { %>
     <p class="mut">Ya estás apuntado en este partido.</p>
   <% } else { %>

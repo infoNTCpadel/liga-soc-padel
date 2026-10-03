@@ -3,6 +3,7 @@
 <div class="card">
   <form method="post" action="/reservar/entrar">
     <input type="hidden" name="next" value="<%= next %>">
+    <input type="hidden" name="join" value="<%= join ? '1' : '' %>">
     <div class="field"><label>Nº de socio</label><input type="text" name="member_no" value="<%= member_no %>" inputmode="numeric" required autofocus></div>
     <div class="field"><label>PIN</label><input type="password" name="pin" inputmode="numeric" required></div>
     <button class="btn" type="submit">Entrar</button>

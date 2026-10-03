@@ -58,7 +58,8 @@ const html = ejs.render(fs.readFileSync('src/views/reservas/grid.ejs', 'utf8'), 
 });
 ok(html.includes('border-color:#f87171') && html.includes('Test Uno'), 'cerrada: tarjeta roja con el nombre del titular');
 ok(html.includes('border-color:#60a5fa') && html.includes('<span class="rname">Test Dos</span>'), 'abierta: tarjeta azul con el nombre del titular');
-ok(html.includes('· abierto'), 'abierta: marca "abierto" junto al horario');
+ok(!html.includes('· abierto'), 'abierta: sin el texto "abierto" (el color azul ya lo dice)');
+ok(/\d\/4/.test(html), 'tarjeta: contador de jugadores n/4 en dos líneas');
 ok(html.includes('Bloqueo') && html.includes('Clase escuela'), 'bloqueo: chip gris con motivo en title');
 ok(!html.includes('color de la pista'), 'leyenda sin colores por pista');
 ok(html.includes('Reservada (pulsa para ver el detalle)'), 'leyenda: Reservada');

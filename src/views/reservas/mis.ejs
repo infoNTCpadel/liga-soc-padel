@@ -40,6 +40,11 @@
         <button class="btn small ghost" type="submit">Cerrar partido</button>
       </form>
     </p>
+    <% } else if (b.players.length < 4) { %>
+    <p><form method="post" action="/reservar/abierto/<%= b.id %>/abrir" style="display:inline">
+      <button class="btn small" type="submit">Abrir partido (buscar jugadores)</button>
+    </form>
+    <span class="mut" style="font-size:.85em">Se abrirá a otros socios del nivel (<%= b.players.length %>/4 jugadores).</span></p>
     <% } %>
     <details>
       <summary class="mut" style="cursor:pointer">Añadir / cambiar jugadores</summary>

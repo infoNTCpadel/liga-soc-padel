@@ -10,6 +10,20 @@
 <h1>Reservas · <%= date.slice(8,10) %>/<%= date.slice(5,7) %>/<%= date.slice(0,4) %></h1>
 <% if (info) { %><div class="alert ok"><%= info %></div><% } %>
 
+<% const incompletas = bookings.filter(b => b.status === 'active' && !(b.open_spots > 0) && b.players.length < 4); %>
+<% if (incompletas.length) { %>
+<div class="card" style="border:1px solid var(--amber)">
+  <h3 style="color:var(--amber)">⚠ Cerradas con jugadores incompletos (<%= incompletas.length %>)</h3>
+  <p class="mut">Partidos cerrados con menos de 4 jugadores. El socio puede abrirlos desde «Mis reservas», o puedes abrirlos tú para buscar jugadores:</p>
+  <table class="tbl"><tr><th>Hora</th><th>Pista</th><th>Titular</th><th>Jugadores</th><th></th></tr>
+  <% for (const b of incompletas) { %>
+    <tr><td><%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %></td><td><%= b.court_name %></td><td><%= b.titular_name %></td><td><%= b.players.length %>/4</td>
+    <td><form method="post" action="/admin/reservas/reservas/<%= b.id %>/abrir" style="display:inline"><button class="btn small" type="submit">Abrir</button></form></td></tr>
+  <% } %>
+  </table>
+</div>
+<% } %>
+
 <div class="card">
   <a class="btn small ghost" href="/admin/reservas/dia?date=<%= prev %>">← Día anterior</a>
   <a class="btn small ghost" href="/admin/reservas/dia?date=<%= next %>">Día siguiente →</a>
