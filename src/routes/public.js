@@ -39,10 +39,16 @@ router.get('/', (req, res) => {
 
 // ---- Normativa (resumen fiel al documento oficial) ----
 router.get('/normativa', (req, res) => {
+  // Tamaños de playoff por categoría (Ajustes): la normativa los refleja.
+  const playoffCats = ['M', 'F', 'X'].map(code => {
+    const p = L.parsePlayoffSizes(getSetting('playoff_sizes_' + code, ''));
+    return { name: L.catName(code), sizes: (p.sizes && p.sizes.length) ? p.sizes : null };
+  });
   res.renderPage('public/normativa', { brackets: L.PLAYTOMIC_BRACKETS,
     price1: eur(getSetting('inscription_price', '15')),
     price2: eur(getSetting('inscription_price_2', '25')),
-    priceShirt: eur(getSetting('shirt_price', '14.95')) });
+    priceShirt: eur(getSetting('shirt_price', '14.95')),
+    playoffCats });
 });
 
 // ---- Inscripción ----
