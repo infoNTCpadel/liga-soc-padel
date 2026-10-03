@@ -7,7 +7,7 @@
 <form method="post" action="/pareja/datos">
   <% players.forEach((pl, i) => { const n = i + 1; %>
   <div class="card">
-    <h3>Jugador <%= n %> <%= pl.id === pair.captain_id ? '<span class="badge info">capitán</span>' : '' %></h3>
+    <h3>Jugador <%= n %> <%- pl.id === pair.captain_id ? '<span class="badge info">capitán</span>' : '' %></h3>
     <div class="row2">
       <div class="field"><label>Nombre y apellidos *</label><input type="text" name="p<%= n %>_name" required value="<%= pl.name %>"></div>
       <div class="field"><label>Teléfono *</label><input type="tel" name="p<%= n %>_phone" required value="<%= pl.phone %>"></div>

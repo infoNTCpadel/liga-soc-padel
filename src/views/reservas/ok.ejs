@@ -5,7 +5,7 @@
   <table class="tbl">
     <tr><th>Jugador</th><th>Socio</th><th></th></tr>
     <% for (const p of b.players) { %>
-    <tr><td><%= p.name %></td><td><%= p.member_no || '—' %></td><td><%= p.is_guest ? '<span class="badge warn">Invitado</span>' : '' %></td></tr>
+    <tr><td><%= p.name %></td><td><%= p.member_no || '—' %></td><td><%- p.is_guest ? '<span class="badge warn">Invitado</span>' : '' %></td></tr>
     <% } %>
   </table>
   <% if (b.payment_status === 'pending') { %>

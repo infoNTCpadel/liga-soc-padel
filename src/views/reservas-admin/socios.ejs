@@ -26,7 +26,7 @@
       <td><strong><%= m.member_no %></strong></td><td><%= m.name %></td><td><%= m.phone || '—' %></td>
       <td><%= m.email || '—' %></td>
       <td><%= (m.level === null || m.level === undefined) ? '—' : m.level %></td>
-      <td><%= m.pin_hash ? '<span class="badge ok">sí</span>' : '<span class="mut">no</span>' %></td>
+      <td><%- m.pin_hash ? '<span class="badge ok">sí</span>' : '<span class="mut">no</span>' %></td>
       <td><%= m.active ? 'Activo' : 'Desactivado' %></td>
       <td><form method="post" action="/admin/reservas/socios/toggle" style="display:inline">
         <input type="hidden" name="member_no" value="<%= m.member_no %>">
