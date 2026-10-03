@@ -53,6 +53,22 @@ a.chip.open:hover{background:#d9f0e3}
 .chip.na{background:#faf9fd;color:#d5d2e2}
 .legend{display:flex;gap:1em;flex-wrap:wrap;margin:.7em 0;font-size:.85em;color:#6b6884}
 .legend i{display:inline-block;width:.9em;height:.9em;border-radius:3px;margin-right:.3em;vertical-align:-1px}
+/* Reserva rápida: confirmación en la propia parrilla (2 clics) */
+.qmodal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;display:flex;align-items:flex-end;justify-content:center}
+.qbox{background:var(--card);color:var(--txt);border:1px solid var(--line);border-radius:16px 16px 0 0;padding:1em 1.1em;width:100%;max-width:34em;max-height:92vh;overflow:auto}
+@media(min-width:720px){.qmodal{align-items:center;padding:1em}.qbox{border-radius:16px}}
+.qbox h3{margin:.1em 0 .3em;color:var(--txt)}
+.qbox .field{margin:.6em 0}
+.qbox label.fl{display:block;font-size:.85em;color:var(--mut);margin-bottom:.25em}
+.qcheck{display:flex;gap:.5em;align-items:flex-start;margin:.7em 0;font-size:.92em;color:var(--txt)}
+.qcheck input{margin-top:.2em}
+.prow{position:relative}
+.prow .psearch{width:100%;box-sizing:border-box}
+.plist{position:absolute;z-index:30;left:0;right:0;background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:8px;max-height:11em;overflow:auto;box-shadow:0 8px 20px rgba(0,0,0,.35)}
+.plist>div{padding:.45em .6em;cursor:pointer}
+.plist>div:hover{background:#2b351f}
+.pill{display:inline-block;background:#2b351f;border:1px solid var(--lime);color:var(--lime);border-radius:999px;padding:0 .55em;font-size:.85em;margin:.15em .3em .15em 0;cursor:pointer;font:inherit}
+.pill.inv{background:#3a2f14;border-color:var(--amber);color:var(--amber);cursor:default}
 <% if (staff) { %>
 /* Tema del personal: colores de la app (oscuro + lima) */
 .slotwrap{background:var(--card);border-color:var(--line)}
@@ -87,7 +103,7 @@ a.chip.free:hover{background:#2b351f;color:var(--lime)}
           const url = '/reservar/nueva?court=' + court.id + '&date=' + date + '&desde=' + row.slot + '&duracion=' + cell.duration;
           const href = staff ? staffBase + '/nueva?court=' + court.id + '&date=' + date + '&desde=' + row.slot + '&duracion=' + cell.duration
             : (member ? url : '/reservar/entrar?next=' + encodeURIComponent(url));
-      %><td><a class="chip free" href="<%= href %>" title="<%= cell.duration %> minutos"><%= staff ? 'Libre · ' + cell.duration + ' min' : court.name + ' · libre' %></a></td><%
+      %><td><a class="chip free" href="<%= href %>" data-cname="<%= court.name %>" data-qdate="<%= staff ? dateStr : date.slice(8,10) + '/' + date.slice(5,7) %>" data-start="<%= minToStr(row.slot) %>" data-end="<%= minToStr(row.slot + cell.duration) %>" title="<%= cell.duration %> minutos"><%= staff ? 'Libre · ' + cell.duration + ' min' : court.name + ' · libre' %></a></td><%
         } else if ((cell.st === 'open' || cell.st === 'busy') && staff && cell.booking && bmap[cell.booking.id]) {
           const b = bmap[cell.booking.id];
           const chips = cardChips(b);
@@ -130,7 +146,68 @@ a.chip.free:hover{background:#2b351f;color:var(--lime)}
   <span><i style="background:#f1f0f6"></i>Ocupada</span>
 <% } %>
 </div>
-<p class="hint"><%= staff ? 'Pulsa una franja libre para empezar la reserva en ese tramo. Pulsa una ocupada para ver el detalle en grande.' : 'Franjas de ' + config.durations.slice().sort((a,b) => b-a)[0] + ' minutos. Al pulsar una franja libre se reserva esa duración sin preguntar (si no cabe, se ofrece la siguiente).' %></p>
+<p class="hint"><%= staff ? 'Pulsa una franja libre para la reserva rápida (2 clics). Pulsa una ocupada para ver el detalle en grande.' : 'Franjas de ' + config.durations.slice().sort((a,b) => b-a)[0] + ' minutos. Al pulsar una franja libre se abre la confirmación rápida (2 clics).' %></p>
+<% if (!staff && member) { %>
+<div id="qModal" class="qmodal" style="display:none" role="dialog" aria-modal="true" aria-label="Confirmar reserva">
+  <div class="qbox">
+    <h3>Confirmar reserva</h3>
+    <p class="mut" id="qSummary" style="margin-top:0"></p>
+    <p style="font-size:.92em">Titular: <strong><%= member.name %></strong> <span class="mut">(socio <%= member.member_no %>)</span></p>
+    <label class="qcheck"><input type="checkbox" id="qOpen" checked> <span><strong>Partido abierto</strong><br><span class="mut" style="font-size:.85em">Si no añades jugadores, otros socios de tu nivel podrán apuntarse desde la parrilla.</span></span></label>
+    <form id="qForm" method="post" action="/reservar/rapida">
+      <input type="hidden" name="court_id" id="qCourt">
+      <input type="hidden" name="date" value="<%= date %>">
+      <input type="hidden" name="start_min" id="qStart">
+      <input type="hidden" name="duration_min" id="qDur">
+      <input type="hidden" name="abrir" id="qAbrir" value="1">
+      <div class="row2" style="align-items:center;margin-top:.6em">
+        <div><a href="#" id="qFull" class="mut" style="font-size:.85em">Añadir jugadores…</a></div>
+        <div style="text-align:right">
+          <button type="button" class="btn small ghost" id="qCancel">Cancelar</button>
+          <button type="submit" class="btn small">Confirmar reserva</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+<% } %>
+<% if (staff) { %>
+<div id="qModal" class="qmodal" style="display:none" role="dialog" aria-modal="true" aria-label="Reserva rápida">
+  <div class="qbox">
+    <h3>Reserva rápida</h3>
+    <p class="mut" id="qSummary" style="margin-top:0"></p>
+    <div class="field">
+      <label class="fl" for="qSearch">Titular</label>
+      <div class="prow">
+        <input type="text" id="qSearch" class="psearch" placeholder="Nombre, nº de socio o móvil…" autocomplete="off">
+        <div class="plist" id="qList" style="display:none"></div>
+        <div class="pinfo mut" id="qInfo" style="font-size:.85em"></div>
+      </div>
+      <% if (typeof recentTitulars !== 'undefined' && recentTitulars && recentTitulars.length) { %>
+      <div class="mut" style="font-size:.85em;margin-top:.35em">Recientes:
+        <% for (const t of recentTitulars) { %><button type="button" class="pill qrecent" data-no="<%= t.member_no %>" data-name="<%= t.name %>"><%= t.name %></button><% } %>
+      </div>
+      <% } %>
+    </div>
+    <label class="qcheck"><input type="checkbox" id="qOpen"> <span><strong>Partido abierto</strong><br><span class="mut" style="font-size:.85em">Publicar las plazas libres para que se apunten otros socios.</span></span></label>
+    <form id="qForm" method="post" action="<%= staffBase %>/rapida">
+      <input type="hidden" name="court_id" id="qCourt">
+      <input type="hidden" name="date" value="<%= date %>">
+      <input type="hidden" name="start_min" id="qStart">
+      <input type="hidden" name="duration_min" id="qDur">
+      <input type="hidden" name="titular_member_no" id="qTitular">
+      <input type="hidden" name="abrir" id="qAbrir" value="0">
+      <div class="row2" style="align-items:center;margin-top:.6em">
+        <div><a href="#" id="qFull" class="mut" style="font-size:.85em">Más opciones…</a></div>
+        <div style="text-align:right">
+          <button type="button" class="btn small ghost" id="qCancel">Cancelar</button>
+          <button type="submit" class="btn small" id="qGo">Confirmar reserva</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+<% } %>
 <% if (staff) { %>
 <div id="staffDetail" class="card" style="display:none;margin-top:1em"></div>
 <script>
@@ -214,3 +291,92 @@ a.chip.free:hover{background:#2b351f;color:var(--lime)}
 <% } %>
 
 <% if (!staff && typeof chatEnabled !== 'undefined' && chatEnabled) { %><%- include('chat-widget') %><% } %>
+<script>
+(function(){
+  var modal = document.getElementById('qModal');
+  if (!modal) return;
+  var isStaff = <%= staff ? 'true' : 'false' %>;
+  var qSummary = document.getElementById('qSummary'),
+      qForm = document.getElementById('qForm'),
+      qCourt = document.getElementById('qCourt'),
+      qStart = document.getElementById('qStart'),
+      qDur = document.getElementById('qDur'),
+      qAbrir = document.getElementById('qAbrir'),
+      qOpen = document.getElementById('qOpen'),
+      qFull = document.getElementById('qFull'),
+      qCancel = document.getElementById('qCancel');
+  function close(){ modal.style.display = 'none'; }
+  qCancel.addEventListener('click', close);
+  modal.addEventListener('click', function(e){ if (e.target === modal) close(); });
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') close(); });
+  qOpen.addEventListener('change', function(){ qAbrir.value = qOpen.checked ? '1' : '0'; });
+  if (isStaff) {
+    var qSearch = document.getElementById('qSearch'),
+        qList = document.getElementById('qList'),
+        qInfo = document.getElementById('qInfo'),
+        qTitular = document.getElementById('qTitular');
+    var searchBase = '<%= staff ? staffBase : "" %>/socios/buscar', timer = null;
+    function paint(){
+      var m = qTitular.value.trim();
+      qInfo.innerHTML = m ? '<span class="pill">Socio ' + m + '</span>' : '';
+    }
+    function pick(no, name){
+      qTitular.value = no; qSearch.value = name + ' (' + no + ')';
+      qList.style.display = 'none'; paint();
+    }
+    qSearch.addEventListener('input', function(){
+      qTitular.value = ''; paint();
+      clearTimeout(timer);
+      var q = qSearch.value.trim();
+      if (q.length < 2) { qList.style.display = 'none'; return; }
+      timer = setTimeout(function(){
+        fetch(searchBase + '?q=' + encodeURIComponent(q))
+          .then(function(r){ return r.json(); }).then(function(arr){
+            if (!arr.length) { qList.style.display = 'none'; return; }
+            qList.innerHTML = '';
+            arr.forEach(function(s){
+              var d = document.createElement('div');
+              d.textContent = s.name + ' · socio ' + s.member_no + (s.phone ? ' · ' + s.phone : '');
+              d.addEventListener('mousedown', function(){ pick(s.member_no, s.name); });
+              qList.appendChild(d);
+            });
+            qList.style.display = '';
+          })
+          .catch(function(){ qInfo.innerHTML = '<span class="pill inv">No se pudo buscar: recarga la página</span>'; });
+      }, 250);
+    });
+    qSearch.addEventListener('keydown', function(e){
+      if (e.key === 'Enter') {
+        var first = qList.querySelector('div');
+        if (first && qList.style.display !== 'none') { e.preventDefault(); first.dispatchEvent(new Event('mousedown')); }
+      }
+    });
+    qSearch.addEventListener('blur', function(){ setTimeout(function(){ qList.style.display = 'none'; }, 200); });
+    document.querySelectorAll('.qrecent').forEach(function(ch){
+      ch.addEventListener('click', function(){ pick(ch.dataset.no, ch.dataset.name); });
+    });
+    qForm.addEventListener('submit', function(e){
+      if (!qTitular.value.trim()) { e.preventDefault(); qSearch.focus(); qInfo.innerHTML = '<span class="pill inv">Elige el titular</span>'; }
+    });
+  }
+  document.querySelectorAll('a.chip.free').forEach(function(a){
+    a.addEventListener('click', function(e){
+      e.preventDefault();
+      var u = new URL(a.href, location.origin);
+      qCourt.value = u.searchParams.get('court');
+      qStart.value = u.searchParams.get('desde');
+      qDur.value = u.searchParams.get('duracion');
+      qSummary.textContent = a.dataset.cname + ' · ' + a.dataset.qdate + ' · ' + a.dataset.start + '–' + a.dataset.end + ' (' + u.searchParams.get('duracion') + ' min)';
+      qFull.href = a.href;
+      if (isStaff) {
+        document.getElementById('qSearch').value = '';
+        document.getElementById('qTitular').value = '';
+        document.getElementById('qInfo').innerHTML = '';
+        document.getElementById('qList').style.display = 'none';
+      }
+      modal.style.display = 'flex';
+      if (isStaff) setTimeout(function(){ document.getElementById('qSearch').focus(); }, 60);
+    });
+  });
+})();
+</script>

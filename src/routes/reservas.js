@@ -257,56 +257,45 @@ router.post('/nueva', requireMember, (req, res) => {
   };
   if (!court) return res.redirect('/reservar?date=' + date);
   const filled = players.filter(p => p.name).length;
-  // Si faltan jugadores y no viene de lista de espera: validar y preguntar si abrir el partido.
-  if (!offerRow && filled < 3) {
-    const verr = B.validateNewBooking({ court_id: court.id, date, start_min, duration_min, titular_member_no: member.member_no, players });
-    if (verr) return render(verr);
-    req.session.pendingOpen = {
-      mode: 'new', court_id: court.id, court_name: court.name, date, start_min, duration_min,
-      players, titular_email: (req.body.titular_email || '').trim(),
-      missing: 3 - filled,
-    };
-    return res.renderPage('reservas/abrir', {
-      error: null, mode: 'new', missing: 3 - filled,
-      level: member.level, levelRange: B.levelRangeText(member.level),
-      minToStr: B.minToStr, member,
-      when: B.minToStr(start_min) + '–' + B.minToStr(start_min + duration_min) + ' · ' + court.name,
-    });
-  }
-  const r = B.createBooking({
+  // Si faltan jugadores y no viene de lista de espera: se publica como partido
+  // abierto automáticamente (con aviso en la confirmación).
+  const autoOpen = !offerRow && filled < 3;
+  const r = B.quickBook({
     court_id: court.id, court_name: court.name, date, start_min, duration_min,
-    titular_member_no: member.member_no, players,
+    titular_member_no: member.member_no, players, open: autoOpen,
   });
   if (r.error) return render(r.error);
   const titularEmail = (req.body.titular_email || '').trim();
   if (titularEmail && titularEmail !== member.email) B.updateMemberContact(member.member_no, member.phone, titularEmail);
-  res.redirect('/reservar/ok?id=' + r.id);
+  res.redirect('/reservar/ok?id=' + r.id + (autoOpen ? '&abierto=1' : ''));
 });
 
-// Confirmación de partido abierto (al crear o al quitar un jugador).
+// Reserva exprés desde la parrilla: sin pasar por el formulario.
+// Abierta por defecto (el socio puede cerrarla o añadir jugadores en «Mis reservas»).
+router.post('/rapida', requireMember, (req, res) => {
+  const member = me(req);
+  const court = activeCourts().find(x => x.id === parseInt(req.body.court_id, 10));
+  const date = clampDate(validDate(req.body.date));
+  const fail = (msg) => res.redirect('/reservar?date=' + date + '&err=' + encodeURIComponent(msg));
+  if (!court) return fail('Pista no válida.');
+  const wantOpen = req.body.abrir !== '0';
+  const r = B.quickBook({
+    court_id: court.id, court_name: court.name, date,
+    start_min: parseInt(req.body.start_min, 10),
+    duration_min: parseInt(req.body.duration_min, 10),
+    titular_member_no: member.member_no, players: [], open: wantOpen,
+  });
+  if (r.error) return fail(r.error);
+  res.redirect('/reservar/ok?id=' + r.id + (wantOpen ? '&abierto=1' : ''));
+});
+
+// Confirmación de partido abierto al quitar un jugador de una reserva existente.
 router.post('/abrir/confirmar', requireMember, (req, res) => {
   const member = me(req);
   const pend = req.session.pendingOpen;
-  if (!pend) return res.redirect('/reservar');
+  if (!pend || pend.mode !== 'existing') return res.redirect('/reservar');
   delete req.session.pendingOpen;
   const wantOpen = req.body.abrir === '1';
-  if (pend.mode === 'new') {
-    const r = B.createBooking({
-      court_id: pend.court_id, court_name: pend.court_name, date: pend.date,
-      start_min: pend.start_min, duration_min: pend.duration_min,
-      titular_member_no: member.member_no, players: pend.players,
-      open_spots: wantOpen ? pend.missing : 0,
-    });
-    if (r.error) return res.renderPage('reservas/abrir', {
-      error: r.error, mode: 'new', missing: pend.missing,
-      level: member.level, levelRange: B.levelRangeText(member.level),
-      minToStr: B.minToStr, member, when: '',
-    });
-    if (pend.titular_email && pend.titular_email !== member.email)
-      B.updateMemberContact(member.member_no, member.phone, pend.titular_email);
-    return res.redirect('/reservar/ok?id=' + r.id);
-  }
-  // mode 'existing': quitar jugador de un partido cerrado
   const b = B.getBooking(pend.booking_id);
   if (!b || b.titular_member_no !== member.member_no) return res.redirect('/reservar/mis');
   B.setPlayers(b.id, member.member_no, pend.players);
@@ -384,7 +373,7 @@ router.get('/ok', requireMember, (req, res) => {
   const member = me(req);
   const b = B.getBooking(parseInt(req.query.id, 10));
   if (!b || (b.titular_member_no !== member.member_no && !req.session.admin)) return res.redirect('/reservar');
-  res.renderPage('reservas/ok', { b, config: B.getConfig(), minToStr: B.minToStr });
+  res.renderPage('reservas/ok', { b, config: B.getConfig(), minToStr: B.minToStr, abierto: req.query.abierto === '1' });
 });
 
 // ---- mis reservas ----

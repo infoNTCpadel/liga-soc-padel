@@ -90,7 +90,7 @@ router.get('/parrilla', (req, res) => {
     closed: !B.dayHours(date),
     member: null,
     staffMode: true,
-    info: null, error: null,
+    info: req.query.ok || null, error: req.query.error || null,
     ...B.staffGrid(date, {
       staffBase: '/recepcion/reservas', staffDay: '/recepcion/reservas', anularPrefix: '/recepcion/reservas/',
     }, courts),
@@ -116,6 +116,24 @@ router.get('/nueva', (req, res) => {
     d.seg = seg; d.starts = B.bookableStarts(seg.start, seg.end, date);
   }
   res.renderPage('reservas/staff-nueva', d);
+});
+router.post('/rapida', (req, res) => {
+  const courts = activeCourts();
+  const court = courts.find(x => x.id === parseInt(req.body.court_id, 10));
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(req.body.date || '') ? req.body.date : B.todayStr();
+  const back = '/recepcion/reservas/parrilla?date=' + date;
+  const fail = (msg) => res.redirect(back + '&error=' + encodeURIComponent(msg));
+  const tno = (req.body.titular_member_no || '').trim();
+  if (!court || !tno) return fail('Falta la pista o el titular.');
+  const wantOpen = req.body.abrir === '1';
+  const r = B.quickBook({
+    court_id: court.id, court_name: court.name, date,
+    start_min: parseInt(req.body.start_min, 10),
+    duration_min: parseInt(req.body.duration_min, 10),
+    titular_member_no: tno, players: [], open: wantOpen, byStaff: true,
+  });
+  if (r.error) return fail(r.error);
+  res.redirect(back + '&ok=' + encodeURIComponent('Reserva creada para ' + tno + '.'));
 });
 router.post('/nueva', (req, res) => {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(req.body.date || '') ? req.body.date : B.todayStr();

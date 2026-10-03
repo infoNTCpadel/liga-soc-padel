@@ -45,7 +45,8 @@ eq(B.dayHours(SAT), { open_min: 540, close_min: 840 }, 'sábado: horario propio 
 eq(B.dayHours(SUN), null, 'domingo: cerrado');
 eq(B.dayHours(CLOSED), null, 'fecha especial: cerrada');
 eq(B.dayHours(MON), { open_min: 540, close_min: 780 }, 'fecha especial pisa al día de la semana');
-eq(B.dayHours(dayStr(21)), { open_min: 540, close_min: 1320 }, 'día normal: horario general');
+const wedOff = ((3 - new Date().getDay() + 7) % 7) || 7; // próximo miércoles: día normal siempre
+eq(B.dayHours(dayStr(wedOff)), { open_min: 540, close_min: 1320 }, 'día normal: horario general');
 eq(B.freeSegments(1, SUN), [], 'domingo cerrado: sin tramos libres');
 eq(B.slotStarts(SUN), [], 'domingo cerrado: sin filas de parrilla');
 eq(B.slotStarts(SAT).map(B.minToStr), ['09:00', '10:15', '11:30', '12:45'], 'sábado: filas 09:00–12:45');

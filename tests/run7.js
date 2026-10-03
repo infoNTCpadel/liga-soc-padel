@@ -84,14 +84,13 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
   ok(r.statusCode === 200 && r.text.includes('Socio Uno') && r.text.includes('value="480"') && r.text.includes('75 minutos'), 'formulario con titular, franja e inicio y duración automática');
   r = await pub.req('POST', '/reservar/nueva', { court_id: '1', date: TOM, start_min: '480', duration_min: '60',
     p1_name: 'Socio Dos', p1_member: '1002', p2_name: 'Invitado X', p2_member: '9999', p3_name: '', p3_member: '', titular_email: 'uno@example.com' });
-  ok(r.statusCode === 200 && r.text.includes('¿Partido abierto?'), 'con un hueco pregunta si publicar abierto');
-  r = await pub.req('POST', '/reservar/abrir/confirmar', { abrir: '0' });
-  ok(r.statusCode === 302 && r.location.startsWith('/reservar/ok?id='), 'reserva creada (titular + 2 jugadores, cerrada)');
-  const bid = r.location.split('=')[1];
+  ok(r.statusCode === 302 && r.location.includes('/reservar/ok?id=') && r.location.includes('abierto=1'), 'con un hueco se publica abierto automáticamente');
+  const bid = r.location.split('=')[1].split('&')[0];
   const b1 = bbq('SELECT * FROM bookings WHERE id = ?', bid)[0];
   ok(b1.start_min === 480 && b1.end_min === 540 && b1.titular_member_no === '1001', 'reserva 08:00–09:00 del socio 1001');
   ok(bbq("SELECT COUNT(*) c FROM booking_players WHERE booking_id = ?", bid)[0].c === 3, '3 jugadores (titular + 2)');
   ok(b1.payment_status === 'pending', 'pago pendiente por el invitado');
+  ok(b1.open_spots === 1, 'abierto automático con 1 plaza libre');
   ok(bbq("SELECT email FROM club_members WHERE member_no = '1001'")[0].email === 'uno@example.com', 'email guardado en la ficha');
   r = await pub.req('POST', '/reservar/anular', { booking_id: bid });
   ok(r.statusCode === 200 && r.text.includes('Reserva anulada'), 'el socio anula su 1ª reserva (hace hueco en el tope de 2)');
@@ -101,23 +100,17 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
   // las 10:45 no son ni encadenadas ni de parrilla y se siguen rechazando.
   r = await pub.req('POST', '/reservar/nueva', { court_id: '1', date: TOM, start_min: '540', duration_min: '75',
     p1_name: '', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
-  ok(r.statusCode === 200 && r.text.includes('¿Partido abierto?'), 'incompleta: pregunta si abrirla');
-  r = await pub.req('POST', '/reservar/abrir/confirmar', { abrir: '0' });
-  ok(r.statusCode === 302, 'reserva 09:00–10:15 (incompleta, solo el titular)');
-  const bid2 = r.location.split('=')[1];
+  ok(r.statusCode === 302 && r.location.includes('abierto=1'), 'incompleta: se publica abierta automáticamente');
+  const bid2 = r.location.split('=')[1].split('&')[0];
   ok(bbq("SELECT COUNT(*) c FROM booking_players WHERE booking_id = ?", bid2)[0].c === 1, 'reserva incompleta: solo el titular');
   ok(bbq("SELECT payment_status FROM bookings WHERE id = ?", bid2)[0].payment_status === 'ok', 'sin invitados no hay pago pendiente');
+  ok(bbq("SELECT open_spots FROM bookings WHERE id = ?", bid2)[0].open_spots === 3, 'abierta con 3 plazas');
   r = await pub.req('POST', '/reservar/nueva', { court_id: '1', date: TOM, start_min: '645', duration_min: '60',
     p1_name: '', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
   ok(r.statusCode === 200 && r.text.includes('no encaja sin dejar huecos'), '10:45 se rechaza (ni encadena ni es parrilla)');
   r = await pub.req('POST', '/reservar/nueva', { court_id: '1', date: TOM, start_min: '630', duration_min: '60',
     p1_name: '', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
-  ok(r.statusCode === 200 && r.text.includes('¿Partido abierto?'), '10:30 (fila de la parrilla) se acepta');
-  r = await pub.req('POST', '/reservar/nueva', { court_id: '1', date: TOM, start_min: '675', duration_min: '60',
-    p1_name: '', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
-  ok(r.statusCode === 200 && r.text.includes('¿Partido abierto?'), '11:15 pregunta si abrirla');
-  r = await pub.req('POST', '/reservar/abrir/confirmar', { abrir: '0' });
-  ok(r.statusCode === 302, '11:15 sí se puede (queda 10:15–11:15 = 60 min, reservable)');
+  ok(r.statusCode === 302 && r.location.includes('abierto=1'), '10:30 (fila de la parrilla) se acepta y se abre sola');
 
   // 6. Completar jugadores después recalcula el pago
   r = await pub.req('POST', '/reservar/jugadores', { booking_id: bid2, p1_name: 'Invitado Y', p1_member: '8888', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
@@ -126,11 +119,11 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
   r = await pub.req('POST', '/reservar/jugadores', { booking_id: bid2, p1_name: 'Socio Dos', p1_member: '1002', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
   ok(bbq("SELECT payment_status FROM bookings WHERE id = ?", bid2)[0].payment_status === 'ok', 'al poner socio el pago vuelve a OK');
   // El tope es 2 reservas activas: anulamos las de 1001 para no interferir con los siguientes tests
-  const bid1115 = bbq("SELECT id FROM bookings WHERE titular_member_no = '1001' AND date = ? AND start_min = 675 AND status = 'active'", TOM)[0].id;
-  r = await pub.req('POST', '/reservar/anular', { booking_id: bid2 });
-  ok(r.statusCode === 200 && r.text.includes('Reserva anulada'), 'anula la reserva incompleta');
-  r = await pub.req('POST', '/reservar/anular', { booking_id: bid1115 });
-  ok(r.statusCode === 200 && r.text.includes('Reserva anulada'), 'anula la de las 11:15');
+  const toCancel = bbq("SELECT id FROM bookings WHERE titular_member_no = '1001' AND date = ? AND status = 'active'", TOM);
+  for (const row of toCancel) {
+    r = await pub.req('POST', '/reservar/anular', { booking_id: row.id });
+    ok(r.statusCode === 200 && r.text.includes('Reserva anulada'), 'anula reserva de 1001 (' + row.id + ')');
+  }
 
   // 7. Lista de espera con hora + duración (en la pista 2, sin interferencias)
   const pub2 = makeClient(), pubW = makeClient();
@@ -138,8 +131,8 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
   await pubW.req('POST', '/reservar/activar', { member_no: '1003', phone: '600777888', pin: '4321', pin2: '4321' });
   r = await pub2.req('POST', '/reservar/nueva', { court_id: '2', date: TOM, start_min: '480', duration_min: '75',
     p1_name: '', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
-  r = await pub2.req('POST', '/reservar/abrir/confirmar', { abrir: '0' });
-  const bidW = r.location.split('=')[1];
+  ok(r.statusCode === 302 && r.location.includes('/reservar/ok?id='), '1002 reserva 08:00 (se abre sola)');
+  const bidW = r.location.split('=')[1].split('&')[0];
   r = await pubW.req('POST', '/reservar/espera', { court_id: '2', date: TOM, start_min: '480', duration_min: '75' });
   ok(r.statusCode === 302 && r.location.includes('ok=1'), 'apuntado a la lista de espera (08:00, 75 min)');
   await pub2.req('POST', '/reservar/anular', { booking_id: bidW });
@@ -157,8 +150,8 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
   // 8. Bloqueo por rango de fechas con conflicto
   r = await pub.req('POST', '/reservar/nueva', { court_id: '2', date: D4, start_min: '600', duration_min: '75',
     p1_name: '', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
-  r = await pub.req('POST', '/reservar/abrir/confirmar', { abrir: '0' });
-  const bid4 = r.location.split('=')[1];
+  ok(r.statusCode === 302 && r.location.includes('/reservar/ok?id='), 'reserva en D4 para probar el bloqueo');
+  const bid4 = r.location.split('=')[1].split('&')[0];
   r = await admin.req('POST', '/admin/reservas/bloqueos', { court_id: '2', date_from: D3, date_to: D5, start: '09:00', end: '14:00', reason: 'torneo', notes: 'prueba' });
   ok(r.statusCode === 200 && r.text.includes('afectadas'), 'bloqueo 3–5 con reserva afectada pide confirmación');
   r = await admin.req('POST', '/admin/reservas/bloqueos', { court_id: '2', date_from: D3, date_to: D5, start: '09:00', end: '14:00', reason: 'torneo', notes: 'prueba', force: '1' });
@@ -169,7 +162,6 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
   ok(r.text.includes('Pista 2 · ocupada'), 'la parrilla muestra la pista bloqueada como ocupada');
   r = await pub.req('POST', '/reservar/nueva', { court_id: '2', date: D4, start_min: '840', duration_min: '60',
     p1_name: '', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
-  r = await pub.req('POST', '/reservar/abrir/confirmar', { abrir: '0' });
   ok(r.statusCode === 302, 'a las 14:00 (fin del bloqueo) sí se puede reservar');
 
   // 9. El personal crea reservas y completa jugadores
@@ -251,14 +243,11 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
   r = await anon.req('GET', '/reservar/socios/buscar?q=6007');
   ok(r.statusCode === 302, 'el buscador exige login');
 
-  // 1001 reserva con 1 acompañante → se pregunta si abrirlo
+  // 1001 reserva con 1 acompañante → se publica abierto automáticamente
   r = await pub.req('POST', '/reservar/nueva', { court_id: '1', date: D7, start_min: '480', duration_min: '75',
     p1_name: 'Socio Tres', p1_member: '1003', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
-  ok(r.statusCode === 200 && r.text.includes('¿Partido abierto?'), 'con huecos se pregunta si publicar abierto');
-  ok(r.text.includes('2.5–4.5'), 'se muestra el rango de nivel del titular (3.5 ±1)');
-  r = await pub.req('POST', '/reservar/abrir/confirmar', { abrir: '1' });
-  ok(r.statusCode === 302 && r.location.startsWith('/reservar/ok?id='), 'publicar abierto redirige a ok');
-  const bidO = r.location.split('=')[1];
+  ok(r.statusCode === 302 && r.location.includes('/reservar/ok?id=') && r.location.includes('abierto=1'), 'con huecos se publica abierto automáticamente');
+  const bidO = r.location.split('=')[1].split('&')[0];
   ok(bbq('SELECT open_spots FROM bookings WHERE id = ?', bidO)[0].open_spots === 2, 'abierto con 2 plazas');
 
   r = await pubW.req('GET', '/reservar?date=' + D7);
@@ -296,9 +285,8 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
   ok(bbq("SELECT COUNT(*) c FROM member_blocks WHERE blocker_member_no = '1001'")[0].c === 1, 'bloqueo guardado');
   r = await pub.req('POST', '/reservar/nueva', { court_id: '2', date: D7, start_min: '600', duration_min: '75',
     p1_name: '', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
-  ok(r.statusCode === 200 && r.text.includes('¿Partido abierto?'), 'segundo abierto: pregunta');
-  r = await pub.req('POST', '/reservar/abrir/confirmar', { abrir: '1' });
-  const bidO2 = r.location.split('=')[1];
+  ok(r.statusCode === 302 && r.location.includes('abierto=1'), 'segundo abierto: automático');
+  const bidO2 = r.location.split('=')[1].split('&')[0];
   ok(bbq('SELECT open_spots FROM bookings WHERE id = ?', bidO2)[0].open_spots === 3, 'abierto con 3 plazas');
   r = await pub4.req('GET', '/reservar?date=' + D7);
   ok(!r.text.includes('plazas'), '1004 bloqueado no ve el abierto de 1001');
@@ -330,9 +318,8 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
   ok(!!startG, 'formulario ofrece inicios válidos tras el abierto');
   r = await pub2.req('POST', '/reservar/nueva', { court_id: '2', date: D7, start_min: startG, duration_min: '60',
     p1_name: 'Pepe Invitado', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
-  ok(r.statusCode === 200 && r.text.includes('¿Partido abierto?'), 'con invitado y huecos también pregunta');
-  r = await pub2.req('POST', '/reservar/abrir/confirmar', { abrir: '0' });
-  const bidG = r.location.split('=')[1];
+  ok(r.statusCode === 302 && r.location.includes('abierto=1'), 'con invitado y huecos se abre automáticamente');
+  const bidG = r.location.split('=')[1].split('&')[0];
   ok(bbq('SELECT payment_status FROM bookings WHERE id = ?', bidG)[0].payment_status === 'pending', 'invitado con nombre libre → pago pendiente');
 
   // El titular puede cerrar su abierto; el personal crea abiertos

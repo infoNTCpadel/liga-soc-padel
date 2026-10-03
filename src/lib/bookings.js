@@ -579,6 +579,26 @@ function createBooking({ court_id, court_name, date, start_min, duration_min, ti
   return { id, payment_status: st };
 }
 
+// Reserva exprés: valida y crea con los jugadores dados (puede ser ninguno).
+// Si open, las plazas libres son las que falten hasta 4.
+function quickBook({ court_id, court_name, date, start_min, duration_min, titular_member_no, players = [], open = true, byStaff = false }) {
+  const err = validateNewBooking({ court_id, date, start_min, duration_min, titular_member_no, players, byStaff });
+  if (err) return { error: err };
+  const filled = players.filter(p => p.name).length;
+  return createBooking({
+    court_id, court_name, date, start_min, duration_min, titular_member_no, players,
+    open_spots: open ? Math.max(0, 3 - filled) : 0, byStaff,
+  });
+}
+
+// Últimos titulares distintos (para el selector rápido del personal).
+function recentTitulars(limit = 6) {
+  return bdb.prepare(
+    `SELECT titular_member_no AS member_no, titular_name AS name, MAX(created_at) AS last
+     FROM bookings WHERE status = 'active' AND titular_member_no <> ''
+     GROUP BY titular_member_no ORDER BY last DESC LIMIT ?`).all(limit);
+}
+
 function getBooking(id) {
   const b = bdb.prepare('SELECT * FROM bookings WHERE id = ?').get(id);
   if (!b) return null;
@@ -1082,6 +1102,7 @@ function staffGrid(date, urls, courts) {
       players: (b.players || []).map(p => ({ name: p.name, member_no: p.member_no })),
     }))),
     levelsJson: safeJson(levels),
+    recentTitulars: recentTitulars(6),
     staffBase: urls.staffBase, staffDay: urls.staffDay, anularPrefix: urls.anularPrefix,
   };
 }
@@ -1093,7 +1114,7 @@ module.exports = {
   dayBookings, dayBlocks, freeSegments, reachableSet, validStarts,
   isBookable, isPotentiallyValid, gridFor,
   validateNewBooking, activeBookingCount, normalizePlayers, setPlayers, recomputePayment,
-  createBooking, getBooking, cancelBooking,
+  createBooking, getBooking, cancelBooking, quickBook, recentTitulars,
   searchMembers, validLevel, setLevel, fmtLevel, levelRangeText,
   addBlock, removeBlock, getBlocks, isBlockedBy, openVisibleTo,
   joinOpenMatch, syncOpenSpots, closeOpenMatch,

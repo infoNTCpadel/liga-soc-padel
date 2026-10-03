@@ -1,4 +1,7 @@
 <h1>Reserva confirmada</h1>
+<% if (typeof abierto !== 'undefined' && abierto) { %>
+<div class="alert ok">Se ha publicado como <strong>partido abierto</strong>: otros socios de tu nivel podrán apuntarse desde la parrilla. Puedes añadir jugadores desde «Mis reservas».</div>
+<% } %>
 <div class="card">
   <p><strong><%= b.court_name %></strong> · <%= b.date.slice(8,10) %>/<%= b.date.slice(5,7) %>/<%= b.date.slice(0,4) %> · <%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %></p>
   <p class="mut">Titular: <%= b.titular_name %> (socio <%= b.titular_member_no %>)</p>
