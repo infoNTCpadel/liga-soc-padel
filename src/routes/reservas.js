@@ -73,7 +73,8 @@ router.post('/entrar', (req, res) => {
       const lm2 = B.getMember(no);
       const bk2 = bb && B.getMember(bb.titular_member_no);
       const vis = bb && bb.status === 'active' && B.openVisibleTo(bb.titular_member_no, bk2 && bk2.level, { member_no: no, level: lm2.level });
-      return res.redirect((vis ? '/reservar/abierto/' + bb.id : '/reservar?date=' + (bb ? bb.date : '')) + '?err=' + encodeURIComponent(msg));
+      const base = vis ? '/reservar/abierto/' + bb.id : '/reservar?date=' + (bb ? bb.date : '');
+      return res.redirect(base + (base.includes('?') ? '&err=' : '?err=') + encodeURIComponent(msg));
     };
     const b = B.getBooking(bid);
     if (!b || b.status !== 'active' || !(b.open_spots > 0)) return fail('Ese partido ya no está disponible.');
@@ -82,7 +83,8 @@ router.post('/entrar', (req, res) => {
     if (!B.openVisibleTo(b.titular_member_no, booker && booker.level, { member_no: no, level: lm.level })) {
       const mine = lm.level != null ? ' (tu nivel es ' + B.fmtLevel(lm.level) + ')' : '';
       const theirs = booker && booker.level != null ? ' (este partido es de nivel ' + B.levelRangeText(booker.level) + ')' : '';
-      return fail('No puedes apuntarte a este partido' + mine + theirs + '.');
+      // Va al detalle en vista restringida: aviso + titular visible, sin el resto de jugadores.
+      return res.redirect('/reservar/abierto/' + b.id + '?err=' + encodeURIComponent('No te has apuntado a este partido' + mine + theirs + '.'));
     }
     const r = B.joinOpenMatch(b.id, lm);
     if (r.error) return fail(r.error);
@@ -340,11 +342,14 @@ router.get('/abierto/:id', (req, res) => {
   if (!b || b.status !== 'active' || !(b.open_spots > 0)) return res.redirect('/reservar');
   const booker = B.getMember(b.titular_member_no);
   const mine = member && b.titular_member_no === member.member_no;
-  if (!mine && !B.openVisibleTo(b.titular_member_no, booker && booker.level, viewer))
-    return res.redirect('/reservar');
+  const visible = mine || B.openVisibleTo(b.titular_member_no, booker && booker.level, viewer);
+  // Socio logueado que viene de intentar apuntarse (err) con nivel que no encaja:
+  // vista restringida con el aviso y el titular visible, sin el resto de jugadores.
+  const restricted = member && !visible && req.query.err;
+  if (!visible && !restricted) return res.redirect('/reservar');
   const already = member && b.players.some(p => p.member_no === member.member_no);
   res.renderPage('reservas/abierto', {
-    b, booker, mine, already, member,
+    b, booker, mine, already, member, restricted: !!restricted,
     range: B.levelRangeText(booker && booker.level),
     minToStr: B.minToStr, error: req.query.err || null,
   });

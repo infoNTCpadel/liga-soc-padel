@@ -132,11 +132,20 @@ srv.on('error', e => { console.log('FALLO: no arranca', e.message); process.exit
   h = await c2.req('POST', '/reservar/entrar', { member_no: '402', pin: '2222', next: '/reservar/abierto/' + openId, join: '1' });
   ok(h.statusCode === 302 && h.location.startsWith('/reservar/mis?ok='), 'login compatible → redirige a Mis reservas con ok (' + h.location.slice(0, 40) + ')');
   ok(!!joined(openId, '402'), 'login compatible → queda apuntado en la BD');
-  // 8c. nivel incompatible → mensaje claro, sin apuntar
+  // 8c. nivel incompatible → aviso claro + vista restringida con el titular
   const c3 = makeClient();
   h = await c3.req('POST', '/reservar/entrar', { member_no: '403', pin: '3333', next: '/reservar/abierto/' + openId, join: '1' });
-  ok(h.statusCode === 302 && h.location.includes('err=') && decodeURIComponent(h.location).includes('nivel'), 'login incompatible → err con mensaje de nivel (' + decodeURIComponent(h.location).slice(0, 80) + ')');
+  const loc = decodeURIComponent(h.location);
+  ok(h.statusCode === 302 && h.location === '/reservar/abierto/' + openId + '?err=' + encodeURIComponent('No te has apuntado a este partido (tu nivel es 7) (este partido es de nivel 2–4).'),
+    'login incompatible → detalle con err de nivel, URL bien formada (' + loc.slice(0, 90) + ')');
   ok(!joined(openId, '403'), 'login incompatible → NO queda apuntado');
+  h = await c3.req('GET', '/reservar/abierto/' + openId + '?err=prueba');
+  ok(h.statusCode === 200 && h.text.includes('Titular:') && h.text.includes('Titu Lar'), 'vista restringida: muestra el titular');
+  ok(!h.text.includes('<h4>Jugadores</h4>') && !h.text.includes('Apuntarme'), 'vista restringida: sin lista de jugadores ni botón de unirse');
+  const c3b = makeClient();
+  await c3b.req('POST', '/reservar/entrar', { member_no: '403', pin: '3333' });
+  h = await c3b.req('GET', '/reservar/abierto/' + openId);
+  ok(h.statusCode === 302 && h.location === '/reservar', 'sin err: el nivel incompatible sigue sin ver el detalle');
   // 8d. el socio abre su cerrada incompleta
   const c1 = makeClient();
   await c1.req('POST', '/reservar/entrar', { member_no: '401', pin: '1111' });
