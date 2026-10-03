@@ -108,9 +108,12 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
   r = await pub.req('POST', '/reservar/nueva', { court_id: '1', date: TOM, start_min: '645', duration_min: '60',
     p1_name: '', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
   ok(r.statusCode === 200 && r.text.includes('no encaja sin dejar huecos'), '10:45 se rechaza (ni encadena ni es parrilla)');
-  r = await pub.req('POST', '/reservar/nueva', { court_id: '1', date: TOM, start_min: '630', duration_min: '60',
+  r = await pub.req('POST', '/reservar/nueva', { court_id: '1', date: D3, start_min: '630', duration_min: '60',
     p1_name: '', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
   ok(r.statusCode === 302 && r.location.includes('abierto=1'), '10:30 (fila de la parrilla) se acepta y se abre sola');
+  const bid230 = r.location.split('=')[1].split('&')[0];
+  r = await pub.req('POST', '/reservar/anular', { booking_id: bid230 });
+  ok(r.statusCode === 200 && r.text.includes('Reserva anulada'), 'se anula la de las 10:30 para no interferir (regla 1/día)');
 
   // 6. Completar jugadores después recalcula el pago
   r = await pub.req('POST', '/reservar/jugadores', { booking_id: bid2, p1_name: 'Invitado Y', p1_member: '8888', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
@@ -159,7 +162,7 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
   ok(bbq('SELECT status FROM bookings WHERE id = ?', bid4)[0].status === 'cancelled', 'la reserva afectada queda anulada');
   ok(bbq("SELECT COUNT(*) c FROM court_blocks WHERE date_from = ? AND date_to = ?", D3, D5)[0].c === 1, 'bloqueo guardado con rango');
   r = await anon.req('GET', '/reservar?date=' + D4);
-  ok(r.text.includes('Pista 2 · ocupada'), 'la parrilla muestra la pista bloqueada como ocupada');
+  ok(r.text.includes('Prueba'), 'la parrilla muestra el motivo del bloqueo en la pista');
   r = await pub.req('POST', '/reservar/nueva', { court_id: '2', date: D4, start_min: '840', duration_min: '60',
     p1_name: '', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
   ok(r.statusCode === 302, 'a las 14:00 (fin del bloqueo) sí se puede reservar');
@@ -251,7 +254,7 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
   ok(bbq('SELECT open_spots FROM bookings WHERE id = ?', bidO)[0].open_spots === 2, 'abierto con 2 plazas');
 
   r = await pubW.req('GET', '/reservar?date=' + D7);
-  ok(r.text.includes('2 plazas'), '1003 (nivel 3.0) ve el abierto en la parrilla');
+  ok(r.text.includes('Apuntado'), '1003 (nivel 3.0) ve el abierto en la parrilla (está apuntado)');
   r = await pub2.req('GET', '/reservar?date=' + D7);
   ok(!r.text.includes('plazas') && r.text.includes('ocupada'), '1002 (nivel 5.5) lo ve como ocupada');
   r = await anon.req('GET', '/reservar?date=' + D7);
@@ -302,6 +305,7 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
 
   // Quitar un jugador de un partido cerrado pregunta si abrirlo
   const D8 = dayStr(8);
+  const D9 = dayStr(9);
   r = await pub.req('POST', '/reservar/nueva', { court_id: '1', date: D8, start_min: '480', duration_min: '75',
     p1_name: 'Socio Dos', p1_member: '1002', p2_name: 'Socio Tres', p2_member: '1003', p3_name: 'Socio Cuatro', p3_member: '1004' });
   ok(r.statusCode === 302 && r.location.startsWith('/reservar/ok?id='), 'cerrado con los 4: sin preguntas');
@@ -312,11 +316,12 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
   ok(r.statusCode === 302, 'responde que no → sigue cerrado');
   ok(bbq('SELECT open_spots FROM bookings WHERE id = ?', bidC)[0].open_spots === 0, 'sigue cerrado incompleto');
 
-  // Invitado con nombre libre → pago pendiente (elige inicio válido del formulario)
-  r = await pub2.req('GET', '/reservar/nueva?court=2&date=' + D7 + '&desde=680');
+  // Invitado con nombre libre → pago pendiente (elige inicio válido del formulario).
+  // En D9 porque 1002 ya juega en D7 y D8 (regla 1/día).
+  r = await pub2.req('GET', '/reservar/nueva?court=2&date=' + D9 + '&desde=680');
   const startG = (r.text.match(/<option value="(\d+)" data-d/) || [])[1];
   ok(!!startG, 'formulario ofrece inicios válidos tras el abierto');
-  r = await pub2.req('POST', '/reservar/nueva', { court_id: '2', date: D7, start_min: startG, duration_min: '60',
+  r = await pub2.req('POST', '/reservar/nueva', { court_id: '2', date: D9, start_min: startG, duration_min: '60',
     p1_name: 'Pepe Invitado', p1_member: '', p2_name: '', p2_member: '', p3_name: '', p3_member: '' });
   ok(r.statusCode === 302 && r.location.includes('abierto=1'), 'con invitado y huecos se abre automáticamente');
   const bidG = r.location.split('=')[1].split('&')[0];

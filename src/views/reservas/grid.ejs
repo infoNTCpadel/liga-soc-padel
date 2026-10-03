@@ -52,6 +52,8 @@ a.chip.free:hover{background:#e9e3ff}
 a.chip.open:hover{background:#d9f0e3}
 .chip.mine{border:1.5px solid var(--lime);color:#111;background:var(--lime)}
 a.chip.mine:hover{filter:brightness(1.08)}
+.chip.joined{border:1.5px solid #0e7c5b;color:#0b5c44;background:#d7f3e8}
+a.chip.joined:hover{background:#c4ecdc}
 .chip.na{background:#faf9fd;color:#d5d2e2}
 .legend{display:flex;gap:1em;flex-wrap:wrap;margin:.7em 0;font-size:.85em;color:#6b6884}
 .legend i{display:inline-block;width:.9em;height:.9em;border-radius:3px;margin-right:.3em;vertical-align:-1px}
@@ -116,17 +118,28 @@ a.chip.free:hover{background:#2b351f;color:var(--lime)}
         <span class="rtime"><%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %> · <%= b.players.length %>/4<% if (b.payment_status === 'pending') { %> <span class="ppend" title="Pago pendiente">●</span><% } %></span>
       </button></td><%
         } else if (cell.st === 'blocked' && staff) {
-          const breason = (cell.block && cell.block.reason) || 'Bloqueo';
-      %><td><span class="chip busy" style="border-color:#9aa88f;background:#9aa88f1f;cursor:default" title="<%= breason %>">Bloqueo</span></td><%
+          const bl = cell.block || {};
+          const bcol = bl.color || '#9aa88f';
+          const blabel = String(bl.notes || bl.reason || 'Bloqueo');
+          const blabel20 = (blabel.charAt(0).toUpperCase() + blabel.slice(1)).slice(0, 20);
+      %><td><span class="chip busy" style="border-color:<%= bcol %>;background:<%= bcol %>1f;cursor:default" title="Bloqueo: <%= blabel %>"><%= blabel20 %></span></td><%
         } else if (!staff && member && cell.booking && cell.booking.titular_member_no === member.member_no) {
           const mine = cell.booking;
           const mhref = mine.open_spots > 0 ? '/reservar/abierto/' + mine.id : '/reservar/mis';
           const mlabel = mine.open_spots > 0 ? 'Mi partido abierto' : 'Mi reserva';
       %><td><a class="chip mine" href="<%= mhref %>" title="<%= mlabel %> · <%= minToStr(mine.start_min) %>–<%= minToStr(mine.end_min) %>"><%= mlabel %> · <%= minToStr(mine.start_min) %>–<%= minToStr(mine.end_min) %></a></td><%
+        } else if (!staff && member && cell.booking && joinedIds.has(cell.booking.id)) {
+          const jb = cell.booking;
+      %><td><a class="chip joined" href="/reservar/mis?tab=partidos" title="Estás apuntado a este partido">✓ Apuntado · <%= minToStr(jb.start_min) %>–<%= minToStr(jb.end_min) %></a></td><%
         } else if (cell.st === 'open') {
           const openHref = staff ? staffDay + '?date=' + date : '/reservar/abierto/' + cell.booking.id;
       %><td><a class="chip open" href="<%= openHref %>"><%= court.name %> · <%= cell.booking.open_spots %> <%= cell.booking.open_spots === 1 ? 'plaza' : 'plazas' %><%= cell.range ? ' · ' + cell.range : '' %></a></td><%
-        } else if (cell.st === 'busy' || cell.st === 'blocked') {
+        } else if (cell.st === 'blocked') {
+          const bl2 = cell.block || {};
+          const blabel2 = String(bl2.notes || bl2.reason || 'Bloqueo');
+          const blabel20b = (blabel2.charAt(0).toUpperCase() + blabel2.slice(1)).slice(0, 20);
+      %><td><span class="chip busy" title="Bloqueo: <%= blabel2 %>"><%= blabel20b %></span></td><%
+        } else if (cell.st === 'busy') {
       %><td><span class="chip busy"><%= court.name %> · ocupada</span></td><%
         } else if (cell.st === 'past') {
       %><td><span class="chip na" title="Franja pasada"><%= minToStr(row.slot) %></span></td><%
@@ -151,6 +164,7 @@ a.chip.free:hover{background:#2b351f;color:var(--lime)}
   <span><i style="background:#f1f0f6"></i>Ocupada</span>
 <% if (member) { %>
   <span><i style="background:var(--lime);border:1.5px solid var(--lime)"></i>Mi reserva</span>
+  <span><i style="background:#d7f3e8;border:1.5px solid #0e7c5b"></i>Apuntado</span>
 <% } %>
 <% } %>
 </div>

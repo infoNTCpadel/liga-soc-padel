@@ -47,6 +47,8 @@ B.upsertMember('7', 'Siete Pruebas', '600000007');
 B.setPin('7', '1234');
 B.upsertMember('8', 'Ocho Pruebas', '600000008');
 B.setPin('8', '5678');
+B.upsertMember('9', 'Nueve Pruebas', '600000009');
+B.setPin('9', '9999');
 
 // ---- 1. sin clave no hay chat y no se llama al LLM ----
 delete process.env.LLM_API_KEY; delete process.env.OPENROUTER_API_KEY;
@@ -226,8 +228,9 @@ process.env.LLM_API_KEY = 'test-key';
 }
 
 // ---- 12. el borrador sobrevive entre turnos: "sí" confirma sin repreparar ----
+// (socio 9: sin nada en D2, porque el 8 ya juega ese día y rige 1/día)
 {
-  const session = { bookingMemberNo: '8' };
+  const session = { bookingMemberNo: '9' };
   const seg = B.freeSegments(2, D2).find(g => g.end - g.start >= 150) || B.freeSegments(2, D2)[0];
   const inicio = hhmm(seg.start);
   // Turno 1: el modelo prepara el borrador y pide confirmación
@@ -240,7 +243,7 @@ process.env.LLM_API_KEY = 'test-key';
   });
   ok(session.pendingDraft && session.pendingDraft.draft_id, 'tras preparar, la sesión guarda el borrador pendiente');
   ok(r.reply.includes('¿Confirmo?'), 'el agente pide confirmación tras preparar');
-  const before = B.dayBookings(D2).filter(b => b.titular_member_no === '8').length;
+  const before = B.dayBookings(D2).filter(b => b.titular_member_no === '9').length;
   // Turno 2: el "sí" del socio. El LLM simulado solo sabe lo que runChat le pasa,
   // como un modelo real: extrae el draft_id de la nota del sistema.
   r = await Chat.runChat({
@@ -256,7 +259,7 @@ process.env.LLM_API_KEY = 'test-key';
       say('Reserva confirmada.'),
     ]),
   });
-  const after = B.dayBookings(D2).filter(b => b.titular_member_no === '8').length;
+  const after = B.dayBookings(D2).filter(b => b.titular_member_no === '9').length;
   ok(after === before + 1, 'decir "sí" confirma el borrador sin repreparar');
   ok(!session.pendingDraft, 'tras confirmar se limpia el borrador pendiente');
   ok(r.reply.includes('confirmada'), 'el agente confirma la reserva al socio');
@@ -296,7 +299,7 @@ process.env.LLM_API_KEY = 'test-key';
   const session = { bookingMemberNo: '8' };
   // Reserva en D2: lejos del límite -> anulable
   const seg = B.freeSegments(1, D2).find(g => g.end - g.start >= 60);
-  const bk = B.createBooking({ court_id: 1, court_name: 'Pista 1', date: D2, start_min: seg.start, duration_min: 60, titular_member_no: '8', players: [] });
+  const bk = B.createBooking({ court_id: 1, court_name: 'Pista 1', date: D2, start_min: seg.start, duration_min: 60, titular_member_no: '8', players: [], byStaff: true });
   ok(bk.id, 'reserva futura de prueba creada');
   let seen = null;
   await Chat.runChat({

@@ -1,7 +1,7 @@
 <h1>Mis reservas</h1>
 <p class="mut">Sesión de <strong><%= member.name %></strong> (socio <%= member.member_no %>) · <a href="/reservar/datos">Mis datos</a> · <a href="/reservar/salir">Salir</a></p>
 
-<% if (typeof info !== 'undefined' && info) { %><div class="alert ok"><%= info %></div><% } %>
+<% if (info) { %><div class="alert ok"><%= info %></div><% } %>
 <% if (error) { %><div class="alert error"><%= error %></div><% } %>
 
 <% if (area.offers.length) { %>
@@ -23,50 +23,97 @@
 </div>
 <% } %>
 
+<style>
+.mtabs{display:flex;gap:.4em;margin:.9em 0;flex-wrap:wrap}
+.mtabs a{padding:.45em 1em;border:1px solid #ddd;border-radius:999px;text-decoration:none;color:#333;font-size:.9em;background:#fff}
+.mtabs a.on{background:#111;color:#fff;border-color:#111}
+.mrow{display:flex;justify-content:space-between;align-items:center;gap:.6em;padding:.55em 0;border-top:1px solid #eee;flex-wrap:wrap}
+.mrow .mline{font-size:.93em}
+.mrow .macts{display:flex;gap:.35em;align-items:center;flex-wrap:wrap}
+.prow{position:relative}
+.prow .plist{position:absolute;z-index:30;left:0;right:0;background:#fff;color:#111;border:1px solid #ddd;border-radius:8px;max-height:11em;overflow:auto;box-shadow:0 8px 20px rgba(0,0,0,.15)}
+.prow .plist>div{padding:.45em .6em;cursor:pointer}
+.prow .plist>div:hover{background:#f0f7e0}
+.pill{display:inline-block;background:#eef6df;border:1px solid #8db33f;color:#4a6b1a;border-radius:999px;padding:0 .55em;font-size:.85em;margin-left:.3em}
+.pill.inv{background:#fdf3e3;border-color:#d9a441;color:#8a5d14}
+</style>
+<div class="mtabs">
+  <a href="/reservar/mis?tab=pendientes" class="<%= tab === 'pendientes' ? 'on' : '' %>">Reservas pendientes (<%= area.bookings.length %>)</a>
+  <a href="/reservar/mis?tab=partidos" class="<%= tab === 'partidos' ? 'on' : '' %>">Partidos (<%= area.partidos.length %>)</a>
+  <a href="/reservar/mis?tab=historial" class="<%= tab === 'historial' ? 'on' : '' %>">Historial</a>
+</div>
+
 <div class="card">
-  <h3>Próximas reservas</h3>
+<% if (tab === 'pendientes') { %>
   <% if (!area.bookings.length) { %><p class="mut">No tienes reservas próximas.</p><% } %>
   <% for (const b of area.bookings) { %>
-  <div style="border-top:1px solid #eee;padding:.7em 0">
-    <p><strong><%= b.court_name %></strong> · <%= b.date.slice(8,10) %>/<%= b.date.slice(5,7) %>/<%= b.date.slice(0,4) %> · <%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %>
-      <% if (b.payment_status === 'pending') { %><span class="badge warn">Invitados: pagar en recepción</span><% } else { %><span class="badge ok">Todo OK</span><% } %>
-      <% if (b.open_spots > 0) { %><span class="badge" style="background:#e9f7ef;color:#146c39">Abierto · <%= b.open_spots %> <%= b.open_spots === 1 ? 'plaza' : 'plazas' %></span><% } %>
-      <% if (b.ya_jugada) { %><span class="badge" style="background:#f0f0f0;color:#666">Ya jugada</span><% } %></p>
-    <p class="mut">Jugadores: <%= b.players.map(p => p.name + (p.is_guest ? ' (inv.)' : '')).join(' · ') %></p>
-    <% if (!b.ya_jugada) { %>
-    <% if (b.open_spots > 0) { %>
-    <p><a class="btn small ghost" href="/reservar/abierto/<%= b.id %>">Ver partido</a>
-      <form method="post" action="/reservar/abierto/<%= b.id %>/cerrar" style="display:inline;margin-left:.5em">
-        <button class="btn small ghost" type="submit">Cerrar partido</button>
-      </form>
-    </p>
-    <% } else if (b.players.length < 4) { %>
-    <p><form method="post" action="/reservar/abierto/<%= b.id %>/abrir" style="display:inline">
-      <button class="btn small" type="submit">Abrir partido (buscar jugadores)</button>
-    </form>
-    <span class="mut" style="font-size:.85em">Se abrirá a otros socios del nivel (<%= b.players.length %>/4 jugadores).</span></p>
-    <% } %>
-    <details>
-      <summary class="mut" style="cursor:pointer">Añadir / cambiar jugadores</summary>
-      <form method="post" action="/reservar/jugadores" style="margin-top:.5em">
-        <input type="hidden" name="booking_id" value="<%= b.id %>">
-        <% for (let i = 0; i < 3; i++) { const p = b.players[i + 1]; %>
-        <div class="row2">
-          <div class="field"><label>Nombre</label><input type="text" name="p<%= i + 1 %>_name" value="<%= p ? p.name : '' %>"></div>
-          <div class="field"><label>Nº de socio</label><input type="text" name="p<%= i + 1 %>_member" value="<%= p ? p.member_no : '' %>" inputmode="numeric"></div>
-        </div>
+  <div class="mrow">
+    <span class="mline"><strong><%= b.court_name %></strong> · <%= b.date.slice(8,10) %>/<%= b.date.slice(5,7) %> · <%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %> · <%= b.players.length %>/4
+      <% if (b.open_spots > 0) { %><span class="badge" style="background:#e9f7ef;color:#146c39">Abierto</span><% } %>
+      <% if (b.payment_status === 'pending') { %><span class="badge warn">Pagar en recepción</span><% } %>
+      <% if (b.ya_jugada) { %><span class="badge" style="background:#f0f0f0;color:#666">Ya jugada</span><% } %></span>
+    <span class="macts">
+      <% if (!b.ya_jugada) { %>
+        <% if (b.open_spots > 0) { %>
+          <a class="btn small ghost" href="/reservar/abierto/<%= b.id %>">Ver</a>
+          <form method="post" action="/reservar/abierto/<%= b.id %>/cerrar" style="display:inline">
+            <button class="btn small ghost" type="submit">Cerrar</button>
+          </form>
+        <% } else if (b.players.length < 4) { %>
+          <form method="post" action="/reservar/abierto/<%= b.id %>/abrir" style="display:inline">
+            <button class="btn small" type="submit">Abrir</button>
+          </form>
         <% } %>
-        <button class="btn small" type="submit">Guardar</button>
-      </form>
-    </details>
-    <form method="post" action="/reservar/anular" onsubmit="return confirm('¿Anular esta reserva?')" style="margin-top:.4em">
-      <input type="hidden" name="booking_id" value="<%= b.id %>">
-      <button class="btn small danger" type="submit">Anular</button>
-    </form>
-    <% } %>
+        <form method="post" action="/reservar/anular" onsubmit="return confirm('¿Anular esta reserva?')" style="display:inline">
+          <input type="hidden" name="booking_id" value="<%= b.id %>">
+          <button class="btn small danger" type="submit">Anular</button>
+        </form>
+      <% } %>
+    </span>
   </div>
+  <% if (!b.ya_jugada) { %>
+  <details style="margin:-.1em 0 .5em">
+    <summary class="mut" style="cursor:pointer;font-size:.85em">Añadir / cambiar jugadores</summary>
+    <form method="post" action="/reservar/jugadores" class="pform" style="margin-top:.4em">
+      <input type="hidden" name="booking_id" value="<%= b.id %>">
+      <% for (let i = 0; i < 3; i++) { const p = b.players[i + 1]; %>
+      <div class="prow" style="margin-bottom:.35em">
+        <input type="text" class="psearch" placeholder="Buscar socio por nombre, nº o móvil…" autocomplete="off"
+          value="<%= p ? p.name + (p.member_no ? ' (' + p.member_no + ')' : '') : '' %>" style="width:100%;box-sizing:border-box">
+        <input type="hidden" class="pname" name="p<%= i + 1 %>_name" value="<%= p ? p.name : '' %>">
+        <input type="hidden" class="pmember" name="p<%= i + 1 %>_member" value="<%= p ? p.member_no : '' %>">
+        <div class="plist" style="display:none"></div>
+        <div class="pinfo mut" style="font-size:.85em"></div>
+      </div>
+      <% } %>
+      <button class="btn small" type="submit">Guardar</button>
+      <span class="mut" style="font-size:.85em">Al elegir un socio de la lista se añade directamente.</span>
+    </form>
+  </details>
+  <% } %>
   <% } %>
   <p style="margin-top:1em"><a class="btn" href="/reservar">Reservar pista</a></p>
+<% } else if (tab === 'partidos') { %>
+  <% if (!area.partidos.length) { %><p class="mut">No estás apuntado a ningún partido próximo.</p><% } %>
+  <% for (const b of area.partidos) { %>
+  <div class="mrow">
+    <span class="mline"><strong><%= b.court_name %></strong> · <%= b.date.slice(8,10) %>/<%= b.date.slice(5,7) %> · <%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %> · <%= b.players.length %>/4
+      <% if (b.titular_member_no === member.member_no) { %><span class="badge" style="background:#c6f135;color:#111">Mía</span><% } else { %><span class="mut">Titular: <%= b.titular_name %></span><% } %>
+      <% if (b.open_spots > 0) { %><span class="badge" style="background:#e9f7ef;color:#146c39">Abierto</span><% } %></span>
+    <span class="macts">
+      <% if (b.open_spots > 0) { %><a class="btn small ghost" href="/reservar/abierto/<%= b.id %>">Ver</a><% } %>
+    </span>
+  </div>
+  <% } %>
+<% } else { %>
+  <% if (!area.historial.length) { %><p class="mut">Sin historial todavía.</p><% } %>
+  <% for (const b of area.historial) { %>
+  <div class="mrow">
+    <span class="mline"><strong><%= b.court_name %></strong> · <%= b.date.slice(8,10) %>/<%= b.date.slice(5,7) %>/<%= b.date.slice(0,4) %> · <%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %> · <%= b.players.length %>/4
+      <% if (b.status === 'cancelled') { %><span class="badge" style="background:#f0f0f0;color:#666">Anulada</span><% } %></span>
+  </div>
+  <% } %>
+<% } %>
 </div>
 
 <% if (area.waiting.length) { %>
@@ -86,3 +133,49 @@
   </table>
 </div>
 <% } %>
+
+<script>
+(function(){
+  const searchBase = '/reservar/socios/buscar';
+  let timer = null;
+  document.querySelectorAll('.pform .prow').forEach(row => {
+    const form = row.closest('form');
+    const input = row.querySelector('.psearch'), list = row.querySelector('.plist'),
+      hname = row.querySelector('.pname'), hmem = row.querySelector('.pmember'),
+      info = row.querySelector('.pinfo');
+    function paint() {
+      const n = hname.value.trim(), m = hmem.value.trim();
+      info.innerHTML = !n ? '' : (m ? '<span class="pill">Socio ' + m + '</span>' : '<span class="pill inv">Invitado</span>');
+    }
+    function pick(s) {
+      hname.value = s.name; hmem.value = s.member_no;
+      input.value = s.name + ' (' + s.member_no + ')';
+      list.style.display = 'none'; paint();
+      form.submit();
+    }
+    input.addEventListener('input', () => {
+      hname.value = input.value.trim(); hmem.value = ''; paint();
+      clearTimeout(timer);
+      const q = input.value.trim();
+      if (q.length < 2) { list.style.display = 'none'; return; }
+      timer = setTimeout(() => {
+        fetch(searchBase + '?q=' + encodeURIComponent(q))
+          .then(r => r.json()).then(arr => {
+            if (!arr.length) { list.style.display = 'none'; return; }
+            list.innerHTML = '';
+            arr.forEach(s => {
+              const d = document.createElement('div');
+              d.textContent = s.name + ' · socio ' + s.member_no + (s.phone ? ' · ' + s.phone : '');
+              d.addEventListener('mousedown', () => pick(s));
+              list.appendChild(d);
+            });
+            list.style.display = '';
+          }).catch(() => { list.style.display = 'none'; });
+      }, 250);
+    });
+    input.addEventListener('blur', () => setTimeout(() => list.style.display = 'none', 200));
+    input.addEventListener('focus', () => { if (list.children.length) list.style.display = ''; });
+    paint();
+  });
+})();
+</script>

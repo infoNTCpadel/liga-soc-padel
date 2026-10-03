@@ -108,6 +108,7 @@ for (const sql of [
   'ALTER TABLE court_blocks ADD COLUMN date_to TEXT NOT NULL DEFAULT \'\'',
   'ALTER TABLE waitlist ADD COLUMN duration_min INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE bookings ADD COLUMN kind TEXT NOT NULL DEFAULT \'reserva\'',
+  'ALTER TABLE court_blocks ADD COLUMN color TEXT NOT NULL DEFAULT \'\'',
 ]) {
   try { bdb.exec(sql); } catch (e) { /* ya existe */ }
 }
@@ -498,6 +499,23 @@ function activeBookingCount(member_no) {
      AND (date > ? OR (date = ? AND end_min > ?))`
   ).get((member_no || '').trim(), today, today, now).n;
 }
+// ¿El socio ya tiene algo ese día (reserva propia o partido donde juega)?
+// Se usa para la regla de "una reserva o partido por socio y día".
+function memberDayBooking(date, member_no) {
+  const t = (member_no || '').trim();
+  if (!t) return null;
+  return bdb.prepare(
+    `SELECT b.id FROM booking_players p JOIN bookings b ON b.id = p.booking_id
+     WHERE b.date = ? AND b.status = 'active' AND p.member_no = ? LIMIT 1`).get(date, t) || null;
+}
+// Ids de reservas activas de un día donde el socio juega (titular o apuntado).
+function playerBookingIds(date, member_no) {
+  const t = (member_no || '').trim();
+  if (!t) return [];
+  return bdb.prepare(
+    `SELECT DISTINCT b.id AS id FROM booking_players p JOIN bookings b ON b.id = p.booking_id
+     WHERE b.date = ? AND b.status = 'active' AND p.member_no = ?`).all(date, t).map(r => r.id);
+}
 function validateNewBooking({ court_id, date, start_min, duration_min, titular_member_no, players, byStaff = false }) {
   const c = getConfig();
   const t = (titular_member_no || '').trim();
@@ -523,6 +541,9 @@ function validateNewBooking({ court_id, date, start_min, duration_min, titular_m
     `SELECT id FROM bookings WHERE date = ? AND titular_member_no = ? AND status = 'active'
      AND start_min < ? AND ? < end_min LIMIT 1`).get(date, t, end_min, start_min);
   if (mine) return 'Ya tienes otra reserva en ese tramo horario.';
+  // Regla del club: una reserva o partido por socio y día (el personal puede saltársela).
+  if (!byStaff && memberDayBooking(date, t))
+    return 'Ya tienes una reserva o un partido ese día: solo se permite uno por día.';
   return null;
 }
 
@@ -696,6 +717,8 @@ function joinOpenMatch(booking_id, member) {
     `SELECT 1 FROM booking_players WHERE booking_id = ?
      AND (member_no = ? OR lower(name) = lower(?)) LIMIT 1`).get(booking_id, member.member_no, member.name);
   if (already) return { error: 'Ya estás apuntado en este partido.' };
+  if (memberDayBooking(b.date, member.member_no))
+    return { error: 'Ya tienes una reserva o un partido ese día: solo se permite uno por día.' };
   const d = b.end_min - b.start_min;
   const clash = bdb.prepare(
     `SELECT 1 FROM bookings bk JOIN booking_players p ON p.booking_id = bk.id
@@ -761,9 +784,9 @@ function slotCell(court_id, date, slot, viewer) {
     return { st: 'busy', booking: b };
   }
   const bl = bdb.prepare(
-    `SELECT reason FROM court_blocks WHERE court_id = ? AND ? BETWEEN date_from AND date_to
+    `SELECT reason, notes, color FROM court_blocks WHERE court_id = ? AND ? BETWEEN date_from AND date_to
      AND start_min <= ? AND ? < end_min LIMIT 1`).get(court_id, date, slot, slot);
-  if (bl) return { st: 'blocked', block: { reason: bl.reason || 'Bloqueo' } };
+  if (bl) return { st: 'blocked', block: { reason: bl.reason || 'Bloqueo', notes: bl.notes || '', color: bl.color || '' } };
   const d = fitDuration(court_id, date, slot);
   return d ? { st: 'free', duration: d } : { st: 'unavailable' };
 }
@@ -849,18 +872,29 @@ function memberArea(member_no) {
   const member = getMember(t);
   if (!member) return null;
   const today = todayStr(), now = nowMin();
+  const withPlayers = (b) => ({
+    ...b,
+    // La reserva de hoy cuya hora ya pasó sigue saliendo en la lista, pero ya no cuenta como activa.
+    ya_jugada: b.date < today || (b.date === today && b.end_min <= now),
+    players: bdb.prepare('SELECT * FROM booking_players WHERE booking_id = ? ORDER BY id').all(b.id) });
   const bookings = bdb.prepare(
     `SELECT * FROM bookings WHERE titular_member_no = ? AND status = 'active' AND date >= ?
-     ORDER BY date, start_min`).all(t, today).map(b => ({
-       ...b,
-       // La reserva de hoy cuya hora ya pasó sigue saliendo en la lista, pero ya no cuenta como activa.
-       ya_jugada: b.date < today || (b.date === today && b.end_min <= now),
-       players: bdb.prepare('SELECT * FROM booking_players WHERE booking_id = ? ORDER BY id').all(b.id) }));
+     ORDER BY date, start_min`).all(t, today).map(withPlayers);
+  // Partidos próximos donde juega (titular o apuntado): incluye sus propias reservas.
+  const partidos = bdb.prepare(
+    `SELECT DISTINCT b.* FROM bookings b JOIN booking_players p ON p.booking_id = b.id
+     WHERE p.member_no = ? AND b.status = 'active' AND b.date >= ?
+     ORDER BY b.date, b.start_min`).all(t, today).map(withPlayers).filter(b => !b.ya_jugada);
+  // Historial: lo ya jugado o anulado (titular), lo más reciente primero.
+  const historial = bdb.prepare(
+    `SELECT * FROM bookings WHERE titular_member_no = ?
+     AND (status = 'cancelled' OR date < ? OR (date = ? AND end_min <= ?))
+     ORDER BY date DESC, start_min DESC LIMIT 40`).all(t, today, today, now).map(withPlayers);
   const offers = bdb.prepare(
     `SELECT * FROM waitlist WHERE member_no = ? AND status = 'offered' ORDER BY date, start_min`).all(t);
   const waiting = bdb.prepare(
     `SELECT * FROM waitlist WHERE member_no = ? AND status = 'waiting' ORDER BY date, start_min`).all(t);
-  return { member, bookings, offers, waiting };
+  return { member, bookings, partidos, historial, offers, waiting };
 }
 
 // ------------------------------------------------------------ bloqueos (por rango de fechas)
@@ -894,7 +928,7 @@ function affectedBookings(court_id, date_from, date_to, start_min, end_min) {
      AND date >= ? AND date <= ? AND start_min < ? AND ? < end_min
      ORDER BY date, start_min`).all(court_id, date_from, date_to, end_min, start_min);
 }
-function createBlock({ court_id, court_name, date_from, date_to, start_min, end_min, reason, notes, force }) {
+function createBlock({ court_id, court_name, date_from, date_to, start_min, end_min, reason, notes, color, force }) {
   const err = validateBlock({ court_id, date_from, date_to, start_min, end_min });
   if (err) return { error: err };
   const affected = affectedBookings(court_id, date_from, date_to, start_min, end_min);
@@ -906,8 +940,8 @@ function createBlock({ court_id, court_name, date_from, date_to, start_min, end_
   const days = new Set(affected.map(b => b.date));
   for (const d of days) promoteWaitlist(court_id, d);
   const r = bdb.prepare(
-    `INSERT INTO court_blocks(court_id, court_name, date, date_from, date_to, start_min, end_min, reason, notes)
-     VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(court_id, court_name, date_from, date_from, date_to, start_min, end_min, reason || '', notes || '');
+    `INSERT INTO court_blocks(court_id, court_name, date, date_from, date_to, start_min, end_min, reason, notes, color)
+     VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(court_id, court_name, date_from, date_from, date_to, start_min, end_min, reason || '', notes || '', color || '');
   return { id: Number(r.lastInsertRowid), cancelled: affected.length };
 }
 function deleteBlock(id) {
@@ -1128,6 +1162,7 @@ module.exports = {
   searchMembers, validLevel, setLevel, fmtLevel, levelRangeText,
   addBlock, removeBlock, getBlocks, isBlockedBy, openVisibleTo,
   joinOpenMatch, syncOpenSpots, closeOpenMatch, openMatchForPlayers,
+  memberDayBooking, playerBookingIds,
   slotInterval, slotStarts, slotCell, slotDay, fitDuration,
   dayHours, validateHoursJson, bookableStarts,
   expireOffers, promoteWaitlist, joinWaitlist, confirmOffer, leaveWaitlist, memberArea,

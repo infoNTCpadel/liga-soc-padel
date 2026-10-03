@@ -89,6 +89,7 @@ router.get('/parrilla', (req, res) => {
     noCourts: courts.length === 0,
     closed: !B.dayHours(date),
     member: null,
+    joinedIds: new Set(),
     staffMode: true,
     info: req.query.ok || null, error: req.query.error || null,
     ...B.staffGrid(date, {

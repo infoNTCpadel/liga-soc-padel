@@ -2,12 +2,16 @@
 <% if (error) { %><div class="alert error"><%= error %></div><% } %>
 
 <div class="card">
-  <h3>Bloquear pista (torneo, clase, mantenimiento…)</h3>
+  <h3>Bloquear pistas (torneo, clase, mantenimiento…)</h3>
   <form method="post" action="/admin/reservas/bloqueos">
+    <div class="field"><label>Pistas</label>
+      <div style="display:flex;gap:.8em;flex-wrap:wrap;margin-top:.3em">
+        <% for (const c of courts) { %>
+        <label style="font-weight:normal"><input type="checkbox" name="court_ids" value="<%= c.id %>" checked> <%= c.name %></label>
+        <% } %>
+      </div>
+    </div>
     <div class="row2">
-      <div class="field"><label>Pista</label><select name="court_id" required>
-        <% for (const c of courts) { %><option value="<%= c.id %>"><%= c.name %></option><% } %>
-      </select></div>
       <div class="field"><label>Desde el día</label><input type="date" name="date_from" value="<%= today %>" min="<%= today %>" required></div>
       <div class="field"><label>Hasta el día</label><input type="date" name="date_to" value="<%= today %>" min="<%= today %>" required></div>
     </div>
@@ -20,8 +24,14 @@
         <option value="torneo">Torneo</option><option value="clase">Clase</option>
         <option value="mantenimiento">Mantenimiento</option><option value="otro">Otro</option>
       </select></div>
-      <div class="field"><label>Notas</label><input type="text" name="notes"></div>
+      <div class="field"><label>Color en la parrilla</label><select name="color">
+        <option value="">Gris (por defecto)</option>
+        <option value="#60a5fa">Azul</option><option value="#f87171">Rojo</option>
+        <option value="#fbbf24">Ámbar</option><option value="#a78bfa">Morado</option>
+        <option value="#34d399">Verde</option><option value="#f472b6">Rosa</option>
+      </select></div>
     </div>
+    <div class="field"><label>Notas (se muestran en la parrilla, máx. 20 caracteres)</label><input type="text" name="notes" maxlength="60"></div>
     <p class="hint">El bloqueo se aplica cada día del rango, en el mismo horario (p. ej. torneo del 5 al 7 de octubre, de 09:00 a 14:00). Si pisa reservas existentes, se pedirá confirmación antes de anularlas.</p>
     <button class="btn small" type="submit">Bloquear</button>
   </form>
@@ -30,9 +40,10 @@
 <div class="card">
   <h3>Próximos bloqueos</h3>
   <table class="tbl">
-    <tr><th>Fechas</th><th>Pista</th><th>Tramo diario</th><th>Motivo</th><th></th></tr>
+    <tr><th></th><th>Fechas</th><th>Pista</th><th>Tramo diario</th><th>Motivo</th><th></th></tr>
     <% for (const b of blocks) { %>
     <tr>
+      <td><span style="display:inline-block;width:.9em;height:.9em;border-radius:50%;background:<%= b.color || '#9aa88f' %>"></span></td>
       <td><%= b.date_from.slice(8,10) %>/<%= b.date_from.slice(5,7) %><% if (b.date_to !== b.date_from) { %>–<%= b.date_to.slice(8,10) %>/<%= b.date_to.slice(5,7) %><% } %></td><td><%= b.court_name %></td>
       <td><%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %></td>
       <td><%= b.reason %><%= b.notes ? ' · ' + b.notes : '' %></td>

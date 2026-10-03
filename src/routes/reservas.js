@@ -192,6 +192,7 @@ router.get('/', (req, res) => {
     noCourts: courts.length === 0,
     closed: !B.dayHours(date),
     minToStr: B.minToStr, member,
+    joinedIds: new Set(member ? B.playerBookingIds(date, member.member_no) : []),
     chatEnabled: Chat.chatConfig().enabled,
     info: req.query.ok ? 'Te has apuntado a la lista de espera. Te guardamos la plaza ' + c.hold_min + ' minutos si se libera.' : null,
     error: req.query.err || null,
@@ -412,9 +413,10 @@ router.get('/ok', requireMember, (req, res) => {
 // ---- mis reservas ----
 router.get('/mis', requireMember, (req, res) => {
   const member = me(req);
+  const tab = ['pendientes', 'partidos', 'historial'].includes(req.query.tab) ? req.query.tab : 'pendientes';
   res.renderPage('reservas/mis', {
     error: req.query.err || null, info: req.query.ok || null, area: B.memberArea(member.member_no),
-    minToStr: B.minToStr, config: B.getConfig(), member,
+    minToStr: B.minToStr, config: B.getConfig(), member, tab,
   });
 });
 router.post('/anular', requireMember, (req, res) => {
@@ -424,7 +426,7 @@ router.post('/anular', requireMember, (req, res) => {
   const r = B.cancelBooking(b.id, false);
   res.renderPage('reservas/mis', {
     error: r.error || null, info: r.ok ? 'Reserva anulada.' : null,
-    area: B.memberArea(member.member_no), minToStr: B.minToStr, config: B.getConfig(), member,
+    area: B.memberArea(member.member_no), minToStr: B.minToStr, config: B.getConfig(), member, tab: 'pendientes',
   });
 });
 // Completar o quitar jugadores a posteriori (titular).

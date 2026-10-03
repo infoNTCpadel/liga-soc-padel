@@ -68,6 +68,7 @@ router.get('/parrilla', (req, res) => {
     noCourts: courts.length === 0,
     closed: !B.dayHours(date),
     member: null,
+    joinedIds: new Set(),
     staffMode: true,
     info: req.query.ok || null, error: req.query.error || null,
     ...B.staffGrid(date, {
@@ -321,25 +322,40 @@ router.get('/bloqueos', (req, res) => {
 });
 router.post('/bloqueos', (req, res) => {
   const courts = activeCourts();
-  const court = courts.find(x => x.id === parseInt(req.body.court_id, 10));
-  const date_from = req.body.date_from, date_to = req.body.date_to;
+  const ids = [].concat(req.body.court_ids || req.body.court_id || [])
+    .map(x => parseInt(x, 10)).filter(x => courts.some(c => c.id === x));
+  const date_from = req.body.date_from, date_to = req.body.date_to || req.body.date_from;
   const start_min = B.strToMin(req.body.start);
   const end_min = B.strToMin(req.body.end);
   const reason = req.body.reason || '';
+  const notes = (req.body.notes || '').trim();
+  const color = /^#[0-9a-fA-F]{6}$/.test(req.body.color || '') ? req.body.color : '';
   const render = (error) => res.renderPage('reservas-admin/bloqueos', {
     blocks: B.listBlocks(), courts, config: B.getConfig(), error, minToStr: B.minToStr, today: B.todayStr(),
   });
-  if (!court || !/^\d{4}-\d{2}-\d{2}$/.test(date_from || '')) return render('Pista o fecha no válidos.');
-  const r = B.createBlock({
-    court_id: court.id, court_name: court.name, date_from, date_to: date_to || date_from,
-    start_min, end_min, reason, notes: (req.body.notes || '').trim(), force: req.body.force === '1',
-  });
-  if (r.error) return render(r.error);
-  if (r.conflict) {
+  if (!ids.length || !/^\d{4}-\d{2}-\d{2}$/.test(date_from || '')) return render('Pista o fecha no válidos.');
+  // Fase 1: validar todas las pistas sin crear nada todavía.
+  const plan = [];
+  for (const id of ids) {
+    const court = courts.find(x => x.id === id);
+    const err = B.validateBlock({ court_id: id, date_from, date_to, start_min, end_min });
+    if (err) return render(court.name + ': ' + err);
+    plan.push({ court, affected: B.affectedBookings(id, date_from, date_to, start_min, end_min) });
+  }
+  const withConflict = plan.filter(p => p.affected.length);
+  if (withConflict.length && req.body.force !== '1') {
     return res.renderPage('reservas-admin/bloqueo-conflicto', {
-      court, date_from, date_to: date_to || date_from, start_min, end_min,
-      reason, notes: (req.body.notes || '').trim(),
-      affected: r.conflict, minToStr: B.minToStr,
+      courts: plan.map(p => p.court), courtIds: ids,
+      date_from, date_to, start_min, end_min, reason, notes, color,
+      affected: withConflict.flatMap(p => p.affected.map(b => ({ ...b, court_name: p.court.name }))),
+      minToStr: B.minToStr,
+    });
+  }
+  // Fase 2: crear los bloqueos (con force si se confirmó el conflicto).
+  for (const p of plan) {
+    B.createBlock({
+      court_id: p.court.id, court_name: p.court.name, date_from, date_to,
+      start_min, end_min, reason, notes, color, force: true,
     });
   }
   res.redirect('/admin/reservas/bloqueos');

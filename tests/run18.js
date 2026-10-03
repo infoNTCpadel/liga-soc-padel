@@ -47,7 +47,7 @@ ok(new Set(rec.map(t => t.member_no)).size === rec.length, 'sin duplicados');
 // ---- 7. Parrilla socio: modal exprés con data-attrs ----
 const pubHtml = ejs.render(fs.readFileSync('src/views/reservas/grid.ejs', 'utf8'), {
   date: TOM, rows: B.slotDay(TOM, null, courts), courts, config: B.getConfig(), waitStarts: {},
-  noCourts: false, closed: false, member: { name: 'Test Uno', member_no: '301' }, staffMode: false,
+  noCourts: false, closed: false, member: { name: 'Test Uno', member_no: '301' }, joinedIds: new Set(), staffMode: false,
   info: null, error: null, prev: null, next: null, tabs: [TOM], tabLabel: (d) => d, minToStr: B.minToStr,
   chatEnabled: false, filename: 'src/views/reservas/grid.ejs',
 });
@@ -60,7 +60,7 @@ ok(pubHtml.includes('id="qOpen" checked'), 'socio: abierto marcado por defecto')
 const g = B.staffGrid(TOM, { staffBase: '/admin/reservas', staffDay: '/admin/reservas/dia', anularPrefix: '/admin/reservas/reservas/' }, courts);
 const staffHtml = ejs.render(fs.readFileSync('src/views/reservas/grid.ejs', 'utf8'), {
   ...g, rows: B.slotDay(TOM, null, courts), config: B.getConfig(), waitStarts: {},
-  noCourts: false, closed: false, member: null, staffMode: true, info: null, error: null,
+  noCourts: false, closed: false, member: null, joinedIds: new Set(), staffMode: true, info: null, error: null,
   filename: 'src/views/reservas/grid.ejs',
 });
 ok(staffHtml.includes('action="/admin/reservas/rapida"'), 'staff: modal con form a /admin/reservas/rapida');

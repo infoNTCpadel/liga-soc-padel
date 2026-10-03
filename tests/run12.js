@@ -53,7 +53,7 @@ ok(bl.st === 'blocked' && bl.block && bl.block.reason === 'Clase escuela', 'bloq
 const g = B.staffGrid(TOM, { staffBase: '/admin/reservas', staffDay: '/admin/reservas/dia', anularPrefix: '/admin/reservas/reservas/' }, courts);
 const html = ejs.render(fs.readFileSync('src/views/reservas/grid.ejs', 'utf8'), {
   ...g, rows: B.slotDay(TOM, null, courts), config: B.getConfig(), waitStarts: {},
-  noCourts: false, closed: false, member: null, staffMode: true, info: null, error: null,
+  noCourts: false, closed: false, member: null, joinedIds: new Set(), staffMode: true, info: null, error: null,
   filename: 'src/views/reservas/grid.ejs',
 });
 ok(html.includes('border-color:#f87171') && html.includes('Test Uno'), 'cerrada: tarjeta roja con el nombre del titular');
@@ -68,7 +68,7 @@ ok(html.includes('data-bid'), 'cerrada: botón clicable con detalle');
 // ---- 7. Parrilla pública: ocupada/bloqueo sin colores de tipos ----
 const pub = ejs.render(fs.readFileSync('src/views/reservas/grid.ejs', 'utf8'), {
   date: TOM, rows: B.slotDay(TOM, null, courts), courts, config: B.getConfig(), waitStarts: {},
-  noCourts: false, closed: false, member: null, staffMode: false, info: null, error: null,
+  noCourts: false, closed: false, member: null, joinedIds: new Set(), staffMode: false, info: null, error: null,
   prev: null, next: null, tabs: [TOM], tabLabel: (d) => d, minToStr: B.minToStr,
   filename: 'src/views/reservas/grid.ejs',
 });

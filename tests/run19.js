@@ -29,7 +29,7 @@ ok(B.openMatchForPlayers(closedId).error, 'abrir una ya abierta → error');
 ok(B.openMatchForPlayers(99999).error, 'abrir inexistente → error');
 
 // ---- 2. fixtures para parrilla / login ----
-r = B.quickBook({ court_id: 2, court_name: 'Pista 2', date: TOM, start_min: 840, duration_min: 75, titular_member_no: '401', players: [], open: true });
+r = B.quickBook({ court_id: 2, court_name: 'Pista 2', date: TOM, start_min: 840, duration_min: 75, titular_member_no: '401', players: [], open: true, byStaff: true });
 const openId = r.id;
 r = B.quickBook({ court_id: 1, court_name: 'Pista 1', date: TOM, start_min: 960, duration_min: 75, titular_member_no: '401', players: [], open: false, byStaff: true });
 const closedId2 = r.id;
@@ -38,7 +38,7 @@ ok(B.getBooking(closedId2).open_spots === 0, 'fixture cerrada incompleta lista')
 // ---- 3. parrilla pública: reservas propias en lima ----
 const pubHtml = ejs.render(fs.readFileSync('src/views/reservas/grid.ejs', 'utf8'), {
   date: TOM, rows: B.slotDay(TOM, { member_no: '401', level: 3 }, courts), courts, config: B.getConfig(), waitStarts: {},
-  noCourts: false, closed: false, member: { name: 'Titu Lar', member_no: '401' }, staffMode: false,
+  noCourts: false, closed: false, member: { name: 'Titu Lar', member_no: '401' }, joinedIds: new Set(), staffMode: false,
   info: null, error: null, prev: null, next: null, tabs: [TOM], tabLabel: (d) => d, minToStr: B.minToStr,
   chatEnabled: false, filename: 'src/views/reservas/grid.ejs',
 });
@@ -48,7 +48,7 @@ ok(pubHtml.includes('Mi partido abierto'), 'socio: abierto propio etiquetado "Mi
 ok(pubHtml.includes('Mi reserva</span>') || pubHtml.includes('>Mi reserva<'), 'socio: leyenda "Mi reserva"');
 const pubAnon = ejs.render(fs.readFileSync('src/views/reservas/grid.ejs', 'utf8'), {
   date: TOM, rows: B.slotDay(TOM, null, courts), courts, config: B.getConfig(), waitStarts: {},
-  noCourts: false, closed: false, member: null, staffMode: false,
+  noCourts: false, closed: false, member: null, joinedIds: new Set(), staffMode: false,
   info: null, error: null, prev: null, next: null, tabs: [TOM], tabLabel: (d) => d, minToStr: B.minToStr,
   chatEnabled: false, filename: 'src/views/reservas/grid.ejs',
 });
@@ -58,7 +58,7 @@ ok(!pubAnon.includes('chip mine'), 'visitante: sin marcas de "mías"');
 const g = B.staffGrid(TOM, { staffBase: '/admin/reservas', staffDay: '/admin/reservas/dia', anularPrefix: '/admin/reservas/reservas/' }, courts);
 const staffHtml = ejs.render(fs.readFileSync('src/views/reservas/grid.ejs', 'utf8'), {
   ...g, rows: B.slotDay(TOM, null, courts), config: B.getConfig(), waitStarts: {},
-  noCourts: false, closed: false, member: null, staffMode: true, info: null, error: null,
+  noCourts: false, closed: false, member: null, joinedIds: new Set(), staffMode: true, info: null, error: null,
   filename: 'src/views/reservas/grid.ejs',
 });
 ok(staffHtml.includes('1/4'), 'staff: la tarjeta muestra el contador 1/4');
@@ -76,10 +76,10 @@ ok(entrarHtml.includes('name="join"'), 'entrar.ejs: campo oculto join');
 // ---- 6. mis.ejs: botón "Abrir partido" en cerrada incompleta ----
 const misHtml = ejs.render(fs.readFileSync('src/views/reservas/mis.ejs', 'utf8'), {
   error: null, info: null, area: B.memberArea('401'), minToStr: B.minToStr,
-  config: B.getConfig(), member: { name: 'Titu Lar', member_no: '401' },
+  config: B.getConfig(), member: { name: 'Titu Lar', member_no: '401' }, tab: 'pendientes',
   filename: 'src/views/reservas/mis.ejs',
 });
-ok(misHtml.includes('Abrir partido (buscar jugadores)'), 'mis: botón Abrir partido en la cerrada incompleta');
+ok(misHtml.includes('>Abrir<'), 'mis: botón Abrir en la cerrada incompleta');
 ok(misHtml.includes('/reservar/abierto/' + closedId2 + '/abrir'), 'mis: el botón apunta a la ruta de abrir');
 
 // ---- 7. dia.ejs (admin): aviso de cerradas incompletas ----
