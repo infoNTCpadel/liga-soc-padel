@@ -571,6 +571,23 @@ function recomputePayment(booking_id, force) {
     .run(guests ? 'pending' : 'ok', booking_id);
   return guests ? 'pending' : 'ok';
 }
+// Quita un jugador de una reserva (personal). El titular no se puede quitar
+// desde aquí: para eso está anular la reserva. Sus cargos impagados pasan a
+// la reserva para que no se pierdan.
+function removePlayer(booking_id, player_id) {
+  const b = bdb.prepare('SELECT * FROM bookings WHERE id = ?').get(booking_id);
+  if (!b || b.status !== 'active') return { error: 'La reserva ya no está disponible.' };
+  const p = bdb.prepare('SELECT * FROM booking_players WHERE id = ? AND booking_id = ?').get(player_id, booking_id);
+  if (!p) return { error: 'Jugador no encontrado.' };
+  const first = bdb.prepare('SELECT id, member_no FROM booking_players WHERE booking_id = ? ORDER BY id LIMIT 1').get(booking_id);
+  if (p.id === first.id || (p.member_no && b.titular_member_no && p.member_no === b.titular_member_no))
+    return { error: 'El titular no se puede quitar; anula la reserva si hace falta.' };
+  bdb.prepare('DELETE FROM booking_players WHERE id = ?').run(p.id);
+  bdb.prepare('UPDATE booking_charges SET booking_player_id = NULL WHERE booking_player_id = ?').run(p.id);
+  recomputePayment(booking_id);
+  syncOpenSpots(booking_id);
+  return { ok: true };
+}
 // Añade un jugador a una reserva (personal): sin mirar niveles ni regla 1/día,
 // como el resto de acciones del personal. Sin nº de socio válido = invitado.
 function addPlayer(booking_id, name, member_no) {
@@ -1184,7 +1201,7 @@ function staffGrid(date, urls, courts) {
       titular_name: b.titular_name, titular_member_no: b.titular_member_no,
       open_spots: b.open_spots, payment_status: b.payment_status,
       kind: b.kind || 'reserva',
-      players: (b.players || []).map(p => ({ name: p.name, member_no: p.member_no, is_guest: p.is_guest })),
+      players: (b.players || []).map(p => ({ id: p.id, name: p.name, member_no: p.member_no, is_guest: p.is_guest })),
       charges: (b.charges || []).map(c => ({ label: c.label, amount_cents: c.amount_cents, paid: c.paid, player_name: c.player_name })),
     }))),
     levelsJson: safeJson(levels),
@@ -1199,7 +1216,7 @@ module.exports = {
   validPin, setPin, hasPin, checkPin, resetPin,
   dayBookings, dayBlocks, freeSegments, reachableSet, validStarts,
   isBookable, isPotentiallyValid, gridFor,
-  validateNewBooking, activeBookingCount, normalizePlayers, setPlayers, addPlayer, recomputePayment,
+  validateNewBooking, activeBookingCount, normalizePlayers, setPlayers, addPlayer, removePlayer, recomputePayment,
   createBooking, getBooking, cancelBooking, quickBook, recentTitulars,
   searchMembers, validLevel, setLevel, fmtLevel, levelRangeText,
   addBlock, removeBlock, getBlocks, isBlockedBy, openVisibleTo,

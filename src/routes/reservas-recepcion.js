@@ -47,6 +47,12 @@ router.post('/:id/anadir-jugador', (req, res) => {
   if (r.error) return res.json({ ok: false, error: r.error });
   res.json({ ok: true, booking: B.getBooking(id) });
 });
+router.post('/:id/quitar-jugador', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const r = B.removePlayer(id, parseInt(req.body.player_id, 10));
+  if (r.error) return res.json({ ok: false, error: r.error });
+  res.json({ ok: true, booking: B.getBooking(id) });
+});
 router.post('/:id/cargo', (req, res) => {
   const id = parseInt(req.params.id, 10);
   const b = B.getBooking(id);

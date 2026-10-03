@@ -84,10 +84,16 @@
           <%= ch.label %> · <%= eur(ch.amount_cents) %><%= ch.player_name ? ' → ' + ch.player_name : '' %> <%- ch.paid ? '<span class="badge ok">pagado</span>' : '<span class="badge warn">pdte.</span>' %><br>
         <% } %>
         <% if (b.status === 'active') { %>
-        <form method="post" action="/admin/reservas/reservas/<%= b.id %>/cargo" style="margin-top:.3em">
-          <input type="text" name="label" placeholder="Concepto (p. ej. luz)" size="12" required>
-          <input type="text" name="amount" placeholder="€" size="5" required>
-          <button class="btn small ghost" type="submit">+</button>
+        <form method="post" action="/admin/reservas/reservas/<%= b.id %>/cargo" style="margin-top:.3em;max-width:100%">
+          <input type="text" name="label" placeholder="Concepto (p. ej. luz)" required style="width:100%;box-sizing:border-box;margin-bottom:.25em">
+          <div style="display:flex;gap:.25em;align-items:center;flex-wrap:wrap">
+            <input type="text" name="amount" placeholder="€" size="4" required>
+            <select name="player_id" style="max-width:8em">
+              <option value="">Toda la reserva</option>
+              <% for (const p of b.players) { %><option value="<%= p.id %>"><%= p.name %><%= p.is_guest ? ' (inv.)' : '' %></option><% } %>
+            </select>
+            <button class="btn small ghost" type="submit" title="Añadir cargo">+</button>
+          </div>
         </form>
         <% } %>
       </td>

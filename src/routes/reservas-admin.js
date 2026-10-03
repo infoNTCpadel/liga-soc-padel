@@ -116,6 +116,13 @@ router.post('/reservas/:id/anadir-jugador', (req, res) => {
   if (r.error) return res.json({ ok: false, error: r.error });
   res.json({ ok: true, booking: B.getBooking(id) });
 });
+// Quitar un jugador desde el panel de la parrilla (JSON).
+router.post('/reservas/:id/quitar-jugador', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const r = B.removePlayer(id, parseInt(req.body.player_id, 10));
+  if (r.error) return res.json({ ok: false, error: r.error });
+  res.json({ ok: true, booking: B.getBooking(id) });
+});
 // Abrir un partido cerrado con jugadores incompletos para buscar jugadores.
 router.post('/reservas/:id/abrir', (req, res) => {
   const b = B.getBooking(parseInt(req.params.id, 10));
@@ -128,7 +135,7 @@ router.post('/reservas/:id/cargo', (req, res) => {
   const b = B.getBooking(id);
   const date = b ? b.date : B.todayStr();
   const cents = Math.round(parseFloat(String(req.body.amount || '').replace(',', '.')) * 100) || 0;
-  const r = B.addCharge(id, req.body.label || '', cents);
+  const r = B.addCharge(id, req.body.label || '', cents, req.body.player_id || null);
   res.redirect('/admin/reservas/dia?date=' + date + '&ok=' + encodeURIComponent(r.ok ? 'Cargo añadido.' : (r.error || 'Error.')));
 });
 router.post('/cargos/:id/pagado', (req, res) => {
