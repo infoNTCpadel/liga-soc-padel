@@ -66,11 +66,12 @@ const rcpHtml = ejs.render(fs.readFileSync('src/views/recepcion/reservas.ejs', '
 ok(rcpHtml.includes('name="player_id"'), 'recepción: selector de jugador en añadir cargo');
 ok(rcpHtml.includes('Invitado Externo (invitado)') || rcpHtml.includes('Invitado Externo (inv.)'), 'recepción: el selector lista al invitado');
 ok(rcpHtml.includes('Raqueta') && rcpHtml.includes('→ Compa Nero'), 'recepción: cargos con asignado');
-const diaHtml = ejs.render(fs.readFileSync('src/views/reservas-admin/dia.ejs', 'utf8'), {
-  date: TOM, bookings: B.dayDetail(TOM).bookings, blocks: [], eur: (c) => (c / 100).toFixed(2) + ' €',
-  minToStr: B.minToStr, info: null, prev: TOM, next: TOM, filename: 'src/views/reservas-admin/dia.ejs',
+const fichaHtml = ejs.render(fs.readFileSync('src/views/reservas-admin/ficha.ejs', 'utf8'), {
+  b: B.getBooking(B.dayDetail(TOM).bookings[0].id), eur: (c) => (c / 100).toFixed(2) + ' €',
+  minToStr: B.minToStr, info: null, error: null, chargePresets: B.getChargePresets(),
+  filename: 'src/views/reservas-admin/ficha.ejs',
 });
-ok(diaHtml.includes('Pelotas') && diaHtml.includes('→ Invitado Externo'), 'admin día: cargo con asignado');
+ok(fichaHtml.includes('Pelotas') && fichaHtml.includes('→ Invitado Externo'), 'ficha: cargo con asignado');
 
 // ---- 6. HTTP: cargo con jugador vía recepción ----
 const { spawn } = require('child_process');

@@ -103,57 +103,77 @@ router.post('/reservas/:id/anular', (req, res) => {
   B.cancelBooking(parseInt(req.params.id, 10), true);
   res.redirect('/admin/reservas/dia?date=' + date + '&ok=' + encodeURIComponent('Reserva anulada.'));
 });
+// Ficha de la reserva (TPV): jugadores, pagos y cargos en una sola pantalla.
+router.get('/reservas/:id', (req, res) => {
+  const b = B.getBooking(parseInt(req.params.id, 10));
+  if (!b) return res.redirect('/admin/reservas/dia');
+  res.renderPage('reservas-admin/ficha', {
+    b, eur, minToStr: B.minToStr,
+    info: req.query.ok || null, error: req.query.error || null,
+    chargePresets: B.getChargePresets(),
+  });
+});
+// Vuelta a la ficha si el formulario la pedía (si no, al día).
+const backTo = (req, b) => {
+  const back = req.body.back || req.query.back;
+  if (back && back.startsWith('/admin/reservas/')) return back;
+  const date = b ? b.date : B.todayStr();
+  return '/admin/reservas/dia?date=' + date;
+};
+const done = (req, res, b, okMsg, errMsg) => {
+  const url = backTo(req, b);
+  res.redirect(url + (url.includes('?') ? '&' : '?') + (errMsg ? 'error=' : 'ok=') + encodeURIComponent(errMsg || okMsg));
+};
 router.post('/reservas/:id/pago', (req, res) => {
   const id = parseInt(req.params.id, 10);
   const b = B.getBooking(id);
   const st = B.setBookingPaid(id, req.body.paid === '1');
   if (req.body.json === '1' || req.headers.accept === 'application/json')
     return res.json({ ok: true, payment_status: st });
-  const date = b ? b.date : B.todayStr();
-  res.redirect('/admin/reservas/dia?date=' + date + '&ok=' + encodeURIComponent('Pago actualizado.'));
+  done(req, res, b, 'Pago actualizado.');
 });
-// Añadir un jugador desde el panel de la parrilla (JSON).
+// Añadir un jugador (panel de la parrilla: JSON; ficha: formulario con back).
 router.post('/reservas/:id/anadir-jugador', (req, res) => {
   const id = parseInt(req.params.id, 10);
   const r = B.addPlayer(id, req.body.name, req.body.member_no);
+  if (req.body.back) return done(req, res, B.getBooking(id), 'Jugador añadido.', r.error);
   if (r.error) return res.json({ ok: false, error: r.error });
   res.json({ ok: true, booking: B.getBooking(id) });
 });
-// Quitar un jugador desde el panel de la parrilla (JSON).
+// Quitar un jugador (panel de la parrilla: JSON; ficha: formulario con back).
 router.post('/reservas/:id/quitar-jugador', (req, res) => {
   const id = parseInt(req.params.id, 10);
   const r = B.removePlayer(id, parseInt(req.body.player_id, 10));
+  if (req.body.back) return done(req, res, B.getBooking(id), 'Jugador eliminado.', r.error);
   if (r.error) return res.json({ ok: false, error: r.error });
   res.json({ ok: true, booking: B.getBooking(id) });
 });
 // Abrir un partido cerrado con jugadores incompletos para buscar jugadores.
 router.post('/reservas/:id/abrir', (req, res) => {
   const b = B.getBooking(parseInt(req.params.id, 10));
-  const date = b ? b.date : B.todayStr();
   const r = b ? B.openMatchForPlayers(b.id) : { error: 'No encontrada.' };
-  res.redirect('/admin/reservas/dia?date=' + date + (r.error ? '' : '&ok=' + encodeURIComponent('Partido abierto: otros socios del nivel podrán apuntarse.')));
+  done(req, res, b, 'Partido abierto: otros socios del nivel podrán apuntarse.', r.error);
 });
 router.post('/reservas/:id/cargo', (req, res) => {
   const id = parseInt(req.params.id, 10);
   const b = B.getBooking(id);
-  const date = b ? b.date : B.todayStr();
   const cents = Math.round(parseFloat(String(req.body.amount || '').replace(',', '.')) * 100) || 0;
   const r = req.body.player_id === 'split'
     ? B.addChargeSplit(id, req.body.label || '', cents)
     : B.addCharge(id, req.body.label || '', cents, req.body.player_id || null);
-  res.redirect('/admin/reservas/dia?date=' + date + '&ok=' + encodeURIComponent(r.ok ? 'Cargo añadido.' : (r.error || 'Error.')));
+  done(req, res, b, 'Cargo añadido.', r.error || null);
 });
 router.post('/cargos/:id/pagado', (req, res) => {
   const ch = B.bdb.prepare('SELECT booking_id FROM booking_charges WHERE id = ?').get(req.params.id);
   B.setChargePaid(parseInt(req.params.id, 10), req.body.paid === '1');
   const b = ch ? B.getBooking(ch.booking_id) : null;
-  res.redirect('/admin/reservas/dia?date=' + (b ? b.date : B.todayStr()));
+  done(req, res, b, 'Cargo actualizado.');
 });
 router.post('/cargos/:id/eliminar', (req, res) => {
   const ch = B.bdb.prepare('SELECT booking_id FROM booking_charges WHERE id = ?').get(req.params.id);
   B.deleteCharge(parseInt(req.params.id, 10));
   const b = ch ? B.getBooking(ch.booking_id) : null;
-  res.redirect('/admin/reservas/dia?date=' + (b ? b.date : B.todayStr()));
+  done(req, res, b, 'Cargo eliminado.');
 });
 // Completar jugadores de una reserva (el titular cuenta como 1).
 router.post('/reservas/:id/jugadores', (req, res) => {

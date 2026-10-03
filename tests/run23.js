@@ -1,5 +1,5 @@
-// Pruebas: quitar jugadores desde el panel staff; formulario de cargo del
-// día de admin compacto y con selector de jugador.
+// Pruebas: quitar jugadores desde el panel staff; formulario de cargo en la
+// ficha TPV con selector de jugador.
 const DATA = '/tmp/test-v9k/data23';
 process.env.DATA_DIR = DATA;
 require('fs').rmSync(DATA, { recursive: true, force: true });
@@ -55,12 +55,14 @@ const staffHtml = ejs.render(fs.readFileSync('src/views/reservas/grid.ejs', 'utf
 });
 ok(staffHtml.includes('data-act="rm"'), 'panel: botón ✕ para quitar jugador');
 ok(staffHtml.includes('/quitar-jugador'), 'panel: acción quitar-jugador');
-const diaHtml = ejs.render(fs.readFileSync('src/views/reservas-admin/dia.ejs', 'utf8'), {
-  date: TOM, bookings: B.dayDetail(TOM).bookings, blocks: [], eur: (c) => (c / 100).toFixed(2) + ' €',
-  minToStr: B.minToStr, info: null, prev: TOM, next: TOM, filename: 'src/views/reservas-admin/dia.ejs',
+const fichaHtml = ejs.render(fs.readFileSync('src/views/reservas-admin/ficha.ejs', 'utf8'), {
+  b: B.getBooking(bid2), eur: (c) => (c / 100).toFixed(2) + ' €',
+  minToStr: B.minToStr, info: null, error: null, chargePresets: B.getChargePresets(),
+  filename: 'src/views/reservas-admin/ficha.ejs',
 });
-ok(diaHtml.includes('name="player_id"'), 'admin día: el formulario de cargo tiene selector de jugador');
-ok(diaHtml.includes('display:flex'), 'admin día: formulario de cargo en layout flexible (no desborda)');
+ok(fichaHtml.includes('name="player_id"'), 'ficha: el formulario de cargo tiene selector de jugador');
+ok(fichaHtml.includes('display:flex'), 'ficha: formulario de cargo en layout flexible (no desborda)');
+ok(fichaHtml.includes('value="split"'), 'ficha: opción de repartir entre jugadores');
 
 // ---- 3. HTTP: quitar-jugador ----
 const { spawn } = require('child_process');

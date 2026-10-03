@@ -55,9 +55,16 @@ const diaHtml = ejs.render(fs.readFileSync('src/views/reservas-admin/dia.ejs', '
   filename: 'src/views/reservas-admin/dia.ejs',
 });
 ok(diaHtml.includes('dot warn') && diaHtml.includes('pdte.'), 'admin día: punto ámbar con pendientes');
-ok(diaHtml.includes('value="split"') && diaHtml.includes('Repartir entre jugadores'), 'admin día: opción de repartir');
-ok(diaHtml.includes('button.preset') || diaHtml.includes('class="btn small ghost preset"'), 'admin día: botones de presets');
-ok(!diaHtml.includes('Cobrar ' + '6,00'), 'admin día: sin botones Cobrar sueltos en acciones');
+ok(diaHtml.includes('Ficha →'), 'admin día: enlace a la ficha por reserva');
+// split, presets y Cobrar viven ahora en la ficha TPV
+const fichaHtml = ejs.render(fs.readFileSync('src/views/reservas-admin/ficha.ejs', 'utf8'), {
+  b: B.getBooking(bid), eur: (c) => (c / 100).toFixed(2) + ' €', minToStr: B.minToStr,
+  info: null, error: null, chargePresets: B.getChargePresets(),
+  filename: 'src/views/reservas-admin/ficha.ejs',
+});
+ok(fichaHtml.includes('value="split"') && fichaHtml.includes('Repartir entre jugadores'), 'ficha: opción de repartir');
+ok(fichaHtml.includes('class="btn small ghost preset"'), 'ficha: botones de presets');
+ok(fichaHtml.includes('Cobrar'), 'ficha: botón Cobrar por cargo');
 const rcpHtml = ejs.render(fs.readFileSync('src/views/recepcion/reservas.ejs', 'utf8'), {
   date: TOM, bookings: B.dayDetail(TOM).bookings, blocks: [],
   pending: B.dayDetail(TOM).bookings.filter(b => b.status === 'active' && (b.payment_status === 'pending' || b.charges.some(c => !c.paid))),

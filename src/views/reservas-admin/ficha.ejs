@@ -1,0 +1,180 @@
+<style>
+.prow{position:relative}
+.prow .psearch{width:100%;box-sizing:border-box}
+.plist{position:absolute;z-index:30;left:0;right:0;background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:8px;max-height:11em;overflow:auto;box-shadow:0 8px 20px rgba(0,0,0,.35)}
+.plist>div{padding:.45em .6em;cursor:pointer}
+.plist>div:hover{background:#2b351f}
+.pill{display:inline-block;background:#2b351f;border:1px solid var(--lime);color:var(--lime);border-radius:999px;padding:0 .55em;font-size:.85em;margin-right:.3em}
+.pill.inv{background:#3a2f14;border-color:var(--amber);color:var(--amber)}
+.dot{font-size:1.1em;line-height:1}
+.dot.warn{color:#d9a441}
+.dot.ok{color:#2f9e5f}
+.ficha-head{display:flex;gap:.6em;align-items:baseline;flex-wrap:wrap}
+.ficha-head h1{margin:0}
+table.ficha{width:100%;border-collapse:collapse}
+table.ficha td, table.ficha th{padding:.4em .3em;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+.rm{background:none;border:none;color:#e0605e;cursor:pointer;font-size:1.1em;padding:0 .2em}
+.total{font-size:1.15em;font-weight:700}
+</style>
+<p><a class="btn small ghost" href="/admin/reservas/dia?date=<%= b.date %>">← Volver al día <%= b.date.slice(8,10) %>/<%= b.date.slice(5,7) %></a></p>
+<% if (info) { %><div class="alert ok"><%= info %></div><% } %>
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+<div class="ficha-head">
+  <h1><%= b.court_name %> · <%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %></h1>
+  <%- b.status === 'cancelled' ? '<span class="badge">Anulada</span>' : b.open_spots > 0 ? '<span class="badge" style="background:#e9f7ef;color:#146c39">Abierto · ' + b.open_spots + ' ' + (b.open_spots === 1 ? 'plaza' : 'plazas') + '</span>' : '<span class="badge ok">Cerrada</span>' %>
+  <% if (b.kind && b.kind !== 'reserva') { %><span class="badge"><%= b.kind === 'clase' ? 'Clase' : 'Torneo' %></span><% } %>
+</div>
+<p class="mut">Titular: <strong><%= b.titular_name %></strong> (socio <%= b.titular_member_no %>)</p>
+
+<div class="card">
+  <h3>Jugadores (<%= b.players.length %>/4)</h3>
+  <table class="ficha">
+    <% for (const p of b.players) { const isTit = p.member_no && b.titular_member_no && p.member_no === b.titular_member_no; %>
+    <tr><td><strong><%= p.name %></strong><%- p.is_guest ? ' <span class="pill inv">invitado</span>' : '' %><%- isTit ? ' <span class="mut" style="font-size:.85em">(titular)</span>' : '' %></td>
+      <td class="mut"><%= p.member_no ? 'socio ' + p.member_no : '' %></td>
+      <td style="text-align:right"><% if (b.status === 'active' && !isTit) { %>
+        <form method="post" action="/admin/reservas/reservas/<%= b.id %>/quitar-jugador" style="display:inline" onsubmit="return confirm('¿Quitar a <%= p.name.replace(/'/g, "\\'") %> del partido?')">
+          <input type="hidden" name="player_id" value="<%= p.id %>">
+          <input type="hidden" name="back" value="/admin/reservas/reservas/<%= b.id %>">
+          <button class="rm" type="submit" title="Quitar jugador">✕</button>
+        </form><% } %></td></tr>
+    <% } %>
+  </table>
+  <% if (b.status === 'active' && b.players.length < 4) { %>
+  <form method="post" action="/admin/reservas/reservas/<%= b.id %>/anadir-jugador" style="margin-top:.6em">
+    <input type="hidden" name="back" value="/admin/reservas/reservas/<%= b.id %>">
+    <div class="prow" style="margin-bottom:.4em">
+      <input type="text" class="psearch" placeholder="Buscar socio por nombre, nº o móvil…" autocomplete="off">
+      <input type="hidden" class="pname" name="name">
+      <input type="hidden" class="pmember" name="member_no">
+      <div class="plist" style="display:none"></div>
+      <div class="pinfo mut" style="font-size:.85em;margin-top:.2em"></div>
+    </div>
+    <button class="btn small" type="submit">Añadir jugador</button>
+    <span class="mut" style="font-size:.85em">Sin elegir socio se añade como invitado.</span>
+  </form>
+  <% } %>
+</div>
+
+<div class="card">
+  <h3>Pago de invitado</h3>
+  <p><%- b.payment_status === 'pending' ? '<span class="badge warn">Pendiente</span>' : b.payment_status === 'paid' ? '<span class="badge ok">Pagado</span>' : '<span class="badge ok">OK</span>' %>
+  <% const _g = b.players.filter(p => p.is_guest); if (b.payment_status === 'pending' && _g.length) { %><span class="mut"> — <%= _g.map(p => p.name).join(', ') %></span><% } %></p>
+  <% if (b.status === 'active' && (b.payment_status === 'pending' || b.payment_status === 'paid')) { %>
+  <form method="post" action="/admin/reservas/reservas/<%= b.id %>/pago">
+    <input type="hidden" name="back" value="/admin/reservas/reservas/<%= b.id %>">
+    <input type="hidden" name="paid" value="<%= b.payment_status === 'pending' ? '1' : '0' %>">
+    <button class="btn small" type="submit"><%= b.payment_status === 'pending' ? 'Marcar pagado' : 'Marcar pendiente' %></button>
+  </form>
+  <% } %>
+</div>
+
+<div class="card">
+  <h3>Cargos extra</h3>
+  <% const _up = b.charges.filter(c => !c.paid); const _upTot = _up.reduce((s, c) => s + (c.amount_cents || 0), 0); const _tot = b.charges.reduce((s, c) => s + (c.amount_cents || 0), 0); %>
+  <p><% if (_up.length) { %><span class="dot warn">●</span> <strong><%= _up.length %> pdte. · <%= eur(_upTot) %></strong><% } else if (b.charges.length) { %><span class="dot ok">●</span> <span class="mut">todo cobrado</span><% } else { %><span class="mut">Sin cargos</span><% } %>
+  <% if (b.charges.length) { %><span class="mut" style="margin-left:.6em">Total: <%= eur(_tot) %></span><% } %></p>
+  <% for (const ch of b.charges) { %>
+  <div style="display:flex;gap:.5em;align-items:center;margin:.25em 0;flex-wrap:wrap">
+    <span><strong><%= ch.label %></strong> · <%= eur(ch.amount_cents) %><%= ch.player_name ? ' → ' + ch.player_name : ' <span class="mut">(toda la reserva)</span>' %></span>
+    <%- ch.paid ? '<span class="badge ok">cobrado</span>' : '<span class="badge warn">pdte.</span>' %>
+    <% if (b.status === 'active') { %>
+    <form method="post" action="/admin/reservas/cargos/<%= ch.id %>/pagado" style="display:inline">
+      <input type="hidden" name="back" value="/admin/reservas/reservas/<%= b.id %>">
+      <input type="hidden" name="paid" value="<%= ch.paid ? '0' : '1' %>">
+      <button class="btn small ghost" type="submit"><%= ch.paid ? 'Reabrir' : 'Cobrar' %></button>
+    </form>
+    <form method="post" action="/admin/reservas/cargos/<%= ch.id %>/eliminar" style="display:inline" onsubmit="return confirm('¿Eliminar el cargo «<%= ch.label.replace(/'/g, "\\'") %>»?')">
+      <input type="hidden" name="back" value="/admin/reservas/reservas/<%= b.id %>">
+      <button class="rm" type="submit" title="Eliminar cargo">✕</button>
+    </form>
+    <% } %>
+  </div>
+  <% } %>
+  <% if (b.status === 'active') { %>
+  <form method="post" action="/admin/reservas/reservas/<%= b.id %>/cargo" style="margin-top:.6em;max-width:26em">
+    <input type="hidden" name="back" value="/admin/reservas/reservas/<%= b.id %>">
+    <% if (typeof chargePresets !== 'undefined' && chargePresets && chargePresets.length) { %>
+    <div style="margin-bottom:.35em;display:flex;gap:.3em;flex-wrap:wrap">
+      <% for (const pr of chargePresets) { %><button type="button" class="btn small ghost preset" data-label="<%= pr.label %>" data-amount="<%= (pr.amount_cents / 100).toFixed(2).replace('.', ',') %>"><%= pr.label %> · <%= eur(pr.amount_cents) %></button><% } %>
+    </div>
+    <% } %>
+    <div style="display:flex;gap:.35em;flex-wrap:wrap;align-items:center">
+      <input type="text" name="label" placeholder="Concepto" required style="flex:2;min-width:8em">
+      <input type="text" name="amount" placeholder="€" size="5" required>
+      <select name="player_id">
+        <option value="">Toda la reserva</option>
+        <option value="split">⇄ Repartir entre jugadores</option>
+        <% for (const p of b.players) { %><option value="<%= p.id %>"><%= p.name %><%= p.is_guest ? ' (inv.)' : '' %></option><% } %>
+      </select>
+      <button class="btn small" type="submit">Añadir</button>
+    </div>
+  </form>
+  <% } %>
+</div>
+
+<% if (b.status === 'active') { %>
+<div class="card">
+  <h3>Acciones</h3>
+  <div style="display:flex;gap:.5em;flex-wrap:wrap">
+    <% if (!(b.open_spots > 0) && b.players.length < 4) { %>
+    <form method="post" action="/admin/reservas/reservas/<%= b.id %>/abrir" style="display:inline">
+      <input type="hidden" name="back" value="/admin/reservas/reservas/<%= b.id %>">
+      <button class="btn small" type="submit">Abrir partido (buscar jugadores)</button>
+    </form>
+    <% } %>
+    <form method="post" action="/admin/reservas/reservas/<%= b.id %>/anular" onsubmit="return confirm('¿Anular esta reserva?')" style="display:inline">
+      <input type="hidden" name="date" value="<%= b.date %>">
+      <button class="btn small danger" type="submit">Anular reserva</button>
+    </form>
+  </div>
+</div>
+<% } %>
+<script>
+(function(){
+  // Buscador para añadir jugador.
+  document.querySelectorAll('.prow').forEach(row => {
+    const input = row.querySelector('.psearch'), list = row.querySelector('.plist'),
+      hname = row.querySelector('.pname'), hmem = row.querySelector('.pmember'),
+      info = row.querySelector('.pinfo');
+    let timer = null;
+    const paint = () => {
+      const n = hname.value.trim(), m = hmem.value.trim();
+      info.innerHTML = !n ? '' : (m ? '<span class="pill">Socio ' + m + '</span>' : '<span class="pill inv">Invitado</span>');
+    };
+    input.addEventListener('input', () => {
+      hname.value = input.value.trim(); hmem.value = ''; paint();
+      clearTimeout(timer);
+      const v = input.value.trim();
+      if (v.length < 2) { list.style.display = 'none'; return; }
+      timer = setTimeout(() => {
+        fetch('/admin/reservas/socios/buscar?q=' + encodeURIComponent(v)).then(r => r.json()).then(arr => {
+          if (!arr.length) { list.style.display = 'none'; return; }
+          list.innerHTML = '';
+          arr.forEach(s => {
+            const d = document.createElement('div');
+            d.textContent = s.name + ' · socio ' + s.member_no + (s.phone ? ' · ' + s.phone : '');
+            d.addEventListener('mousedown', () => {
+              hname.value = s.name; hmem.value = s.member_no;
+              input.value = s.name + ' (' + s.member_no + ')';
+              list.style.display = 'none'; paint();
+            });
+            list.appendChild(d);
+          });
+          list.style.display = '';
+        }).catch(() => { list.style.display = 'none'; });
+      }, 250);
+    });
+    input.addEventListener('blur', () => setTimeout(() => list.style.display = 'none', 200));
+  });
+  // Presets de cargo.
+  document.querySelectorAll('button.preset').forEach(btn => btn.addEventListener('click', () => {
+    const f = btn.closest('form');
+    if (!f) return;
+    const l = f.querySelector('[name=label]'), a = f.querySelector('[name=amount]');
+    if (l) l.value = btn.getAttribute('data-label') || '';
+    if (a) a.value = btn.getAttribute('data-amount') || '';
+    if (l) l.focus();
+  }));
+})();
+</script>

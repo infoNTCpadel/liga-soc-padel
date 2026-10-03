@@ -1,12 +1,65 @@
+<style>
+.prow{position:relative}
+.plist{position:absolute;z-index:30;left:0;right:0;background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:8px;max-height:11em;overflow:auto;box-shadow:0 8px 20px rgba(0,0,0,.35)}
+.plist>div{padding:.45em .6em;cursor:pointer}
+.plist>div:hover{background:#2b351f}
+.pill{display:inline-block;background:#2b351f;border:1px solid var(--lime);color:var(--lime);border-radius:999px;padding:0 .55em;font-size:.85em;margin-right:.3em}
+</style>
 <h1>Entrar</h1>
 <% if (error) { %><div class="alert error"><%= error %></div><% } %>
 <div class="card">
-  <form method="post" action="/reservar/entrar">
+  <form method="post" action="/reservar/entrar" id="loginForm">
     <input type="hidden" name="next" value="<%= next %>">
     <input type="hidden" name="join" value="<%= join ? '1' : '' %>">
-    <div class="field"><label>Nº de socio</label><input type="text" name="member_no" value="<%= member_no %>" inputmode="numeric" required autofocus></div>
-    <div class="field"><label>PIN</label><input type="password" name="pin" inputmode="numeric" required></div>
+    <div class="field"><label>Socio</label>
+      <div class="prow">
+        <input type="text" id="q" placeholder="Busca por tu nombre, nº de socio o móvil…" autocomplete="off" autofocus value="<%= member_no %>">
+        <input type="hidden" name="member_no" id="member_no" value="<%= member_no %>">
+        <div class="plist" id="qlist" style="display:none"></div>
+        <div class="pinfo mut" id="qinfo" style="font-size:.85em;margin-top:.25em"></div>
+      </div>
+      <p class="hint" style="margin:.3em 0 0">Escríbelo y elígete en la lista — son 2 clics.</p>
+    </div>
+    <div class="field"><label>PIN</label><input type="password" name="pin" id="pin" inputmode="numeric" required></div>
     <button class="btn" type="submit">Entrar</button>
   </form>
   <p class="mut">¿Primera vez? <a href="/reservar/activar">Activa tu acceso</a> con tu nº de socio y tu teléfono.</p>
 </div>
+<script>
+(function(){
+  const q = document.getElementById('q'), list = document.getElementById('qlist'),
+    hidden = document.getElementById('member_no'), info = document.getElementById('qinfo'),
+    pin = document.getElementById('pin'), form = document.getElementById('loginForm');
+  let timer = null;
+  const paint = () => {
+    info.innerHTML = hidden.value ? '<span class="pill">Socio ' + hidden.value.replace(/[<>&"']/g, '') + '</span>' : '';
+  };
+  q.addEventListener('input', () => {
+    hidden.value = ''; paint();
+    clearTimeout(timer);
+    const v = q.value.trim();
+    if (v.length < 2) { list.style.display = 'none'; return; }
+    timer = setTimeout(() => {
+      fetch('/reservar/socios/buscar-publico?q=' + encodeURIComponent(v)).then(r => r.json()).then(arr => {
+        if (!arr.length) { list.style.display = 'none'; return; }
+        list.innerHTML = '';
+        arr.forEach(s => {
+          const d = document.createElement('div');
+          d.textContent = s.name + ' · socio ' + s.member_no;
+          d.addEventListener('mousedown', () => {
+            hidden.value = s.member_no;
+            q.value = s.name + ' (' + s.member_no + ')';
+            list.style.display = 'none'; paint(); pin.focus();
+          });
+          list.appendChild(d);
+        });
+        list.style.display = '';
+      }).catch(() => { list.style.display = 'none'; });
+    }, 250);
+  });
+  q.addEventListener('blur', () => setTimeout(() => list.style.display = 'none', 200));
+  // Sin JS o escribiendo el nº a mano: el visible vale como nº de socio.
+  form.addEventListener('submit', () => { if (!hidden.value) hidden.value = q.value.trim(); });
+  paint();
+})();
+</script>

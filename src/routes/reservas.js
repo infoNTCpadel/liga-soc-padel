@@ -380,6 +380,11 @@ router.post('/abierto/:id/abrir', requireMember, (req, res) => {
 router.get('/socios/buscar', requireMember, (req, res) => {
   res.json(B.searchMembers(req.query.q || ''));
 });
+// Búsqueda pública para el login (sin login previo): solo nombre y nº de socio,
+// sin teléfonos ni niveles. Mínimo 2 caracteres, máximo 10 resultados.
+router.get('/socios/buscar-publico', (req, res) => {
+  res.json(B.searchMembers(req.query.q || '').map(s => ({ member_no: s.member_no, name: s.name })));
+});
 
 // ---- chat conversacional de reservas ----
 // Anti-spam por IP (en memoria; un solo proceso). Sin esto, cualquiera podría

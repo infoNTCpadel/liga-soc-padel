@@ -76,8 +76,15 @@ ok(pub.includes('ocupada'), 'pública: ocupada/bloqueo siguen como "ocupada"');
 ok(!pub.includes('#f87171') && !pub.includes('#60a5fa'), 'pública: sin colores de tipos');
 
 // ---- 8. Vistas del día: buscador en "Completar jugadores" ----
+// El día de admin es compacto: la gestión de jugadores vive en la ficha.
+{
+  const src = fs.readFileSync('src/views/reservas-admin/dia.ejs', 'utf8');
+  ok(src.includes('Ficha →') && src.includes('/admin/reservas/reservas/'), 'dia.ejs: enlace a la ficha por reserva');
+  ok(!src.includes('Completar jugadores'), 'dia.ejs: tabla compacta sin formularios por fila');
+  const fsrc = fs.readFileSync('src/views/reservas-admin/ficha.ejs', 'utf8');
+  ok(fsrc.includes('class="psearch"') && fsrc.includes('/admin/reservas/socios/buscar'), 'ficha.ejs: buscador de jugadores');
+}
 for (const [f, base] of [
-  ['src/views/reservas-admin/dia.ejs', '/admin/reservas/socios/buscar'],
   ['src/views/recepcion/reservas.ejs', '/recepcion/reservas/socios/buscar'],
 ]) {
   const src = fs.readFileSync(f, 'utf8');

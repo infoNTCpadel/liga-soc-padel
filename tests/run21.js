@@ -79,7 +79,13 @@ const diaHtml = ejs.render(fs.readFileSync('src/views/reservas-admin/dia.ejs', '
   date: TOM, bookings: B.dayDetail(TOM).bookings, blocks: [], eur: (c) => (c / 100).toFixed(2) + ' €',
   minToStr: B.minToStr, info: null, prev: TOM, next: TOM, filename: 'src/views/reservas-admin/dia.ejs',
 });
-ok(diaHtml.includes('>Pagado<') && diaHtml.includes('Marcar pendiente'), 'admin día: estado pagado con botón de revertir');
+ok(diaHtml.includes('>Pagado<'), 'admin día: estado pagado en la tabla compacta');
+const fichaHtml = ejs.render(fs.readFileSync('src/views/reservas-admin/ficha.ejs', 'utf8'), {
+  b: B.getBooking(bid2), eur: (c) => (c / 100).toFixed(2) + ' €',
+  minToStr: B.minToStr, info: null, error: null, chargePresets: [],
+  filename: 'src/views/reservas-admin/ficha.ejs',
+});
+ok(fichaHtml.includes('>Pagado<') && fichaHtml.includes('Marcar pendiente'), 'ficha: estado pagado con botón de revertir');
 
 // ---- 5. HTTP: endpoints JSON del panel ----
 const { spawn } = require('child_process');
