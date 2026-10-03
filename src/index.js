@@ -26,6 +26,7 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(express.json({ limit: '1mb' }));
 
 app.use(session({
   secret: process.env.SESSION_SECRET || 'liga-padel-secret-cambiar-en-produccion',

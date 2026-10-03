@@ -34,9 +34,18 @@ router.get('/', (req, res) => {
   });
 });
 router.post('/:id/pago', (req, res) => {
-  const b = B.getBooking(parseInt(req.params.id, 10));
-  B.setBookingPaid(parseInt(req.params.id, 10), req.body.paid === '1');
+  const id = parseInt(req.params.id, 10);
+  const b = B.getBooking(id);
+  const st = B.setBookingPaid(id, req.body.paid === '1');
+  if (req.body.json === '1' || req.headers.accept === 'application/json')
+    return res.json({ ok: true, payment_status: st });
   res.redirect('/recepcion/reservas?date=' + (b ? b.date : B.todayStr()) + '&ok=' + encodeURIComponent('Pago actualizado.'));
+});
+router.post('/:id/anadir-jugador', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const r = B.addPlayer(id, req.body.name, req.body.member_no);
+  if (r.error) return res.json({ ok: false, error: r.error });
+  res.json({ ok: true, booking: B.getBooking(id) });
 });
 router.post('/:id/cargo', (req, res) => {
   const id = parseInt(req.params.id, 10);

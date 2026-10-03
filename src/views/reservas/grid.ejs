@@ -73,6 +73,7 @@ a.chip.joined:hover{background:#c4ecdc}
 .plist>div:hover{background:#2b351f}
 .pill{display:inline-block;background:#2b351f;border:1px solid var(--lime);color:var(--lime);border-radius:999px;padding:0 .55em;font-size:.85em;margin:.15em .3em .15em 0;cursor:pointer;font:inherit}
 .pill.inv{background:#3a2f14;border-color:var(--amber);color:var(--amber);cursor:default}
+.lchip{display:inline-block;min-width:1.6em;text-align:center;color:#fff;border-radius:6px;padding:0 .35em;font-size:.78em;font-weight:700;margin-left:.3em}
 <% if (staff) { %>
 /* Tema del personal: colores de la app (oscuro + lima) */
 .slotwrap{background:var(--card);border-color:var(--line)}
@@ -255,12 +256,28 @@ a.chip.free:hover{background:#2b351f;color:var(--lime)}
     h += '<p class="mut" style="margin-top:-.4em">' + (free > 0 ? 'Partido abierto · faltan ' + free + (free === 1 ? ' jugador' : ' jugadores') : kindLabel + ' cerrada') + '</p>';
     h += '<ul>';
     for (const p of pls){
-      const lv = (p.level !== undefined && p.level !== null && p.level !== '') ? p.level : LVL[p.member_number];
-      h += '<li>' + esc(p.name) + (lv ? ' <span class="lchip" style="background:' + levelColor(lv) + '">' + esc(String(lv)) + '</span>' : '') + (p.is_guest ? ' <span class="mut">(invitado)</span>' : '') + '</li>';
+      const lv = (p.level !== undefined && p.level !== null && p.level !== '') ? p.level : LVL[p.member_no];
+      h += '<li>' + esc(p.name) + (lv ? ' <span class="lchip" style="background:' + levelColor(lv) + '">' + esc(String(lv)) + '</span>' : '') + (p.is_guest ? ' <span class="pill inv">invitado</span>' : '') + '</li>';
     }
     for (let i = 0; i < free; i++) h += '<li><span class="mut">— plaza libre —</span></li>';
     h += '</ul>';
-    h += '<p>' + (b.payment_status === 'paid' ? '<span class="badge ok">Pagado</span>' : b.payment_status === 'pending' ? '<span class="badge warn">Pago pendiente</span>' : '<span class="badge">Sin pago</span>') + '</p>';
+    // Pago: quién debe + acciones.
+    const guests = pls.filter(p => p.is_guest);
+    h += '<p>' + (b.payment_status === 'paid' ? '<span class="badge ok">Pagado</span>' : b.payment_status === 'pending' ? '<span class="badge warn">Pago pendiente</span>' : '<span class="badge">Sin pago</span>');
+    if (b.payment_status === 'pending' && guests.length) h += ' <span class="mut">— ' + guests.map(g => esc(g.name)).join(', ') + '</span>';
+    h += '</p>';
+    h += '<p class="pmsg mut" style="font-size:.85em"></p>';
+    if (b.payment_status === 'pending') h += '<button type="button" class="btn small" data-act="pago" data-paid="1">Marcar pagado</button> ';
+    else if (b.payment_status === 'paid') h += '<button type="button" class="btn small ghost" data-act="pago" data-paid="0">Volver a pendiente</button> ';
+    // Añadir jugador (el personal puede añadir a cualquiera, sin mirar niveles).
+    if (pls.length < 4){
+      h += '<details style="margin-top:.6em"><summary class="mut" style="cursor:pointer">Añadir jugador</summary>';
+      h += '<div class="prow" style="margin:.4em 0;position:relative">';
+      h += '<input type="text" class="psearch" placeholder="Buscar socio por nombre, nº o móvil…" autocomplete="off" style="width:100%;box-sizing:border-box">';
+      h += '<input type="hidden" class="pname"><input type="hidden" class="pmember">';
+      h += '<div class="plist" style="display:none"></div><div class="pinfo mut" style="font-size:.85em"></div></div>';
+      h += '<button type="button" class="btn small" data-act="add">Añadir</button> <span class="mut" style="font-size:.85em">Sin elegir socio se añade como invitado.</span></details>';
+    }
     h += '<div class="row2" style="margin-top:.8em"><div>';
     h += '<a class="btn small ghost" href="<%= staffDay %>?date=<%= date %>">Ver el día completo</a>';
     h += '</div><div style="text-align:right">';
@@ -270,11 +287,82 @@ a.chip.free:hover{background:#2b351f;color:var(--lime)}
     h += '</div></div>';
     return h;
   }
+  const SEARCH_BASE = '<%= staffBase %>/socios/buscar';
+  const ADD_URL = id => '<%= anularPrefix %>' + id + '/anadir-jugador';
+  const PAGO_URL = id => '<%= anularPrefix %>' + id + '/pago';
+  function refresh(b){
+    const i = DATA.findIndex(x => String(x.id) === String(b.id));
+    if (i >= 0) DATA[i] = b;
+    box.innerHTML = card(b);
+    wire(box, b);
+  }
+  function wire(scope, b){
+    // Buscador de socios para añadir jugador.
+    const row = scope.querySelector('.prow');
+    if (row){
+      const input = row.querySelector('.psearch'), list = row.querySelector('.plist'),
+        hname = row.querySelector('.pname'), hmem = row.querySelector('.pmember'),
+        info = row.querySelector('.pinfo');
+      let timer = null;
+      const paint = () => {
+        const n = hname.value.trim(), m = hmem.value.trim();
+        info.innerHTML = !n ? '' : (m ? '<span class="pill">Socio ' + esc(m) + '</span>' : '<span class="pill inv">Invitado</span>');
+      };
+      input.addEventListener('input', () => {
+        hname.value = input.value.trim(); hmem.value = ''; paint();
+        clearTimeout(timer);
+        const q = input.value.trim();
+        if (q.length < 2) { list.style.display = 'none'; return; }
+        timer = setTimeout(() => {
+          fetch(SEARCH_BASE + '?q=' + encodeURIComponent(q)).then(r => r.json()).then(arr => {
+            if (!arr.length) { list.style.display = 'none'; return; }
+            list.innerHTML = '';
+            arr.forEach(s => {
+              const d = document.createElement('div');
+              d.textContent = s.name + ' · socio ' + s.member_no + (s.phone ? ' · ' + s.phone : '');
+              d.addEventListener('mousedown', () => {
+                hname.value = s.name; hmem.value = s.member_no;
+                input.value = s.name + ' (' + s.member_no + ')';
+                list.style.display = 'none'; paint();
+              });
+              list.appendChild(d);
+            });
+            list.style.display = '';
+          }).catch(() => { list.style.display = 'none'; });
+        }, 250);
+      });
+      input.addEventListener('blur', () => setTimeout(() => list.style.display = 'none', 200));
+    }
+    scope.querySelectorAll('[data-act="add"]').forEach(btn => btn.addEventListener('click', () => {
+      const nm = scope.querySelector('.pname').value.trim(), mm = scope.querySelector('.pmember').value.trim();
+      const msg = scope.querySelector('.pmsg');
+      if (!nm) { msg.textContent = 'Escribe o elige un nombre.'; return; }
+      msg.textContent = 'Añadiendo…';
+      fetch(ADD_URL(b.id), { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: nm, member_no: mm }) })
+        .then(r => r.json()).then(j => {
+          if (!j.ok) { msg.textContent = j.error || 'No se pudo añadir.'; return; }
+          refresh(j.booking);
+        }).catch(() => { msg.textContent = 'Error de red.'; });
+    }));
+    scope.querySelectorAll('[data-act="pago"]').forEach(btn => btn.addEventListener('click', () => {
+      const msg = scope.querySelector('.pmsg');
+      msg.textContent = 'Guardando…';
+      fetch(PAGO_URL(b.id), { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paid: btn.getAttribute('data-paid'), json: '1' }) })
+        .then(r => r.json()).then(j => {
+          if (!j.ok) { msg.textContent = j.error || 'No se pudo guardar.'; return; }
+          b.payment_status = j.payment_status;
+          refresh(b);
+        }).catch(() => { msg.textContent = 'Error de red.'; });
+    }));
+  }
   document.querySelectorAll('button.chip.busy[data-bid]').forEach(function(btn){
     btn.addEventListener('click', function(){
       const b = DATA.find(x => String(x.id) === btn.getAttribute('data-bid'));
       if (!b) return;
       box.innerHTML = card(b);
+      wire(box, b);
       box.style.display = 'block';
       box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     });

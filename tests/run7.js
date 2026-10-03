@@ -211,7 +211,7 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
   r = await recep.req('GET', '/recepcion/reservas?date=' + D5);
   ok(r.statusCode === 200 && r.text.includes('Pendientes de pago'), 'recepción ve pendientes de pago');
   await recep.req('POST', `/recepcion/reservas/${bidA}/pago`, { paid: '1' });
-  ok(bbq('SELECT payment_status FROM bookings WHERE id = ?', bidA)[0].payment_status === 'ok', 'recepción marca pagado');
+  ok(bbq('SELECT payment_status FROM bookings WHERE id = ?', bidA)[0].payment_status === 'paid', 'recepción marca pagado');
   await recep.req('POST', `/recepcion/reservas/${bidA}/cargo`, { label: 'Luz', amount: '4,50' });
   ok(bbq('SELECT amount_cents FROM booking_charges WHERE booking_id = ?', bidA)[0].amount_cents === 450, 'cargo de luz 4,50 €');
 

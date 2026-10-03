@@ -560,12 +560,36 @@ function normalizePlayers(titular, extras) {
   }
   return rows;
 }
-function recomputePayment(booking_id) {
+function recomputePayment(booking_id, force) {
+  const cur = bdb.prepare('SELECT payment_status FROM bookings WHERE id = ?').get(booking_id);
+  // 'paid' es manual y se mantiene: solo el personal lo cambia (force lo ignora).
+  if (!force && cur && cur.payment_status === 'paid') return 'paid';
   const guests = bdb.prepare(
     'SELECT 1 FROM booking_players WHERE booking_id = ? AND is_guest = 1 LIMIT 1').get(booking_id);
   bdb.prepare('UPDATE bookings SET payment_status = ? WHERE id = ?')
     .run(guests ? 'pending' : 'ok', booking_id);
   return guests ? 'pending' : 'ok';
+}
+// Añade un jugador a una reserva (personal): sin mirar niveles ni regla 1/día,
+// como el resto de acciones del personal. Sin nº de socio válido = invitado.
+function addPlayer(booking_id, name, member_no) {
+  const b = bdb.prepare('SELECT * FROM bookings WHERE id = ?').get(booking_id);
+  if (!b || b.status !== 'active') return { error: 'La reserva ya no está disponible.' };
+  name = (name || '').trim();
+  if (!name) return { error: 'Indica el nombre del jugador.' };
+  const total = bdb.prepare('SELECT COUNT(*) c FROM booking_players WHERE booking_id = ?').get(booking_id).c;
+  if (total >= 4) return { error: 'El partido ya está completo (4 jugadores).' };
+  const mno = (member_no || '').trim();
+  const m = mno ? getMember(mno) : null;
+  if (mno && (!m || !m.active)) return { error: 'Nº de socio no válido.' };
+  const dup = bdb.prepare('SELECT 1 FROM booking_players WHERE booking_id = ? AND (member_no = ? OR lower(name) = lower(?)) LIMIT 1')
+    .get(booking_id, mno || ('-' + Date.now()), name);
+  if (dup) return { error: 'Ese jugador ya está en el partido.' };
+  bdb.prepare('INSERT INTO booking_players(booking_id, name, member_no, is_guest) VALUES(?, ?, ?, ?)')
+    .run(booking_id, m ? m.name : name, mno, m ? 0 : 1);
+  recomputePayment(booking_id);
+  syncOpenSpots(booking_id);
+  return { ok: true };
 }
 // Sustituye los jugadores de una reserva (titular primero) y recalcula el pago.
 function setPlayers(booking_id, titular_member_no, extras) {
@@ -953,7 +977,11 @@ function listBlocks(fromDate) {
 
 // ------------------------------------------------------------ cobros de reservas
 function setBookingPaid(id, paid) {
-  bdb.prepare("UPDATE bookings SET payment_status = ? WHERE id = ?").run(paid ? 'ok' : 'pending', id);
+  if (paid) {
+    bdb.prepare("UPDATE bookings SET payment_status = 'paid' WHERE id = ?").run(id);
+    return 'paid';
+  }
+  return recomputePayment(id, true); // vuelve al cálculo automático
 }
 function addCharge(booking_id, label, amount_cents) {
   if (!(label || '').trim()) return { error: 'Indica el concepto del cargo.' };
@@ -1143,7 +1171,7 @@ function staffGrid(date, urls, courts) {
       titular_name: b.titular_name, titular_member_no: b.titular_member_no,
       open_spots: b.open_spots, payment_status: b.payment_status,
       kind: b.kind || 'reserva',
-      players: (b.players || []).map(p => ({ name: p.name, member_no: p.member_no })),
+      players: (b.players || []).map(p => ({ name: p.name, member_no: p.member_no, is_guest: p.is_guest })),
     }))),
     levelsJson: safeJson(levels),
     recentTitulars: recentTitulars(6),
@@ -1157,7 +1185,7 @@ module.exports = {
   validPin, setPin, hasPin, checkPin, resetPin,
   dayBookings, dayBlocks, freeSegments, reachableSet, validStarts,
   isBookable, isPotentiallyValid, gridFor,
-  validateNewBooking, activeBookingCount, normalizePlayers, setPlayers, recomputePayment,
+  validateNewBooking, activeBookingCount, normalizePlayers, setPlayers, addPlayer, recomputePayment,
   createBooking, getBooking, cancelBooking, quickBook, recentTitulars,
   searchMembers, validLevel, setLevel, fmtLevel, levelRangeText,
   addBlock, removeBlock, getBlocks, isBlockedBy, openVisibleTo,

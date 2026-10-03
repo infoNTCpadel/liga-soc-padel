@@ -101,10 +101,20 @@ router.post('/reservas/:id/anular', (req, res) => {
   res.redirect('/admin/reservas/dia?date=' + date + '&ok=' + encodeURIComponent('Reserva anulada.'));
 });
 router.post('/reservas/:id/pago', (req, res) => {
-  const b = B.getBooking(parseInt(req.params.id, 10));
+  const id = parseInt(req.params.id, 10);
+  const b = B.getBooking(id);
+  const st = B.setBookingPaid(id, req.body.paid === '1');
+  if (req.body.json === '1' || req.headers.accept === 'application/json')
+    return res.json({ ok: true, payment_status: st });
   const date = b ? b.date : B.todayStr();
-  B.setBookingPaid(parseInt(req.params.id, 10), req.body.paid === '1');
   res.redirect('/admin/reservas/dia?date=' + date + '&ok=' + encodeURIComponent('Pago actualizado.'));
+});
+// Añadir un jugador desde el panel de la parrilla (JSON).
+router.post('/reservas/:id/anadir-jugador', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const r = B.addPlayer(id, req.body.name, req.body.member_no);
+  if (r.error) return res.json({ ok: false, error: r.error });
+  res.json({ ok: true, booking: B.getBooking(id) });
 });
 // Abrir un partido cerrado con jugadores incompletos para buscar jugadores.
 router.post('/reservas/:id/abrir', (req, res) => {
