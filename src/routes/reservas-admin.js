@@ -19,6 +19,8 @@ function activeCourts() {
   } catch (e) { return []; }
 }
 const eur = (cents) => (Number(cents || 0) / 100).toFixed(2).replace('.', ',') + ' €';
+// Texto del textarea de conceptos preconfigurados ("Etiqueta: 3,00" por línea).
+const presetsText = () => B.getChargePresets().map(p => p.label + ': ' + (p.amount_cents / 100).toFixed(2).replace('.', ',')).join('\n');
 
 // Estado del formulario de horarios por día: filas Lun–Dom y texto de fechas especiales.
 function hoursFormState(config) {
@@ -51,6 +53,7 @@ router.get('/dia', (req, res) => {
   const { bookings, blocks } = B.dayDetail(date);
   res.renderPage('reservas-admin/dia', {
     date, bookings, blocks, eur, minToStr: B.minToStr, info: req.query.ok || null,
+    chargePresets: B.getChargePresets(),
     prev: B.addDays(date, -1), next: B.addDays(date, 1),
   });
 });
@@ -135,7 +138,9 @@ router.post('/reservas/:id/cargo', (req, res) => {
   const b = B.getBooking(id);
   const date = b ? b.date : B.todayStr();
   const cents = Math.round(parseFloat(String(req.body.amount || '').replace(',', '.')) * 100) || 0;
-  const r = B.addCharge(id, req.body.label || '', cents, req.body.player_id || null);
+  const r = req.body.player_id === 'split'
+    ? B.addChargeSplit(id, req.body.label || '', cents)
+    : B.addCharge(id, req.body.label || '', cents, req.body.player_id || null);
   res.redirect('/admin/reservas/dia?date=' + date + '&ok=' + encodeURIComponent(r.ok ? 'Cargo añadido.' : (r.error || 'Error.')));
 });
 router.post('/cargos/:id/pagado', (req, res) => {
@@ -227,7 +232,7 @@ router.post('/nueva', (req, res) => {
 // ---- configuración ----
 router.get('/config', (req, res) => {
   const config = B.getConfig();
-  res.renderPage('reservas-admin/config', { error: null, ok: null, config, minToStr: B.minToStr, ...hoursFormState(config) });
+  res.renderPage('reservas-admin/config', { error: null, ok: null, config, minToStr: B.minToStr, chargePresetsText: presetsText(), ...hoursFormState(config) });
 });
 router.post('/config', (req, res) => {
   const open_min = B.strToMin(req.body.open) ?? 480;
@@ -241,7 +246,7 @@ router.post('/config', (req, res) => {
   const err = B.validateConfig(open_min, close_min, durationsStr);
   const renderErr = (msg) => {
     const config = B.getConfig();
-    return res.renderPage('reservas-admin/config', { error: msg, ok: null, config, minToStr: B.minToStr, ...hoursFormState(config) });
+    return res.renderPage('reservas-admin/config', { error: msg, ok: null, config, minToStr: B.minToStr, chargePresetsText: req.body.charge_presets || '', ...hoursFormState(config) });
   };
   if (err) return renderErr(err);
   // Horarios por día de la semana: solo se guarda lo que difiera del horario general.
@@ -274,6 +279,7 @@ router.post('/config', (req, res) => {
   B.setCfg('days_ahead', days_ahead); B.setCfg('hold_min', hold_min); B.setCfg('cancel_limit_h', cancel_limit_h);
   B.setCfg('max_active_bookings', max_active_bookings);
   B.setCfg('guest_price', (req.body.guest_price || '').trim());
+  B.setCfg('charge_presets', JSON.stringify(B.parseChargePresets(req.body.charge_presets || '')));
   B.setCfg('reminders_enabled', req.body.reminders_enabled === '1' ? '1' : '0');
   B.setCfg('reminder_hours', Math.min(24, Math.max(1, parseInt(req.body.reminder_hours, 10) || 3)));
   // Solo se tocan los horarios por día si el formulario los traía (no borrar overrides con un POST antiguo).
@@ -284,7 +290,7 @@ router.post('/config', (req, res) => {
   const okMsg = bookedClosed.length
     ? `Configuración guardada. Ojo: hay reservas activas en día cerrado (${bookedClosed.join(', ')}); anúlalas o avisa a los socios.`
     : 'Configuración guardada.';
-  res.renderPage('reservas-admin/config', { error: null, ok: okMsg, config, minToStr: B.minToStr, ...hoursFormState(config) });
+  res.renderPage('reservas-admin/config', { error: null, ok: okMsg, config, minToStr: B.minToStr, chargePresetsText: presetsText(), ...hoursFormState(config) });
 });
 
 // ---- socios ----

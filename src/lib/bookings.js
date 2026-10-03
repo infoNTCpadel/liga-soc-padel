@@ -126,6 +126,15 @@ try {
   if (!hasDurs && oldSlot) {
     bdb.prepare("INSERT INTO booking_config(key, value) VALUES('slot_durations', ?)").run(String(parseInt(oldSlot.value, 10) || 90));
   }
+  // Conceptos de cargo preconfigurados por defecto (el admin los puede editar).
+  const hasPresets = bdb.prepare("SELECT 1 FROM booking_config WHERE key = 'charge_presets'").get();
+  if (!hasPresets) {
+    bdb.prepare("INSERT INTO booking_config(key, value) VALUES('charge_presets', ?)").run(JSON.stringify([
+      { label: 'Pelotas', amount_cents: 300 },
+      { label: 'Raqueta', amount_cents: 500 },
+      { label: 'Luz', amount_cents: 300 },
+    ]));
+  }
 } catch (e) { /* instalación nueva o ya migrada */ }
 
 // ------------------------------------------------------------ config
@@ -174,6 +183,7 @@ function getConfig() {
     reminders_enabled: cfg('reminders_enabled'),
     reminder_hours: parseInt(cfg('reminder_hours'), 10),
     hours_json: cfg('hours_json'),
+    charge_presets: cfg('charge_presets'),
   };
 }
 // Valida la configuración: horarios coherentes y al menos una duración válida.
@@ -1007,6 +1017,40 @@ function setBookingPaid(id, paid) {
   }
   return recomputePayment(id, true); // vuelve al cálculo automático
 }
+// Conceptos de cargo preconfigurados: texto "Etiqueta: importe" por línea.
+function parseChargePresets(text) {
+  const out = [];
+  for (const line of String(text || '').split('\n')) {
+    const m = line.trim().match(/^(.+?)\s*:\s*([0-9]+(?:[.,][0-9]{1,2})?)\s*€?$/);
+    if (!m) continue;
+    const cents = Math.round(parseFloat(m[2].replace(',', '.')) * 100);
+    if (m[1].trim() && cents > 0) out.push({ label: m[1].trim(), amount_cents: cents });
+  }
+  return out;
+}
+function getChargePresets() {
+  try {
+    const arr = JSON.parse(getConfig().charge_presets || '[]');
+    if (Array.isArray(arr)) return arr.filter(p => p && p.label && p.amount_cents > 0);
+  } catch (e) {}
+  return [];
+}
+// Reparte un cargo entre los jugadores de la reserva (p. ej. pelotas entre los 4).
+function addChargeSplit(booking_id, label, amount_cents) {
+  if (!(label || '').trim()) return { error: 'Indica el concepto del cargo.' };
+  const cents = Math.round(Number(amount_cents) || 0);
+  if (!(cents > 0)) return { error: 'Importe no válido.' };
+  const players = bdb.prepare('SELECT id FROM booking_players WHERE booking_id = ? ORDER BY id').all(booking_id);
+  if (!players.length) return { error: 'La reserva no tiene jugadores.' };
+  const n = players.length, base = Math.floor(cents / n);
+  let rest = cents - base * n;
+  const ins = bdb.prepare('INSERT INTO booking_charges(booking_id, label, amount_cents, booking_player_id) VALUES(?, ?, ?, ?)');
+  players.forEach((p, i) => {
+    const share = base + (i < rest ? 1 : 0);
+    ins.run(booking_id, label.trim(), share, p.id);
+  });
+  return { ok: true, count: n };
+}
 function addCharge(booking_id, label, amount_cents, player_id) {
   if (!(label || '').trim()) return { error: 'Indica el concepto del cargo.' };
   const cents = Math.round(Number(amount_cents) || 0);
@@ -1226,7 +1270,7 @@ module.exports = {
   dayHours, validateHoursJson, bookableStarts,
   expireOffers, promoteWaitlist, joinWaitlist, confirmOffer, leaveWaitlist, memberArea,
   validateBlock, affectedBookings, createBlock, deleteBlock, listBlocks,
-  setBookingPaid, addCharge, setChargePaid, deleteCharge, chargeList, dayDetail, pendingPayments,
+  setBookingPaid, addCharge, addChargeSplit, setChargePaid, deleteCharge, chargeList, parseChargePresets, getChargePresets, dayDetail, pendingPayments,
   dueReminders, checkReminders, sendEmail,
   levelColor, staffGrid, bookingColor,
 };

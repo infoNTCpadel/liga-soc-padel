@@ -19,6 +19,8 @@
     <div class="field"><label>Máx. reservas activas por socio (0 = sin límite)</label><input type="number" name="max_active_bookings" value="<%= config.max_active_bookings %>" min="0" max="20" required></div>
     <div class="field"><label>Precio de referencia del invitado (€, opcional)</label><input type="text" name="guest_price" value="<%= config.guest_price %>" placeholder="p. ej. 6"></div>
   </div>
+  <div class="field"><label>Conceptos de cargo preconfigurados (uno por línea: <em>Etiqueta: importe €</em>)</label><textarea name="charge_presets" rows="3" placeholder="Pelotas: 3&#10;Raqueta: 5&#10;Luz: 3"><%= typeof chargePresetsText !== 'undefined' ? chargePresetsText : '' %></textarea>
+  <p class="hint">Salen como botones rápidos al añadir cargos, para ir más rápido en recepción.</p></div>
   <div class="row2">
     <div class="field"><label>Horas antes para el recordatorio</label><input type="number" name="reminder_hours" value="<%= config.reminder_hours %>" min="1" max="24"></div>
   </div>

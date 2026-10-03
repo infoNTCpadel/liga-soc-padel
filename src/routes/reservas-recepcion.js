@@ -30,6 +30,7 @@ router.get('/', (req, res) => {
   res.renderPage('recepcion/reservas', {
     date, bookings, blocks, pending, unpaidCharges, eur, minToStr: B.minToStr,
     info: req.query.ok || null, error: req.query.error || null,
+    chargePresets: B.getChargePresets(),
     prev: B.addDays(date, -1), next: B.addDays(date, 1),
   });
 });
@@ -57,7 +58,9 @@ router.post('/:id/cargo', (req, res) => {
   const id = parseInt(req.params.id, 10);
   const b = B.getBooking(id);
   const cents = Math.round(parseFloat(String(req.body.amount || '').replace(',', '.')) * 100) || 0;
-  const r = B.addCharge(id, req.body.label || '', cents, req.body.player_id || null);
+  const r = req.body.player_id === 'split'
+    ? B.addChargeSplit(id, req.body.label || '', cents)
+    : B.addCharge(id, req.body.label || '', cents, req.body.player_id || null);
   const date = b ? b.date : B.todayStr();
   res.redirect('/recepcion/reservas?date=' + date + (r.error
     ? '&error=' + encodeURIComponent(r.error)
