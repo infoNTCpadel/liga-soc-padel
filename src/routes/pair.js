@@ -4,6 +4,13 @@ const express = require('express');
 const router = express.Router();
 const { db, getSetting } = require('../db');
 const L = require('../lib/league');
+const { notifyRivalValidation } = require('../lib/result-notify');
+
+// Avisa por email a la pareja rival (sin bloquear la respuesta ni fallar nunca).
+function notifyRival(req, matchId) {
+  const baseUrl = req.protocol + '://' + req.get('host');
+  notifyRivalValidation(db, matchId, baseUrl, getSetting('club_name', 'Liga social de pádel'));
+}
 
 function requirePair(req, res, next) {
   const pair = req.session.pairId
@@ -149,6 +156,7 @@ router.post('/resultado/:id', (req, res) => {
       .run(pair.id, pair.id, pair.id, (b.notes || '').trim(), m.id);
     const upd = db.prepare('SELECT * FROM matches WHERE id = ?').get(m.id);
     advanceWinner(upd);
+    notifyRival(req, m.id);
     return res.redirect('/pareja');
   }
 
@@ -182,6 +190,7 @@ router.post('/resultado/:id', (req, res) => {
     .run(s1a, s1b, s2a, s2b, q[0], q[1], q[2], q[3], winnerId, pair.id, (b.notes || '').trim(), m.id);
   const upd = db.prepare('SELECT * FROM matches WHERE id = ?').get(m.id);
   advanceWinner(upd);
+  notifyRival(req, m.id);
   res.redirect('/pareja');
 });
 
