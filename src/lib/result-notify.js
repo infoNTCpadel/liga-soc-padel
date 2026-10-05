@@ -64,6 +64,8 @@ async function notifyRivalValidation(db, matchId, baseUrl, clubName) {
     for (const to of data.recipients) {
       results.push(await sendEmail(to, data.subject, data.html, clubName));
     }
+    const sent = results.filter(r => r.ok).length;
+    console.log(`notifyRivalValidation: partido ${matchId} → email a ${sent}/${data.recipients.length} destinatario(s)`);
     return { ok: true, results };
   } catch (e) {
     console.error('notifyRivalValidation:', e.message);
