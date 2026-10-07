@@ -13,6 +13,17 @@
   <div class="stat"><b>3</b><span>categorías: masculina, femenina y mixta</span></div>
 </div>
 
+<% if (recentResults.length) { %>
+<div class="card">
+  <h3>Últimos resultados</h3>
+  <% for (const r of recentResults) { %>
+    <p class="recent-row"><span class="mut small"><%= r.context %></span><br>
+    <strong><%= r.winner %></strong> <span class="score"><%= r.score %></span><% if (r.loser) { %> <span class="mut">· <%= r.loser %></span><% } %></p>
+  <% } %>
+  <p><a href="/liga">Ver la liga →</a></p>
+</div>
+<% } %>
+
 <h2>Calendario <%= seasonName %></h2>
 <div class="timeline">
   <% for (const p of phases) { %>
@@ -21,6 +32,7 @@
       <div>
         <div class="dates"><%= p.dates || (fmtDate(p.ini) + ' – ' + fmtDate(p.fin)) %></div>
         <div class="plabel"><%= p.label %></div>
+        <% if (p.countdown) { %><div class="countdown"><%= p.countdown %></div><% } %>
       </div>
       <% if (p.current) { %><span class="badge ok" style="margin-left:auto">En curso</span><% } %>
     </div>

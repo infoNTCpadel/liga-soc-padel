@@ -112,6 +112,10 @@ input[type=checkbox] { width: 1.15rem; height: 1.15rem; accent-color: var(--lime
 .phase.past .dot { background: var(--mut); }
 .phase .dates { color: var(--lime); font-weight: 700; font-size: .85rem; text-transform: uppercase; }
 .phase .plabel { font-weight: 700; }
+.phase .countdown { color: var(--amber); font-weight: 700; font-size: .85rem; margin-top: 2px; }
+.recent-row { margin: 10px 0; }
+.recent-row .score { font-weight: 700; color: var(--lime); }
+tr.warnrow td { background: #2b2214; }
 
 /* Cuadros de playoff */
 /* Cuadro de playoffs */

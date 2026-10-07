@@ -19,6 +19,7 @@
   <a class="dashcard" href="/admin/parejas"><b>Parejas</b><span class="desc">Listado, edición y altas manuales</span></a>
   <a class="dashcard" href="/admin/grupos"><b>Grupos</b><span class="desc">Composición y sorteo por rondas</span></a>
   <a class="dashcard" href="/admin/partidos"><span class="nbadge <%= (stats.toValidate + stats.disputed) ? '' : 'zero' %>"><%= stats.toValidate + stats.disputed %></span><b>Partidos</b><span class="desc">Resultados, validaciones y disputas</span></a>
+  <a class="dashcard" href="/admin/seguimiento"><span class="nbadge <%= stats.pendingMatches ? '' : 'zero' %>"><%= stats.pendingMatches %></span><b>Seguimiento</b><span class="desc">Partidos pendientes y avisos por WhatsApp</span></a>
   <a class="dashcard" href="/admin/playoffs"><b>Playoffs</b><span class="desc">Cuadros finales por categoría</span></a>
   <a class="dashcard" href="/admin/cambios"><span class="nbadge <%= stats.changes ? '' : 'zero' %>"><%= stats.changes %></span><b>Cambios</b><span class="desc">Solicitudes de cambio de pareja</span></a>
   <a class="dashcard" href="/admin/cuadrante"><b>Cuadrante</b><span class="desc">Vista global de la competición</span></a>

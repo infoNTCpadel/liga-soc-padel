@@ -1,0 +1,31 @@
+<h1>Seguimiento de partidos</h1>
+<p class="mut">Parejas con partidos pendientes de jugar en la ronda, ordenadas por pendientes.
+<% for (const n of [1, 2, 3]) { %>
+  <a class="btn small <%= n === round ? '' : 'ghost' %>" href="/admin/seguimiento?round=<%= n %>">Ronda <%= n %></a>
+<% } %>
+</p>
+
+<% for (const c of data) { %>
+<div class="card">
+  <h3><%= c.name %></h3>
+  <% if (!c.rows.length) { %>
+    <p class="mut">Sin partidos pendientes en esta ronda. ¡Todo jugado! 🎾</p>
+  <% } else { %>
+  <div class="tblwrap"><table class="tbl">
+    <tr><th>Pareja</th><th>Grupo</th><th>Jugados</th><th>Pendientes</th><th>Último resultado</th><th></th></tr>
+    <% for (const r of c.rows) { %>
+    <tr class="<%= r.played === 0 ? 'warnrow' : '' %>">
+      <td><strong><%= r.n1 %> / <%= r.n2 %></strong><br><span class="mut small"><%= r.code %></span>
+        <% if (r.played === 0) { %> <span class="badge warn">sin jugar</span><% } %></td>
+      <td class="num"><%= r.group_no %></td>
+      <td class="num"><%= r.played %>/<%= r.total %></td>
+      <td class="num"><strong><%= r.pending %></strong></td>
+      <td class="small"><%= r.lastTxt %></td>
+      <td><% if (r.wa) { %><a class="btn small" href="<%= r.wa %>" target="_blank" rel="noopener">WhatsApp</a><% } else { %><span class="mut small">sin teléfono</span><% } %></td>
+    </tr>
+    <% } %>
+  </table></div>
+  <% } %>
+</div>
+<% } %>
+<p class="mut small">El botón WhatsApp abre el chat con el capitán (o el primer jugador) con un mensaje ya escrito: revísalo y envíalo desde tu móvil.</p>

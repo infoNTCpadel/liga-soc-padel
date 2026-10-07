@@ -75,7 +75,12 @@ router.get('/', (req, res) => {
     return { n, closed: getSetting(`round${n}_closed`, '0') === '1', info };
   });
   const middayStats = getMiddayStats();
-  res.renderPage('admin/home', { stats, rounds, playoffsGenerated: getSetting('playoffs_generated', '0') === '1', middayStats });
+  let pendingMatches = 0;
+  for (const r of rounds) {
+    if (r.closed) continue;
+    for (const cat of L.CATEGORY_CODES) pendingMatches += Math.max(0, r.info[cat].total - r.info[cat].done);
+  }
+  res.renderPage('admin/home', { stats: { ...stats, pendingMatches }, rounds, playoffsGenerated: getSetting('playoffs_generated', '0') === '1', middayStats });
 });
 
 // Estadísticas de MEDIODÍA PADEL para el panel (edición abierta; 0 si no hay).
@@ -90,7 +95,61 @@ function getMiddayStats() {
   } catch (e) { return { pending: 0, total: 0 }; }
 }
 
-// ================= INSCRIPCIONES =================
+// ================= SEGUIMIENTO =================
+// Partidos pendientes por pareja en una ronda + aviso por WhatsApp.
+function fmtDateEs(iso) {
+  if (!iso) return '';
+  const [y, m, d] = String(iso).split('-');
+  return `${d}/${m}/${y}`;
+}
+router.get('/seguimiento', (req, res) => {
+  let round = parseInt(req.query.round, 10);
+  if (![1, 2, 3].includes(round)) {
+    round = [1, 2, 3].find(n =>
+      getSetting(`round${n}_closed`, '0') !== '1' &&
+      db.prepare('SELECT COUNT(*) c FROM groups WHERE round_no = ?').get(n).c > 0
+    ) || 1;
+  }
+  const club = getSetting('club_name', 'Liga social de pádel');
+  const cierre = getSetting(`phase_r${round}_fin`, '');
+  const data = L.CATEGORY_CODES.map(code => {
+    const members = db.prepare(
+      `SELECT p.id AS pair_id, p.code, p1.name AS n1, p2.name AS n2,
+              pc.name AS cap_name, pc.phone AS cap_phone, g.group_no
+       FROM group_members gm
+       JOIN groups g ON g.id = gm.group_id
+       JOIN pairs p ON p.id = gm.pair_id AND p.status = 'active'
+       JOIN players p1 ON p1.id = p.player1_id
+       JOIN players p2 ON p2.id = p.player2_id
+       LEFT JOIN players pc ON pc.id = p.captain_id
+       WHERE g.category = ? AND g.round_no = ?
+       ORDER BY g.group_no, p.id`).all(code, round);
+    const matches = db.prepare(
+      `SELECT m.* FROM matches m JOIN groups g ON g.id = m.group_id
+       WHERE g.category = ? AND g.round_no = ? AND m.stage = 'groups'`).all(code, round);
+    const rows = members.map(pm => {
+      const mine = matches.filter(m => m.pair_a_id === pm.pair_id || m.pair_b_id === pm.pair_id);
+      const played = mine.filter(m => m.winner_id || m.wo_winner_id || m.unplayed).length;
+      const pending = mine.length - played;
+      const last = mine.map(m => m.submitted_at).filter(Boolean).sort().pop() || null;
+      const daysAgo = last ? Math.floor((Date.now() - new Date(last + 'Z').getTime()) / 86400000) : null;
+      const nombre = pm.cap_name || pm.n1;
+      const cierreTxt = cierre ? ` (cierra el ${fmtDateEs(cierre)})` : '';
+      const cuerpo = played === 0
+        ? `aún no habéis jugado ningún partido de la Ronda ${round}${cierreTxt}`
+        : `os quedan ${pending} partido${pending === 1 ? '' : 's'} por jugar en la Ronda ${round}${cierreTxt}`;
+      const text = `Hola ${nombre}, os escribimos del ${club}: ${cuerpo}. ¿Podéis ir jugándolos esta semana? ¡Gracias! 🎾`;
+      return {
+        ...pm, total: mine.length, played, pending,
+        lastTxt: daysAgo == null ? '—' : (daysAgo === 0 ? 'hoy' : `hace ${daysAgo} día${daysAgo === 1 ? '' : 's'}`),
+        wa: L.waLink(pm.cap_phone, text),
+      };
+    }).filter(r => r.pending > 0)
+      .sort((a, b) => b.pending - a.pending || a.played - b.played);
+    return { code, name: L.catName(code), rows };
+  });
+  res.renderPage('admin/seguimiento', { round, data });
+});
 router.get('/inscripciones', (req, res) => {
   const { status = '', paid = '', q = '' } = req.query;
   let sql = `SELECT p.*, p1.name n1, p1.phone t1, p1.paid paid1, p1.gender g1, p1.member_verified mv1,
@@ -681,10 +740,11 @@ router.post('/partidos/:id/resultado', (req, res) => {
   const unplayed = !!b.unplayed;
   db.prepare(`UPDATE matches SET s1a=?, s1b=?, s2a=?, s2b=?, stb_a=?, stb_b=?,
               winner_id=?, wo_winner_id=?, unplayed=?, submitted_by=NULL,
+              submitted_at = CASE WHEN ? = 1 THEN submitted_at ELSE datetime('now') END,
               validation = CASE WHEN ? = 1 THEN 'none' ELSE 'validated' END,
               validation_deadline = NULL, notes = ? WHERE id = ?`)
     .run(num(b.s1a), num(b.s1b), num(b.s2a), num(b.s2b), num(b.stb_a), num(b.stb_b),
-      unplayed ? null : winner, wo ? winner : null, unplayed ? 1 : 0, unplayed ? 1 : 0,
+      unplayed ? null : winner, wo ? winner : null, unplayed ? 1 : 0, unplayed ? 1 : 0, unplayed ? 1 : 0,
       (b.notes || '').trim(), m.id);
   const upd = db.prepare('SELECT * FROM matches WHERE id = ?').get(m.id);
   advanceWinner(upd);

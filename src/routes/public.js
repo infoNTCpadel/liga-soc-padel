@@ -17,6 +17,8 @@ function phases() {
   for (const p of list) {
     p.current = p.ini && p.fin && today >= p.ini && today <= p.fin;
     p.past = p.fin && today > p.fin;
+    // Cuenta atrás hasta el cierre de la fase en curso
+    p.countdown = p.current ? L.countdownText(p.fin) : null;
   }
   return list;
 }
@@ -33,7 +35,19 @@ router.get('/', (req, res) => {
     pairs: db.prepare("SELECT COUNT(*) c FROM pairs WHERE status = 'active'").get().c,
     pending: db.prepare("SELECT COUNT(*) c FROM pairs WHERE status = 'pending'").get().c,
   };
-  res.renderPage('public/home', { phases: phases(), fmtDate, counts,
+  // Últimos 3 resultados con marcador (de parejas o del admin)
+  const RN = require('../lib/result-notify');
+  const recentResults = db.prepare(
+    `SELECT m.* FROM matches m
+     WHERE m.winner_id IS NOT NULL OR m.wo_winner_id IS NOT NULL
+     ORDER BY COALESCE(m.submitted_at, m.created_at) DESC, m.id DESC LIMIT 3`
+  ).all().map(m => {
+    const wId = m.wo_winner_id || m.winner_id;
+    const lId = wId === m.pair_a_id ? m.pair_b_id : m.pair_a_id;
+    return { context: RN.matchContext(db, m), winner: L.pairName(db, wId),
+             loser: lId ? L.pairName(db, lId) : null, score: RN.formatScore(m) };
+  });
+  res.renderPage('public/home', { phases: phases(), fmtDate, counts, recentResults,
     registrationClosed: getSetting('registration_closed', '0') === '1' });
 });
 

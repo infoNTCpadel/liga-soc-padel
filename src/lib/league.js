@@ -518,7 +518,32 @@ function bracketOf(level) {
   return PLAYTOMIC_BRACKETS.find(b => level >= b.min && level <= b.max) || PLAYTOMIC_BRACKETS[3];
 }
 
-// "Pista 2 · 12/10/2026 10:30" a partir de scheduled_at ('YYYY-MM-DDTHH:MM') y court_name.
+// Texto de cuenta atrás hasta el cierre de una fase (fin en 'YYYY-MM-DD',
+// se considera el fin del día). Devuelve null si ya pasó o no hay fecha.
+function countdownText(finIso, nowMs) {
+  if (!finIso) return null;
+  const parts = String(finIso).split('-').map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return null;
+  const end = new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59).getTime();
+  const ms = end - (nowMs != null ? nowMs : Date.now());
+  if (ms <= 0) return null;
+  const totalH = Math.floor(ms / 3600000);
+  const d = Math.floor(totalH / 24), h = totalH % 24;
+  if (d > 0) return `Quedan ${d} día${d === 1 ? '' : 's'} y ${h} h para el cierre`;
+  if (totalH > 0) return `Quedan ${totalH} h para el cierre`;
+  return 'Cierra en menos de 1 h';
+}
+
+// Enlace click-to-chat de WhatsApp con texto precargado.
+// Normaliza el teléfono a formato internacional (34 + móvil en España).
+function waLink(phone, text) {
+  const d = normPhone(phone);
+  let intl = null;
+  if (/^[67]\d{8}$/.test(d)) intl = '34' + d;          // móvil español sin prefijo
+  else if (/^\d{10,15}$/.test(d)) intl = d;            // ya en formato internacional
+  if (!intl) return null;
+  return 'https://wa.me/' + intl + '?text=' + encodeURIComponent(text || '');
+}
 function formatSlot(scheduledAt, courtName) {
   if (!scheduledAt && !courtName) return '';
   let s = '';
@@ -536,6 +561,7 @@ module.exports = {
   computeStandings, movementDelta, targetGroup,
   chunkIntoGroups, roundRobin, nextPowerOfTwo, seedOrder, formatSlot,
   buildBracket, splitPlayoffCategories, parsePlayoffSizes, placeSeeds, drawSeeds34, playoffOrdinal, isPlayoffStage, matchStageClosed,
+  countdownText, waLink,
   BRACKET_NEXT, BRACKET_NAMES, BRACKET_NAME_BY_CODE,
   autoValidateExpired,
   getGroups, getGroupMembers, getGroupMatches, pairName, getRanking,
