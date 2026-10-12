@@ -23,6 +23,7 @@
     <% if (m.avail_a || m.avail_b) { %><button type="button" class="btn small ghost" data-avail data-aa="<%= m.avail_a || '' %>" data-ab="<%= m.avail_b || '' %>" data-na="<%= pairName(m.pair_a_id) %>" data-nb="<%= pairName(m.pair_b_id) %>" title="Ver los días que no pueden jugar">📝 disponibilidad</button><% } %>
   </p>
   <p class="small">Resultado actual: <strong><%= scoreStr(m) %></strong>
+    <% const snm = subNote(m); if (snm) { %><br><span class="mut"><%= snm %></span><% } %>
     <% const vb = valBadge(m); %>
     <% if (vb === 'pending') { %><span class="badge pending">pendiente de validación (subido por <%= pairName(m.submitted_by) %>)</span><% } %>
     <% if (vb === 'disputado') { %><span class="badge disputado">disputado</span>
@@ -70,7 +71,10 @@
       </div>
       <div class="field">
         <label><input type="checkbox" name="wo" value="1" <%= m.wo_winner_id ? 'checked' : '' %>> W.O. (el ganador se lleva el partido 6-4 / 6-4)</label><br>
-        <label><input type="checkbox" name="unplayed" value="1" <%= m.unplayed ? 'checked' : '' %>> Partido no jugado</label>
+        <label><input type="checkbox" name="unplayed" value="1" <%= m.unplayed ? 'checked' : '' %>> Partido no jugado</label><br>
+        <% const sA = subMap[m.pair_a_id], sB = subMap[m.pair_b_id]; %>
+        <% if (sA) { %><label><input type="checkbox" name="sub_a" value="1" <%= m.sub_a_id ? 'checked' : '' %>> Jugó el sustituto de <%= pairName(m.pair_a_id) %> (<%= sA.name %>)</label><br><% } %>
+        <% if (sB) { %><label><input type="checkbox" name="sub_b" value="1" <%= m.sub_b_id ? 'checked' : '' %>> Jugó el sustituto de <%= pairName(m.pair_b_id) %> (<%= sB.name %>)</label><br><% } %>
       </div>
       <div class="field"><label>Notas</label><input type="text" name="notes" value="<%= m.notes %>"></div>
       <input type="hidden" name="back" value="<%= '/admin/partidos?stage=' + stage + '&category=' + category + (round ? '&round=' + round : '') %>">

@@ -18,9 +18,15 @@
       <% const sh = players.filter(p => p.shirt); %>
       <%= sh.length ? sh.map(p => p.name + ' (' + (p.shirt_size || '?') + ')').join(', ') : 'ninguna' %>
     </p>
-    <% if (canChange) { %><p><a class="btn small ghost" href="/pareja/cambio">Solicitar cambio de pareja</a> <a class="btn small ghost" href="/pareja/datos">Editar mis datos</a></p><% } else { %><p><a class="btn small ghost" href="/pareja/datos">Editar mis datos</a></p><% } %>
-    <% if (changeReq) { %>
-      <p class="small"><span class="badge <%= changeReq.status === 'pending' ? 'warn' : changeReq.status === 'approved' ? 'ok' : 'bad' %>">Cambio de pareja: <%= changeReq.status === 'pending' ? 'pendiente de revisión' : changeReq.status %></span></p>
+    <% if (canRegisterSub) { %><p><a class="btn small ghost" href="/pareja/sustituto"><%= substitute ? 'Mi sustituto' : 'Registrar sustituto' %></a> <a class="btn small ghost" href="/pareja/datos">Editar mis datos</a></p><% } else { %><p><a class="btn small ghost" href="/pareja/datos">Editar mis datos</a></p><% } %>
+    <% if (subReq) { %>
+      <p class="small"><span class="badge <%= subReq.status === 'pending' ? 'warn' : subReq.status === 'approved' ? 'ok' : 'bad' %>">Sustituto: <%= subReq.status === 'pending' ? 'pendiente de revisión' : subReq.status === 'approved' ? 'aprobado' : 'rechazado' %></span></p>
+    <% } %>
+    <% if (substitute) { %>
+      <p class="small"><strong>Sustituto:</strong> <%= substitute.name %> (<%= substitute.phone %>)
+        · <%= subPlayed %> partido<%= subPlayed === 1 ? '' : 's' %> en la liga
+        <% if (subPlayed > 0) { %><span class="badge ok">puede jugar playoffs</span><% } else { %><span class="badge warn">aún no puede jugar playoffs</span><% } %>
+      </p>
     <% } %>
   </div>
   <div class="card">
@@ -37,7 +43,9 @@
   <% for (const m of toValidate) { const rival = m.pair_a_id === pair.id ? m.pair_b_id : m.pair_a_id; %>
     <div class="match">
       <span class="teams">vs <%= pairName(rival) %></span>
-      <span class="score"><%= scoreStr(m) %></span>
+      <span class="score"><%= scoreStr(m) %>
+        <% const snv = subNote(m, pair.id); if (snv) { %><br><span class="small mut"><%= snv %></span><% } %>
+      </span>
       <span class="acts">
         <form method="post" action="/pareja/validar/<%= m.id %>" style="display:inline"><button class="btn small" type="submit">Validar</button></form>
         <form method="post" action="/pareja/disputar/<%= m.id %>" style="display:inline"><button class="btn small danger" type="submit">Disputar</button></form>
@@ -69,6 +77,7 @@
       <% const vb = valBadge(m); %>
       <% if (vb === 'pending') { %><span class="badge pending">pendiente de validación</span><% } %>
       <% if (vb === 'disputado') { %><span class="badge disputado">disputado</span><% } %>
+      <% const snm = subNote(m, pair.id); if (snm) { %><br><span class="small mut"><%= snm %></span><% } %>
     </span>
     <% if (!done) { %>
     <span class="acts"><button class="btn small" onclick="document.getElementById('f<%= m.id %>').style.display='block'">Subir resultado</button></span>
@@ -89,6 +98,8 @@
       </div>
       <div class="field"><label>Súper tie-break (tú – rival)</label><div class="scorein"><input type="number" name="s3a" min="0" max="30"> <span>–</span> <input type="number" name="s3b" min="0" max="30"></div></div>
       <div class="field"><label><input type="checkbox" name="wo" value="1"> Rival no presentado (W.O. a nuestro favor)</label></div>
+      <% if (substitute) { %><div class="field"><label><input type="checkbox" name="sub_me" value="1"> Jugó mi sustituto (<%= substitute.name %>) en lugar de un titular</label></div><% } %>
+      <% if (ri && ri.substitute) { %><div class="field"><label><input type="checkbox" name="sub_rival" value="1"> Jugó el sustituto rival (<%= ri.substitute.name %>)</label></div><% } %>
       <div class="field"><label>Notas (opcional)</label><input type="text" name="notes"></div>
       <button class="btn" type="submit">Enviar resultado</button>
     </form>
@@ -106,7 +117,9 @@
     <span class="teams"><span class="badge cat"><%= playoffOrdinal(m.stage) %> · <%= bracketName(m.bracket_round) %></span> vs <%= rival ? pairName(rival) : 'Por decidir' %>
       <% const slp = slotStr(m); if (slp) { %><br><span class="small mut">📍 <%= slp %></span><% } %>
     </span>
-    <span class="score"><%= scoreStr(m) %></span>
+    <span class="score"><%= scoreStr(m) %>
+      <% const snp = subNote(m, pair.id); if (snp) { %><br><span class="small mut"><%= snp %></span><% } %>
+    </span>
     <% if (!done && rival) { %><span class="acts"><button class="btn small" onclick="document.getElementById('p<%= m.id %>').style.display='block'">Subir resultado</button></span><% } %>
   </div>
   <% if (!done && rival) { %>
@@ -120,6 +133,9 @@
       </div>
       <div class="field"><label>Súper tie-break (tú – rival)</label><div class="scorein"><input type="number" name="s3a" min="0" max="30"> <span>–</span> <input type="number" name="s3b" min="0" max="30"></div></div>
       <div class="field"><label><input type="checkbox" name="wo" value="1"> Rival no presentado (W.O.)</label></div>
+      <% if (substitute) { %><div class="field"><label><input type="checkbox" name="sub_me" value="1"> Jugó mi sustituto (<%= substitute.name %>) en lugar de un titular</label></div><% } %>
+      <% const ris = rival && rivalInfo[rival] && rivalInfo[rival].substitute; %>
+      <% if (ris) { %><div class="field"><label><input type="checkbox" name="sub_rival" value="1"> Jugó el sustituto rival (<%= ris.name %>)</label></div><% } %>
       <button class="btn" type="submit">Enviar resultado</button>
     </form>
   </div>

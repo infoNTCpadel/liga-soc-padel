@@ -60,6 +60,7 @@ router.get('/', (req, res) => {
     toValidate: c("SELECT COUNT(*) c FROM matches WHERE validation = 'pending'"),
     disputed: c("SELECT COUNT(*) c FROM matches WHERE validation = 'disputed'"),
     changes: c("SELECT COUNT(*) c FROM pair_changes WHERE status = 'pending'"),
+    subRequests: c("SELECT COUNT(*) c FROM substitute_requests WHERE status = 'pending'"),
     shirts: c('SELECT COUNT(*) c FROM players WHERE shirt = 1'),
   };
   const rounds = [1, 2, 3].map(n => {
@@ -696,6 +697,14 @@ router.get('/partidos', (req, res) => {
   const stage = req.query.stage === 'po' ? 'po' : 'groups';
   const courts = db.prepare('SELECT * FROM courts WHERE active = 1 ORDER BY name').all();
   const common = { category, stage, courts, error: req.query.error || null, pairName: (id) => L.pairName(db, id) };
+  // Sustitutos registrados por pareja (para marcar quién jugó al introducir el resultado)
+  const subMapFor = (ms) => {
+    const map = {};
+    for (const mm of ms) for (const pid of [mm.pair_a_id, mm.pair_b_id]) {
+      if (pid && !(pid in map)) map[pid] = L.pairSubstitute(db, pid);
+    }
+    return map;
+  };
   let matches, blocks = [], block = 'all';
   if (stage === 'groups') {
     const round = Math.min(3, Math.max(1, parseInt(req.query.round) || 1));
@@ -707,7 +716,7 @@ router.get('/partidos', (req, res) => {
        WHERE m.stage = 'groups' AND m.category = ? AND m.round_no = ? ORDER BY g.group_no, m.id`
     ).all(category, round);
     const unscheduled = matches.filter(m => !m.court_id || !m.scheduled_at).length;
-    res.renderPage('admin/partidos', { ...common, round, matches, blocks, block, unscheduled });
+    res.renderPage('admin/partidos', { ...common, round, matches, blocks, block, unscheduled, subMap: subMapFor(matches) });
   } else {
     blocks = db.prepare(`SELECT DISTINCT stage FROM matches WHERE stage LIKE 'po%' AND category = ? ORDER BY stage`)
       .all(category).map(r => r.stage);
@@ -721,7 +730,7 @@ router.get('/partidos', (req, res) => {
     sql += ` ORDER BY m.stage, CASE m.bracket_round WHEN 'R32' THEN 0 WHEN 'R16' THEN 1 WHEN 'QF' THEN 2 WHEN 'SF' THEN 3 WHEN 'F' THEN 4 ELSE 9 END, m.bracket_slot`;
     matches = db.prepare(sql).all(...params);
     const unscheduled = matches.filter(m => !m.court_id || !m.scheduled_at).length;
-    res.renderPage('admin/partidos', { ...common, round: null, matches, blocks, block, unscheduled });
+    res.renderPage('admin/partidos', { ...common, round: null, matches, blocks, block, unscheduled, subMap: subMapFor(matches) });
   }
 });
 
@@ -738,14 +747,31 @@ router.post('/partidos/:id/resultado', (req, res) => {
   if (![m.pair_a_id, m.pair_b_id].includes(winner) && !b.unplayed && !b.wo) return res.redirect('/admin/partidos');
   const wo = !!b.wo;
   const unplayed = !!b.unplayed;
+  // Sustitutos por lado (solo si esa pareja tiene sustituto registrado; en W.O./no jugado nadie jugó)
+  let subA = null, subB = null;
+  if (!unplayed && !wo) {
+    const sA = m.pair_a_id ? L.pairSubstitute(db, m.pair_a_id) : null;
+    const sB = m.pair_b_id ? L.pairSubstitute(db, m.pair_b_id) : null;
+    if (b.sub_a && sA) subA = sA.id;
+    if (b.sub_b && sB) subB = sB.id;
+    if (L.isPlayoffStage(m.stage)) {
+      for (const sid of [subA, subB].filter(Boolean)) {
+        if (L.substituteGroupMatches(db, sid) < 1) {
+          const nm = db.prepare('SELECT name FROM players WHERE id = ?').get(sid);
+          return res.redirect((req.body.back || '/admin/partidos') + '&error=' + encodeURIComponent(
+            `El sustituto ${(nm && nm.name) || ''} no ha participado en la fase de grupos y no puede jugar los playoffs.`));
+        }
+      }
+    }
+  }
   db.prepare(`UPDATE matches SET s1a=?, s1b=?, s2a=?, s2b=?, stb_a=?, stb_b=?,
               winner_id=?, wo_winner_id=?, unplayed=?, submitted_by=NULL,
               submitted_at = CASE WHEN ? = 1 THEN submitted_at ELSE datetime('now') END,
               validation = CASE WHEN ? = 1 THEN 'none' ELSE 'validated' END,
-              validation_deadline = NULL, notes = ? WHERE id = ?`)
+              validation_deadline = NULL, notes = ?, sub_a_id = ?, sub_b_id = ? WHERE id = ?`)
     .run(num(b.s1a), num(b.s1b), num(b.s2a), num(b.s2b), num(b.stb_a), num(b.stb_b),
       unplayed ? null : winner, wo ? winner : null, unplayed ? 1 : 0, unplayed ? 1 : 0, unplayed ? 1 : 0,
-      (b.notes || '').trim(), m.id);
+      (b.notes || '').trim(), (unplayed || wo) ? null : subA, (unplayed || wo) ? null : subB, m.id);
   const upd = db.prepare('SELECT * FROM matches WHERE id = ?').get(m.id);
   advanceWinner(upd);
   res.redirect(req.body.back || '/admin/partidos');
@@ -934,6 +960,10 @@ router.get('/playoffs', (req, res) => {
       round3closed: getSetting('round3_closed', '0') === '1',
       hasResults: playoffHasResults(category),
       pairName: (id) => L.pairName(db, id),
+      subInfo: (id) => {
+        const sub = L.pairSubstitute(db, id);
+        return sub ? { name: sub.name, played: L.substituteGroupMatches(db, sub.id) } : null;
+      },
     };
   });
   res.renderPage('admin/playoffs', { data, error: req.query.error || null, ok: req.query.ok || null,
@@ -1092,7 +1122,52 @@ router.post('/temporadas/:id/eliminar', (req, res) => {
   res.redirect('/admin/temporadas');
 });
 
-// ================= CAMBIOS DE PAREJA =================
+// ================= SUSTITUTOS =================
+router.get('/sustitutos', (req, res) => {
+  const rows = db.prepare(
+    `SELECT s.*, p.code, p.category, p.level_avg
+     FROM substitute_requests s JOIN pairs p ON p.id = s.pair_id
+     ORDER BY s.created_at DESC`
+  ).all();
+  const registered = db.prepare(
+    `SELECT p.id, p.code, p.category, pl.id AS sub_id, pl.name, pl.phone, pl.level
+     FROM pairs p JOIN players pl ON pl.id = p.substitute_id
+     WHERE p.substitute_id IS NOT NULL ORDER BY p.category, p.code`
+  ).all().map(r => ({ ...r, played: L.substituteGroupMatches(db, r.sub_id) }));
+  const legacyPending = db.prepare("SELECT COUNT(*) c FROM pair_changes WHERE status = 'pending'").get().c;
+  res.renderPage('admin/sustitutos', { rows, registered, legacyPending, brackets: L.PLAYTOMIC_BRACKETS });
+});
+
+router.post('/sustitutos/:id/aprobar', (req, res) => {
+  const s = db.prepare('SELECT * FROM substitute_requests WHERE id = ?').get(req.params.id);
+  if (!s || s.status !== 'pending') return res.redirect('/admin/sustitutos');
+  const pair = db.prepare('SELECT * FROM pairs WHERE id = ?').get(s.pair_id);
+  if (!pair) return res.redirect('/admin/sustitutos');
+  // Revalidar por si los datos cambiaron desde la solicitud
+  if (L.bracketOf(s.level).name !== L.bracketOf(pair.level_avg || 0).name ||
+      (pair.category === 'M' && s.gender !== 'M') || (pair.category === 'F' && s.gender !== 'F')) {
+    db.prepare("UPDATE substitute_requests SET status = 'rejected', decided_at = datetime('now') WHERE id = ?").run(s.id);
+    return res.redirect('/admin/sustitutos');
+  }
+  const verifiedMembers = new Set(
+    db.prepare('SELECT member_no FROM players WHERE member_verified = 1').all()
+      .map(r => L.memberNoKey(r.member_no))
+  );
+  const mv = verifiedMembers.has(L.memberNoKey(s.member_no)) ? 1 : 0;
+  const r = db.prepare('INSERT INTO players(name, email, phone, level, gender, member_no, member_verified) VALUES(?, ?, ?, ?, ?, ?, ?)')
+    .run(s.name, s.email, s.phone, s.level, s.gender, s.member_no, mv);
+  db.prepare('UPDATE pairs SET substitute_id = ? WHERE id = ?').run(Number(r.lastInsertRowid), pair.id);
+  db.prepare("UPDATE substitute_requests SET status = 'approved', decided_at = datetime('now') WHERE id = ?").run(s.id);
+  res.redirect('/admin/sustitutos');
+});
+
+router.post('/sustitutos/:id/rechazar', (req, res) => {
+  db.prepare("UPDATE substitute_requests SET status = 'rejected', decided_at = datetime('now') WHERE id = ? AND status = 'pending'")
+    .run(req.params.id);
+  res.redirect('/admin/sustitutos');
+});
+
+// ================= CAMBIOS DE PAREJA (antiguo: solo solicitudes heredadas) =================
 router.get('/cambios', (req, res) => {
   const rows = db.prepare(
     `SELECT c.*, p.code, p.category, op.name AS old_name, op.level AS old_level

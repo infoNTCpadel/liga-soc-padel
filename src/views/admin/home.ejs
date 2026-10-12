@@ -6,7 +6,7 @@
   <div class="stat"><b><%= stats.unpaid %></b><span>jugadores sin pagar</span></div>
   <div class="stat"><b><%= stats.toValidate %></b><span>resultados por validar</span></div>
   <div class="stat"><b><%= stats.disputed %></b><span>resultados disputados</span></div>
-  <div class="stat"><b><%= stats.changes %></b><span>cambios de pareja pendientes</span></div>
+  <div class="stat"><b><%= stats.subRequests %></b><span>sustitutos pendientes</span></div>
 </div>
 
 <% if (stats.disputed) { %><div class="alert error">Hay <%= stats.disputed %> resultado(s) disputado(s): revísalos en <a href="/admin/partidos">Partidos</a>.</div><% } %>
@@ -21,7 +21,7 @@
   <a class="dashcard" href="/admin/partidos"><span class="nbadge <%= (stats.toValidate + stats.disputed) ? '' : 'zero' %>"><%= stats.toValidate + stats.disputed %></span><b>Partidos</b><span class="desc">Resultados, validaciones y disputas</span></a>
   <a class="dashcard" href="/admin/seguimiento"><span class="nbadge <%= stats.pendingMatches ? '' : 'zero' %>"><%= stats.pendingMatches %></span><b>Seguimiento</b><span class="desc">Partidos pendientes y avisos por WhatsApp</span></a>
   <a class="dashcard" href="/admin/playoffs"><b>Playoffs</b><span class="desc">Cuadros finales por categoría</span></a>
-  <a class="dashcard" href="/admin/cambios"><span class="nbadge <%= stats.changes ? '' : 'zero' %>"><%= stats.changes %></span><b>Cambios</b><span class="desc">Solicitudes de cambio de pareja</span></a>
+  <a class="dashcard" href="/admin/sustitutos"><span class="nbadge <%= stats.subRequests ? '' : 'zero' %>"><%= stats.subRequests %></span><b>Sustitutos</b><span class="desc">Solicitudes y sustitutos registrados</span></a>
   <a class="dashcard" href="/admin/cuadrante"><b>Cuadrante</b><span class="desc">Vista global de la competición</span></a>
   <a class="dashcard" href="/admin/preguntas"><b>Preguntas</b><span class="desc">Dudas recibidas de los jugadores</span></a>
   <a class="dashcard" href="/admin/pistas"><b>Pistas</b><span class="desc">Configuración de pistas del club</span></a>

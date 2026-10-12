@@ -39,6 +39,10 @@
           <span class="seed"><%= i + 1 %></span>
           <span class="<%= i < s.seeds ? 'seedhead' : '' %>"><%= d.pairName(id) %></span>
           <% if (i < s.seeds) { %><span class="badge validado">cabeza de serie</span><% } %>
+          <% const si = d.subInfo(id); if (si) { %>
+            <span class="small mut">🔄 <%= si.name %> (<%= si.played %> en liga)</span>
+            <% if (si.played > 0) { %><span class="badge ok">puede jugar</span><% } else { %><span class="badge warn">sin partidos: no puede jugar playoffs</span><% } %>
+          <% } %>
           <% if (editable) { %>
             <span class="seedmove">
               <form method="post" action="/admin/playoffs/orden" style="display:inline">

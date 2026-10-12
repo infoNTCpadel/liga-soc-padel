@@ -1,0 +1,37 @@
+<h1>Sustituto de la pareja</h1>
+<p class="mut">Puedes registrar <strong>un sustituto</strong> para tu pareja: jugará los partidos en los que un titular no pueda, sin convertirse en titular. Cuando el titular vuelva, el sustituto regresa al banquillo. La organización debe aprobarlo antes de que juegue ningún partido.</p>
+<p class="mut small">Para que el sustituto pueda jugar los <strong>playoffs</strong>, tiene que haber <strong>participado en la fase de grupos</strong> (al menos un partido disputado). Al subir cada resultado indica si jugó el sustituto.</p>
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+<% if (substitute) { %>
+<div class="card">
+  <h3>Sustituto actual</h3>
+  <p><strong><%= substitute.name %></strong> (<%= substitute.phone %>) · Nivel <%= substitute.level %></p>
+  <p class="small mut">Si necesitas cambiar de sustituto, envía una nueva solicitud: al aprobarla sustituirá al anterior.</p>
+</div>
+<% } %>
+<% if (subReq && subReq.status === 'pending') { %>
+<div class="card"><p><span class="badge warn">Solicitud pendiente de revisión por la organización</span></p></div>
+<% } else { %>
+<div class="card" style="max-width: 560px">
+  <form method="post" action="/pareja/sustituto">
+    <div class="field"><label>Nombre del sustituto *</label><input type="text" name="new_name" required></div>
+    <div class="row2">
+      <div class="field"><label>Teléfono *</label><input type="tel" name="new_phone" required></div>
+      <div class="field"><label>Email</label><input type="email" name="new_email"></div>
+    </div>
+    <div class="field"><label>Nivel Playtomic (0 – 6) *</label><input type="number" name="new_level" step="0.1" min="0" max="6" required>
+      <span class="hint">Debe ser del mismo tramo que la media de la pareja. Tramos: <% for (const b of brackets) { %><%= b.name %> (<%= b.min %>–<%= b.max %>) · <% } %></span>
+    </div>
+    <div class="field"><label>Nº de socio del club del sustituto * <span class="hint">también el sustituto debe ser socio</span></label><input type="text" name="new_member" required></div>
+    <div class="field"><label>Sexo del sustituto *</label>
+      <select name="new_gender" required>
+        <option value="">—</option>
+        <option value="M">Hombre</option>
+        <option value="F">Mujer</option>
+      </select>
+    </div>
+    <button class="btn" type="submit">Solicitar sustituto</button>
+  </form>
+</div>
+<% } %>
+<p><a href="/pareja">← Volver a Mi pareja</a></p>

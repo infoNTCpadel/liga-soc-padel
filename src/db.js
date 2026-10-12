@@ -228,6 +228,22 @@ function seasonDb(id) {
       'ALTER TABLE players ADD COLUMN member_no TEXT',
       'ALTER TABLE players ADD COLUMN member_verified INTEGER NOT NULL DEFAULT 0',
       'ALTER TABLE pair_changes ADD COLUMN new_member_no TEXT',
+      'ALTER TABLE pairs ADD COLUMN substitute_id INTEGER REFERENCES players(id) ON DELETE SET NULL',
+      'ALTER TABLE matches ADD COLUMN sub_a_id INTEGER REFERENCES players(id) ON DELETE SET NULL',
+      'ALTER TABLE matches ADD COLUMN sub_b_id INTEGER REFERENCES players(id) ON DELETE SET NULL',
+      `CREATE TABLE IF NOT EXISTS substitute_requests (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         pair_id INTEGER NOT NULL REFERENCES pairs(id) ON DELETE CASCADE,
+         name TEXT NOT NULL,
+         email TEXT NOT NULL DEFAULT '',
+         phone TEXT NOT NULL DEFAULT '',
+         level REAL NOT NULL,
+         gender TEXT NOT NULL DEFAULT 'M',
+         member_no TEXT NOT NULL DEFAULT '',
+         status TEXT NOT NULL DEFAULT 'pending',
+         created_at TEXT NOT NULL DEFAULT (datetime('now')),
+         decided_at TEXT
+       )`,
     ]) {
       try { sdb.exec(sql); } catch (e) { /* ya existe */ }
     }

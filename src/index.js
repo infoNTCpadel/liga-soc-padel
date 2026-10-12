@@ -81,6 +81,22 @@ app.use((req, res, next) => {
     if (d === -1) return 'Baja 1 grupo';
     return 'Baja 2 grupos';
   };
+  // Nota de sustituto en un partido: "🔄 Sustituto: Nombre" (lado propio/rival)
+  res.locals.subNote = (m, myPairId) => {
+    if (!m) return '';
+    const notes = [];
+    const nameOf = (id) => { const r = id ? db.prepare('SELECT name FROM players WHERE id = ?').get(id) : null; return r ? r.name : null; };
+    const na = nameOf(m.sub_a_id), nb = nameOf(m.sub_b_id);
+    if (myPairId != null) {
+      const mine = m.pair_a_id === myPairId ? na : (m.pair_b_id === myPairId ? nb : null);
+      const rival = m.pair_a_id === myPairId ? nb : (m.pair_b_id === myPairId ? na : null);
+      if (mine) notes.push('🔄 Jugó tu sustituto: ' + mine);
+      if (rival) notes.push('🔄 Jugó el sustituto rival: ' + rival);
+    } else {
+      if (na || nb) notes.push('🔄 Sustituto: ' + [na, nb].filter(Boolean).join(' / '));
+    }
+    return notes.join(' · ');
+  };
   res.locals.bracketName = (code) => L.BRACKET_NAME_BY_CODE[code] || code || '';
   res.locals.playoffOrdinal = (stage) => L.playoffOrdinal(stage);
   res.locals.CATEGORIES = L.CATEGORIES;

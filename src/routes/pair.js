@@ -90,19 +90,21 @@ router.get('/', (req, res) => {
     if (rid && !rivalInfo[rid]) {
       const rp = db.prepare('SELECT * FROM pairs WHERE id = ?').get(rid);
       const cap = db.prepare('SELECT name, phone FROM players WHERE id = ?').get(rp.captain_id);
-      rivalInfo[rid] = { name: L.pairName(db, rid), captain: cap };
+      rivalInfo[rid] = { name: L.pairName(db, rid), captain: cap, substitute: L.pairSubstitute(db, rid) };
     }
   }
 
-  const changeReq = db.prepare(
-    'SELECT * FROM pair_changes WHERE pair_id = ? ORDER BY id DESC LIMIT 1'
+  const subReq = db.prepare(
+    'SELECT * FROM substitute_requests WHERE pair_id = ? ORDER BY id DESC LIMIT 1'
   ).get(pair.id);
+  const substitute = L.pairSubstitute(db, pair.id);
+  const subPlayed = substitute ? L.substituteGroupMatches(db, substitute.id) : 0;
 
   res.renderPage('pair/home', {
-    pair, players, captain, matches, poMatches, toValidate, rivalInfo, changeReq,
+    pair, players, captain, matches, poMatches, toValidate, rivalInfo, subReq, substitute, subPlayed,
     error: req.query.error || null,
     pairName: (id) => L.pairName(db, id),
-    canChange: pair.changes_used < 1 && getSetting('playoffs_generated', '0') !== '1',
+    canRegisterSub: (!subReq || subReq.status !== 'pending') && getSetting('playoffs_generated', '0') !== '1',
   });
 });
 
@@ -150,9 +152,22 @@ router.post('/resultado/:id', (req, res) => {
   const b = req.body;
   const wo = !!b.wo;
 
+  // Sustitutos: la pareja que sube el resultado indica si jugó su sustituto o el del rival.
+  // Solo vale si esa pareja tiene sustituto registrado.
+  const meIsA0 = m.pair_a_id === pair.id;
+  const otherId0 = meIsA0 ? m.pair_b_id : m.pair_a_id;
+  const mySub = L.pairSubstitute(db, pair.id);
+  const rivalSub = otherId0 ? L.pairSubstitute(db, otherId0) : null;
+  let subA = null, subB = null;
+  if (!wo) {
+    if (b.sub_me && mySub) { if (meIsA0) subA = mySub.id; else subB = mySub.id; }
+    if (b.sub_rival && rivalSub) { if (meIsA0) subB = rivalSub.id; else subA = rivalSub.id; }
+  }
+
   if (wo) {
     db.prepare(`UPDATE matches SET winner_id = ?, wo_winner_id = ?, submitted_by = ?, submitted_at = datetime('now'),
-                validation = 'pending', validation_deadline = datetime('now', '+1 day'), notes = ? WHERE id = ?`)
+                validation = 'pending', validation_deadline = datetime('now', '+1 day'), notes = ?,
+                sub_a_id = NULL, sub_b_id = NULL WHERE id = ?`)
       .run(pair.id, pair.id, pair.id, (b.notes || '').trim(), m.id);
     const upd = db.prepare('SELECT * FROM matches WHERE id = ?').get(m.id);
     advanceWinner(upd);
@@ -184,10 +199,20 @@ router.post('/resultado/:id', (req, res) => {
   const s3a = meIsA ? s3aF : s3bF, s3b = meIsA ? s3bF : s3aF;
 
   const q = mode === 'stb' ? [null, null, s3a, s3b] : [null, null, null, null];
+  // En playoffs, el sustituto solo puede jugar si participó en la fase de grupos.
+  if (L.isPlayoffStage(m.stage)) {
+    for (const sid of [subA, subB].filter(Boolean)) {
+      if (L.substituteGroupMatches(db, sid) < 1) {
+        const nm = db.prepare('SELECT name FROM players WHERE id = ?').get(sid);
+        return fail(`El sustituto ${(nm && nm.name) || ''} no ha participado en la fase de grupos y no puede jugar los playoffs.`);
+      }
+    }
+  }
   db.prepare(`UPDATE matches SET s1a=?, s1b=?, s2a=?, s2b=?, s3a=?, s3b=?, stb_a=?, stb_b=?,
               winner_id=?, submitted_by=?, submitted_at=datetime('now'),
-              validation='pending', validation_deadline=datetime('now','+1 day'), notes=? WHERE id=?`)
-    .run(s1a, s1b, s2a, s2b, q[0], q[1], q[2], q[3], winnerId, pair.id, (b.notes || '').trim(), m.id);
+              validation='pending', validation_deadline=datetime('now','+1 day'), notes=?,
+              sub_a_id=?, sub_b_id=? WHERE id=?`)
+    .run(s1a, s1b, s2a, s2b, q[0], q[1], q[2], q[3], winnerId, pair.id, (b.notes || '').trim(), subA, subB, m.id);
   const upd = db.prepare('SELECT * FROM matches WHERE id = ?').get(m.id);
   advanceWinner(upd);
   notifyRival(req, m.id);
@@ -215,47 +240,47 @@ router.post('/disputar/:id', (req, res) => {
   res.redirect('/pareja');
 });
 
-// ---- Solicitud de cambio de pareja ----
-router.get('/cambio', (req, res) => {
+// ---- Sustituto de la pareja ----
+// Un sustituto por pareja: juega partidos sueltos cuando un titular no puede.
+// No se convierte en titular; cuando el titular vuelve, el sustituto vuelve al banquillo.
+router.get('/sustituto', (req, res) => {
   const pair = req.pair;
-  if (pair.changes_used >= 1 || getSetting('playoffs_generated', '0') === '1') return res.redirect('/pareja');
-  const players = db.prepare('SELECT * FROM players WHERE id IN (?, ?)').all(pair.player1_id, pair.player2_id);
-  res.renderPage('pair/cambio', { pair, players, error: null, brackets: L.PLAYTOMIC_BRACKETS });
+  if (getSetting('playoffs_generated', '0') === '1') return res.redirect('/pareja');
+  const substitute = L.pairSubstitute(db, pair.id);
+  const subReq = db.prepare('SELECT * FROM substitute_requests WHERE pair_id = ? ORDER BY id DESC LIMIT 1').get(pair.id);
+  res.renderPage('pair/sustituto', { pair, substitute, subReq, error: null, brackets: L.PLAYTOMIC_BRACKETS });
 });
 
-router.post('/cambio', (req, res) => {
+router.post('/sustituto', (req, res) => {
   const pair = req.pair;
-  if (pair.changes_used >= 1 || getSetting('playoffs_generated', '0') === '1') return res.redirect('/pareja');
-  const b = req.body;
-  const oldId = parseInt(b.old_player_id, 10);
-  const old = db.prepare('SELECT * FROM players WHERE id = ?').get(oldId);
-  const err = (msg) => res.renderPage('pair/cambio', {
-    pair, players: db.prepare('SELECT * FROM players WHERE id IN (?, ?)').all(pair.player1_id, pair.player2_id),
+  if (getSetting('playoffs_generated', '0') === '1') return res.redirect('/pareja');
+  const substitute = L.pairSubstitute(db, pair.id);
+  const pending = db.prepare("SELECT id FROM substitute_requests WHERE pair_id = ? AND status = 'pending'").get(pair.id);
+  const err = (msg) => res.renderPage('pair/sustituto', {
+    pair, substitute, subReq: db.prepare('SELECT * FROM substitute_requests WHERE pair_id = ? ORDER BY id DESC LIMIT 1').get(pair.id),
     error: msg, brackets: L.PLAYTOMIC_BRACKETS,
   });
-  if (!old || ![pair.player1_id, pair.player2_id].includes(oldId)) return err('Jugador no válido.');
+  if (pending) return err('Ya tienes una solicitud pendiente de revisión por la organización.');
+  const b = req.body;
   const nl = parseFloat(b.new_level);
-  if (!(nl >= 0 && nl <= 6)) return err('El nivel del nuevo jugador no es válido.');
-  if (!(b.new_name || '').trim() || !(b.new_phone || '').trim()) return err('Faltan los datos del nuevo jugador.');
+  if (!(nl >= 0 && nl <= 6)) return err('El nivel del sustituto no es válido.');
+  if (!(b.new_name || '').trim() || !(b.new_phone || '').trim()) return err('Faltan los datos del sustituto.');
   const newMember = (b.new_member || '').trim();
-  if (!newMember) return err('Falta el nº de socio del club del nuevo jugador (también el sustituto debe ser socio).');
+  if (!newMember) return err('Falta el nº de socio del club del sustituto (también debe ser socio).');
   if (!L.validSpanishMobile(b.new_phone))
-    return err('El teléfono del nuevo jugador no parece un móvil válido (9 dígitos, empieza por 6 o 7): revísalo por favor.');
+    return err('El teléfono del sustituto no parece un móvil válido (9 dígitos, empieza por 6 o 7): revísalo por favor.');
   const ng = (b.new_gender || '').toUpperCase();
-  if (!['M', 'F'].includes(ng)) return err('Indica el sexo del nuevo jugador.');
-  // Mismo nivel: mismo tramo Playtomic que el jugador sustituido.
-  if (L.bracketOf(nl).name !== L.bracketOf(old.level).name) {
-    return err(`El nuevo jugador debe ser del mismo nivel (${L.bracketOf(old.level).name}).`);
+  if (!['M', 'F'].includes(ng)) return err('Indica el sexo del sustituto.');
+  // Misma categoría: en masculina solo hombres, en femenina solo mujeres.
+  if (pair.category === 'M' && ng !== 'M') return err('En la categoría masculina el sustituto debe ser hombre.');
+  if (pair.category === 'F' && ng !== 'F') return err('En la categoría femenina el sustituto debe ser mujer.');
+  // Mismo nivel: mismo tramo Playtomic que la media de la pareja.
+  if (L.bracketOf(nl).name !== L.bracketOf(pair.level_avg || 0).name) {
+    return err(`El sustituto debe ser del mismo nivel que la pareja (${L.bracketOf(pair.level_avg || 0).name}).`);
   }
-  // En mixta, la pareja debe seguir siendo un hombre y una mujer.
-  if (pair.category === 'X') {
-    const other = db.prepare('SELECT * FROM players WHERE id = ?')
-      .get(pair.player1_id === oldId ? pair.player2_id : pair.player1_id);
-    if (other && other.gender === ng) return err('En la categoría mixta la pareja debe estar formada por un hombre y una mujer.');
-  }
-  db.prepare(`INSERT INTO pair_changes(pair_id, old_player_id, new_name, new_email, new_phone, new_level, new_gender, new_member_no)
-              VALUES(?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(pair.id, oldId, b.new_name.trim(), (b.new_email || '').trim(), b.new_phone.trim(), nl, ng, newMember);
+  db.prepare(`INSERT INTO substitute_requests(pair_id, name, email, phone, level, gender, member_no)
+              VALUES(?, ?, ?, ?, ?, ?, ?)`)
+    .run(pair.id, b.new_name.trim(), (b.new_email || '').trim(), b.new_phone.trim(), nl, ng, newMember);
   res.redirect('/pareja');
 });
 

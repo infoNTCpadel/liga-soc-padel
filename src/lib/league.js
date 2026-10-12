@@ -534,7 +534,25 @@ function countdownText(finIso, nowMs) {
   return 'Cierra en menos de 1 h';
 }
 
-// Enlace click-to-chat de WhatsApp con texto precargado.
+// Partidos de fase de grupos DISPUTADOS (con marcador real, no W.O. ni no jugado)
+// en los que participó un sustituto. Sirve para la elegibilidad en playoffs:
+// un sustituto solo puede jugar el playoff si participó en la liga.
+function substituteGroupMatches(db, subId) {
+  if (!subId) return 0;
+  const r = db.prepare(
+    `SELECT COUNT(*) c FROM matches
+     WHERE stage = 'groups' AND winner_id IS NOT NULL AND wo_winner_id IS NULL
+       AND (unplayed IS NULL OR unplayed = 0) AND (sub_a_id = ? OR sub_b_id = ?)`
+  ).get(subId, subId);
+  return r ? r.c : 0;
+}
+
+// Ficha del sustituto registrado de una pareja (o null).
+function pairSubstitute(db, pairId) {
+  const p = db.prepare('SELECT substitute_id FROM pairs WHERE id = ?').get(pairId);
+  if (!p || !p.substitute_id) return null;
+  return db.prepare('SELECT * FROM players WHERE id = ?').get(p.substitute_id) || null;
+}
 // Normaliza el teléfono a formato internacional (34 + móvil en España).
 function waLink(phone, text) {
   const d = normPhone(phone);
@@ -561,7 +579,7 @@ module.exports = {
   computeStandings, movementDelta, targetGroup,
   chunkIntoGroups, roundRobin, nextPowerOfTwo, seedOrder, formatSlot,
   buildBracket, splitPlayoffCategories, parsePlayoffSizes, placeSeeds, drawSeeds34, playoffOrdinal, isPlayoffStage, matchStageClosed,
-  countdownText, waLink,
+  countdownText, waLink, substituteGroupMatches, pairSubstitute,
   BRACKET_NEXT, BRACKET_NAMES, BRACKET_NAME_BY_CODE,
   autoValidateExpired,
   getGroups, getGroupMembers, getGroupMatches, pairName, getRanking,

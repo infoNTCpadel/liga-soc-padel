@@ -1,0 +1,47 @@
+<h1>Sustitutos</h1>
+<p class="mut">Cada pareja puede tener <strong>un sustituto</strong> registrado: juega partidos sueltos cuando un titular no puede, sin convertirse en titular. Para jugar los <strong>playoffs</strong>, el sustituto tiene que haber <strong>participado en la fase de grupos</strong> (al menos un partido disputado).</p>
+<% if (legacyPending > 0) { %>
+<div class="alert warn">Hay <%= legacyPending %> solicitud(es) antigua(s) de <strong>cambio permanente</strong> pendientes: <a href="/admin/cambios">revisarlas aquí</a>.</div>
+<% } %>
+
+<h2>Solicitudes pendientes</h2>
+<% const pend = rows.filter(r => r.status === 'pending'); %>
+<% if (!pend.length) { %><p class="mut">No hay solicitudes pendientes.</p><% } %>
+<% for (const r of pend) { %>
+<div class="card">
+  <p><strong><%= r.name %></strong> (<%= r.phone %>) · Nivel <%= r.level %> (<%= brackets.find(b => r.level >= b.min && r.level <= b.max)?.name || '' %>) · <%= r.gender === 'M' ? 'Hombre' : 'Mujer' %> · Socio nº <%= r.member_no %></p>
+  <p class="small mut">Pareja <%= r.code %> · <%= r.category %> · media <%= r.level_avg %> · solicitada el <%= r.created_at.slice(0, 10) %></p>
+  <p>
+    <form method="post" action="/admin/sustitutos/<%= r.id %>/aprobar" style="display:inline"><button class="btn small" type="submit">Aprobar</button></form>
+    <form method="post" action="/admin/sustitutos/<%= r.id %>/rechazar" style="display:inline"><button class="btn small danger" type="submit">Rechazar</button></form>
+  </p>
+</div>
+<% } %>
+
+<h2>Sustitutos registrados</h2>
+<% if (!registered.length) { %><p class="mut">Aún no hay sustitutos registrados.</p><% } %>
+<div class="tblwrap"><table class="tbl">
+  <tr><th>Pareja</th><th>Sustituto</th><th>Teléfono</th><th>Partidos en liga</th><th>Playoffs</th></tr>
+  <% for (const r of registered) { %>
+  <tr>
+    <td><strong><%= r.code %></strong> <span class="mut small"><%= r.category %></span></td>
+    <td><%= r.name %></td>
+    <td class="small"><%= r.phone %></td>
+    <td class="num"><%= r.played %></td>
+    <td><% if (r.played > 0) { %><span class="badge ok">puede jugar</span><% } else { %><span class="badge warn">sin partidos</span><% } %></td>
+  </tr>
+  <% } %>
+</table></div>
+
+<% const hist = rows.filter(r => r.status !== 'pending'); %>
+<% if (hist.length) { %>
+<h2>Historial</h2>
+<div class="tblwrap"><table class="tbl">
+  <tr><th>Solicitante</th><th>Pareja</th><th>Estado</th><th>Fecha</th></tr>
+  <% for (const r of hist) { %>
+  <tr><td><%= r.name %></td><td><%= r.code %></td>
+    <td><span class="badge <%= r.status === 'approved' ? 'ok' : 'bad' %>"><%= r.status === 'approved' ? 'aprobado' : 'rechazado' %></span></td>
+    <td class="small"><%= (r.decided_at || r.created_at || '').slice(0, 10) %></td></tr>
+  <% } %>
+</table></div>
+<% } %>

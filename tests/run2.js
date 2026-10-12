@@ -155,19 +155,19 @@ srv.on('error', e => { console.log('FALLO: no arranca', e.message); process.exit
   plast = dbq('SELECT category, status FROM pairs ORDER BY id DESC LIMIT 1')[0];
   ok(plast.category === 'M' && plast.status === 'active', 'alta manual con socios verificados crea activa');
 
-  // 15. Cambio de pareja exige nº de socio
+  // 15. Sustituto exige nº de socio
   const code = dbq('SELECT code FROM pairs WHERE id=1')[0].code;
   const pairCli = makeClient();
   r = await pairCli.req('POST', '/acceso', { code });
   ok(r.statusCode === 302, 'acceso de pareja activa OK');
-  r = await pairCli.req('POST', '/pareja/cambio', { old_player_id: String(pedroId), new_name: 'Tomás', new_phone: '612000020', new_level: '3', new_gender: 'M' });
-  ok(r.text.includes('nº de socio'), 'cambio sin socio da error');
-  r = await pairCli.req('POST', '/pareja/cambio', { old_player_id: String(pedroId), new_name: 'Tomás', new_phone: '612000020', new_level: '3', new_gender: 'M', new_member: '2009' });
-  ok(r.statusCode === 302, 'cambio con socio OK');
-  const ch = dbq('SELECT new_member_no, status FROM pair_changes ORDER BY id DESC LIMIT 1')[0];
-  ok(ch.new_member_no === '2009' && ch.status === 'pending', 'solicitud guarda nº de socio');
-  const chId = dbq('SELECT id FROM pair_changes ORDER BY id DESC LIMIT 1')[0].id;
-  r = await admin.req('POST', `/admin/cambios/${chId}/aprobar`);
+  r = await pairCli.req('POST', '/pareja/sustituto', { new_name: 'Tomás', new_phone: '612000020', new_level: '3', new_gender: 'M' });
+  ok(r.text.includes('nº de socio'), 'sustituto sin socio da error');
+  r = await pairCli.req('POST', '/pareja/sustituto', { new_name: 'Tomás', new_phone: '612000020', new_level: '3', new_gender: 'M', new_member: '2009' });
+  ok(r.statusCode === 302, 'sustituto con socio OK');
+  const ch = dbq('SELECT member_no, status FROM substitute_requests ORDER BY id DESC LIMIT 1')[0];
+  ok(ch.member_no === '2009' && ch.status === 'pending', 'solicitud guarda nº de socio');
+  const chId = dbq('SELECT id FROM substitute_requests ORDER BY id DESC LIMIT 1')[0].id;
+  r = await admin.req('POST', `/admin/sustitutos/${chId}/aprobar`);
   const np = dbq("SELECT member_no, member_verified FROM players WHERE name='Tomás'")[0];
   ok(np.member_no === '2009' && np.member_verified === 0, 'aprobación inserta socio sin verificar');
 
