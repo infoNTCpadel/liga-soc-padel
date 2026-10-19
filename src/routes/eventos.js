@@ -26,8 +26,14 @@ router.get('/:slug', (req, res) => {
   const ev = E.getEvent(req.params.slug);
   if (!ev || ev.status === 'oculta') return res.status(404).renderPage('public/404', {});
   const inscritos = E.countInscriptions(ev.id);
+  // Si la inscripción anterior falló, se repuebla el formulario con lo que había escrito
+  let form = null;
+  if (req.session.eventForm && req.session.eventForm.slug === req.params.slug) {
+    form = req.session.eventForm.values;
+    delete req.session.eventForm;
+  }
   res.renderPage('eventos/evento', {
-    ev, inscritos, left: E.spotsLeft(ev), levelOptions,
+    ev, inscritos, left: E.spotsLeft(ev), levelOptions, form,
     ok: req.query.ok === '1', error: req.query.error || null,
     fmtDate: E.fmtDate, eur: E.eur, formatName: E.formatName, modeName: E.modeName, statusName: E.statusName,
   });
@@ -55,7 +61,17 @@ router.post('/:slug/inscribir', (req, res) => {
   const ev = E.getEvent(req.params.slug);
   if (!ev || ev.status === 'oculta') return res.status(404).renderPage('public/404', {});
   const b = req.body;
-  const back = (msg) => res.redirect(`/eventos/${ev.slug}?error=` + encodeURIComponent(msg));
+  // Guarda lo escrito para repoblar el formulario si hay un error de validación
+  const FORM_KEYS = ['kind', 'name', 'phone', 'level', 'gender', 'member_no', 'email',
+    'p1_name', 'p1_phone', 'p1_level', 'p1_gender', 'p1_member_no', 'p1_email',
+    'p2_name', 'p2_phone', 'p2_level', 'p2_gender', 'p2_member_no', 'p2_email'];
+  const back = (msg) => {
+    req.session.eventForm = {
+      slug: ev.slug,
+      values: Object.fromEntries(FORM_KEYS.filter(k => b[k] !== undefined).map(k => [k, b[k]])),
+    };
+    res.redirect(`/eventos/${ev.slug}?error=` + encodeURIComponent(msg));
+  };
   const wantPair = (ev.inscription_mode === 'pairs') || (ev.inscription_mode === 'mixed' && b.kind === 'pareja');
   if (wantPair) {
     const r1 = validPlayer(b, 'p1'), r2 = validPlayer(b, 'p2');

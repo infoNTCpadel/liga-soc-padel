@@ -97,6 +97,22 @@ const srv = spawn('node', ['src/index.js'], { cwd: dir, env, stdio: 'ignore' });
   r = await pub.req('GET', '/eventos/' + evB.slug);
   ok(r.statusCode === 404, 'el creado oculto no se ve');
 
+  // 9. Repoblado tras error: el formulario conserva lo escrito
+  await admin.req('POST', '/admin/eventos/nuevo', {
+    name: 'Evento C', event_date: '2026-12-22', format: 'torneo', price: '0', max_players: '0', mode: 'pairs',
+  });
+  const evC = mdb("SELECT * FROM events WHERE name = 'Evento C'")[0];
+  r = await pub.req('POST', `/eventos/${evC.slug}/inscribir`, {
+    p1_name: 'Guardado Uno', p1_phone: '612400011', p1_level: '2.95',
+    p2_name: 'Guardado Dos', p2_phone: 'mal', p2_level: '3.95',
+  });
+  ok(r.location.includes('error='), 'teléfono inválido → error');
+  r = await pub.req('GET', r.location); // sigue la redirección con la misma sesión
+  ok(r.text.includes('móvil válido'), 'se muestra el error');
+  ok(r.text.includes('value="Guardado Uno"') && r.text.includes('value="612400011"') &&
+     r.text.includes('value="Guardado Dos"') && r.text.includes('value="3.95" selected'),
+    'el formulario conserva los datos escritos');
+
   console.log(`\n${pass} OK, ${fail} fallos`);
   srv.kill(); process.exit(fail ? 1 : 0);
 })().catch(e => { console.log('FALLO excepción:', e.message); srv.kill(); process.exit(1); });

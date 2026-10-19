@@ -24,6 +24,9 @@
 <% } else if (left !== null && left <= 0) { %>
 <div class="card"><p><span class="badge warn">Completo</span> <span class="mut">Ya no quedan plazas.</span></p></div>
 <% } else { %>
+<% const fv = (n) => (form && form[n] != null ? form[n] : ''); %>
+<% const fsel = (n, v) => (form && String(form[n]) === String(v) ? 'selected' : ''); %>
+<% const f1 = (s) => ev.inscription_mode === 'individual' ? s : 'p1_' + s; %>
 <div class="card" style="max-width: 560px">
   <% if (ev.inscription_mode === 'individual') { %>
   <h3>Apuntarme</h3>
@@ -32,56 +35,56 @@
   <% } else { %>
   <h3>Apuntarme</h3>
   <div class="field"><label>¿Cómo os apuntáis?</label>
-    <label class="small"><input type="radio" name="kind" value="solo" checked> Voy solo/a</label>
-    <label class="small"><input type="radio" name="kind" value="pareja"> Vamos en pareja</label>
+    <label class="small"><input type="radio" name="kind" value="solo" <%= fv('kind') !== 'pareja' ? 'checked' : '' %>> Voy solo/a</label>
+    <label class="small"><input type="radio" name="kind" value="pareja" <%= fv('kind') === 'pareja' ? 'checked' : '' %>> Vamos en pareja</label>
   </div>
   <% } %>
   <p class="small mut">Si ya sois socios del club o jugáis la liga social, con el teléfono os reconocemos automáticamente.</p>
   <form method="post" action="/eventos/<%= ev.slug %>/inscribir" id="f-insc">
-    <% if (ev.inscription_mode === 'mixed') { %><input type="hidden" name="kind" value="solo" id="f-kind"><% } %>
+    <% if (ev.inscription_mode === 'mixed') { %><input type="hidden" name="kind" value="<%= fv('kind') || 'solo' %>" id="f-kind"><% } %>
     <div id="f-p1">
       <h4><%= ev.inscription_mode === 'individual' ? 'Tus datos' : 'Jugador 1' %></h4>
       <div class="row2">
-        <div class="field"><label>Nombre *</label><input type="text" name="<%= ev.inscription_mode === 'individual' ? 'name' : 'p1_name' %>" required></div>
-        <div class="field"><label>Teléfono móvil *</label><input type="tel" name="<%= ev.inscription_mode === 'individual' ? 'phone' : 'p1_phone' %>" required></div>
+        <div class="field"><label>Nombre *</label><input type="text" name="<%= f1('name') %>" value="<%= fv(f1('name')) %>" required></div>
+        <div class="field"><label>Teléfono móvil *</label><input type="tel" name="<%= f1('phone') %>" value="<%= fv(f1('phone')) %>" required></div>
       </div>
       <div class="row2">
         <div class="field"><label>Nivel *</label>
-          <select name="<%= ev.inscription_mode === 'individual' ? 'level' : 'p1_level' %>" required>
+          <select name="<%= f1('level') %>" required>
             <option value="">—</option>
-            <% for (const o of levelOptions) { %><option value="<%= o.value %>"><%= o.name %></option><% } %>
+            <% for (const o of levelOptions) { %><option value="<%= o.value %>" <%= fsel(f1('level'), o.value) %>><%= o.name %></option><% } %>
           </select>
         </div>
         <div class="field"><label>Sexo</label>
-          <select name="<%= ev.inscription_mode === 'individual' ? 'gender' : 'p1_gender' %>"><option value="">—</option><option value="M">Hombre</option><option value="F">Mujer</option></select>
+          <select name="<%= f1('gender') %>"><option value="">—</option><option value="M" <%= fsel(f1('gender'), 'M') %>>Hombre</option><option value="F" <%= fsel(f1('gender'), 'F') %>>Mujer</option></select>
         </div>
       </div>
       <div class="row2">
-        <div class="field"><label>Nº de socio <span class="hint">(si lo tienes)</span></label><input type="text" name="<%= ev.inscription_mode === 'individual' ? 'member_no' : 'p1_member_no' %>"></div>
-        <div class="field"><label>Email</label><input type="email" name="<%= ev.inscription_mode === 'individual' ? 'email' : 'p1_email' %>"></div>
+        <div class="field"><label>Nº de socio <span class="hint">(si lo tienes)</span></label><input type="text" name="<%= f1('member_no') %>" value="<%= fv(f1('member_no')) %>"></div>
+        <div class="field"><label>Email</label><input type="email" name="<%= f1('email') %>" value="<%= fv(f1('email')) %>"></div>
       </div>
     </div>
     <% if (ev.inscription_mode !== 'individual') { %>
-    <div id="f-p2" style="<%= ev.inscription_mode === 'mixed' ? 'display:none' : '' %>">
+    <div id="f-p2" style="<%= ev.inscription_mode === 'pairs' || fv('kind') === 'pareja' ? '' : 'display:none' %>">
       <h4>Jugador 2</h4>
       <div class="row2">
-        <div class="field"><label>Nombre *</label><input type="text" name="p2_name"></div>
-        <div class="field"><label>Teléfono móvil *</label><input type="tel" name="p2_phone"></div>
+        <div class="field"><label>Nombre *</label><input type="text" name="p2_name" value="<%= fv('p2_name') %>"></div>
+        <div class="field"><label>Teléfono móvil *</label><input type="tel" name="p2_phone" value="<%= fv('p2_phone') %>"></div>
       </div>
       <div class="row2">
         <div class="field"><label>Nivel *</label>
           <select name="p2_level">
             <option value="">—</option>
-            <% for (const o of levelOptions) { %><option value="<%= o.value %>"><%= o.name %></option><% } %>
+            <% for (const o of levelOptions) { %><option value="<%= o.value %>" <%= fsel('p2_level', o.value) %>><%= o.name %></option><% } %>
           </select>
         </div>
         <div class="field"><label>Sexo</label>
-          <select name="p2_gender"><option value="">—</option><option value="M">Hombre</option><option value="F">Mujer</option></select>
+          <select name="p2_gender"><option value="">—</option><option value="M" <%= fsel('p2_gender', 'M') %>>Hombre</option><option value="F" <%= fsel('p2_gender', 'F') %>>Mujer</option></select>
         </div>
       </div>
       <div class="row2">
-        <div class="field"><label>Nº de socio <span class="hint">(si lo tiene)</span></label><input type="text" name="p2_member_no"></div>
-        <div class="field"><label>Email</label><input type="email" name="p2_email"></div>
+        <div class="field"><label>Nº de socio <span class="hint">(si lo tiene)</span></label><input type="text" name="p2_member_no" value="<%= fv('p2_member_no') %>"></div>
+        <div class="field"><label>Email</label><input type="email" name="p2_email" value="<%= fv('p2_email') %>"></div>
       </div>
     </div>
     <% } %>
