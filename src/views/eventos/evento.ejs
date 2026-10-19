@@ -1,0 +1,54 @@
+<p class="small"><a href="/eventos">← Todos los eventos</a></p>
+<h1><%= ev.name %></h1>
+<p><span class="badge cat"><%= formatName(ev.format) %></span>
+  <span>📅 <strong><%= fmtDate(ev.event_date) %></strong><%= ev.event_time ? ' · ' + ev.event_time : '' %></span>
+  <% if (ev.price_cents > 0) { %><span> · 💶 <strong><%= eur(ev.price_cents) %></strong></span><% } else { %><span> · <strong>Gratis</strong></span><% } %>
+</p>
+<% if (ev.description) { %><div class="card"><p><%= ev.description %></p></div><% } %>
+<p class="small mut"><%= inscritos %> inscrito(s)<%= left !== null ? ` · ${left} plazas libres` : '' %></p>
+
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+
+<% if (ok) { %>
+<div class="card">
+  <h3>¡Apuntado/a! 🎾</h3>
+  <p>Tu inscripción está registrada.</p>
+  <% if (memberNo) { %>
+  <p class="small">Tu nº de socio para la <strong>reserva de pistas</strong>: <span class="code"><%= memberNo %></span><br>
+  <span class="mut">Si aún no tienes acceso a las reservas, entra en <a href="/reservar/entrar">Reservar pista</a> y usa «Activar mi acceso» con este número.</span></p>
+  <% } %>
+  <p><a class="btn small" href="/eventos">Ver más eventos</a></p>
+</div>
+<% } else if (!ev.inscriptions_open) { %>
+<div class="card"><p><span class="badge warn">Inscripciones cerradas</span></p></div>
+<% } else if (left !== null && left <= 0) { %>
+<div class="card"><p><span class="badge warn">Completo</span> <span class="mut">Ya no quedan plazas.</span></p></div>
+<% } else { %>
+<div class="card" style="max-width: 560px">
+  <h3>Apuntarme</h3>
+  <p class="small mut">Si ya eres socio del club o juegas la liga social, con tu teléfono te reconocemos automáticamente.</p>
+  <form method="post" action="/eventos/<%= ev.slug %>/inscribir">
+    <div class="row2">
+      <div class="field"><label>Nombre *</label><input type="text" name="name" required></div>
+      <div class="field"><label>Teléfono móvil *</label><input type="tel" name="phone" required></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Nivel *</label>
+        <select name="level" required>
+          <option value="">—</option>
+          <% for (const o of levelOptions) { %><option value="<%= o.value %>"><%= o.name %></option><% } %>
+        </select>
+      </div>
+      <div class="field"><label>Sexo</label>
+        <select name="gender"><option value="">—</option><option value="M">Hombre</option><option value="F">Mujer</option></select>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Nº de socio <span class="hint">(si lo tienes)</span></label><input type="text" name="member_no"></div>
+      <div class="field"><label>Email</label><input type="email" name="email"></div>
+    </div>
+    <button class="btn" type="submit">Inscribirme<%= ev.price_cents > 0 ? ' · ' + eur(ev.price_cents) : '' %></button>
+  </form>
+  <% if (ev.price_cents > 0) { %><p class="small mut">El pago se realiza en el club.</p><% } %>
+</div>
+<% } %>

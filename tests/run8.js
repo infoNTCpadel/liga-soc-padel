@@ -132,8 +132,8 @@ ok(B.openVisibleTo('B1', 3.5, { member_no: 'B2', level: 3.5 }) === true, 'tras q
 // joinOpenMatch y syncOpenSpots
 B.setCfg('days_ahead', '14');
 const D9 = B.addDays(B.todayStr(), 9);
-B.upsertMember('J1', 'Join Uno', '1'); B.upsertMember('J2', 'Join Dos', '2');
-B.upsertMember('J3', 'Join Tres', '3'); B.upsertMember('J4', 'Join Cuatro', '4');
+B.upsertMember('J1', 'Join Uno', '11'); B.upsertMember('J2', 'Join Dos', '22');
+B.upsertMember('J3', 'Join Tres', '33'); B.upsertMember('J4', 'Join Cuatro', '44');
 B.setLevel('J1', 3.5); B.setLevel('J2', 4); B.setLevel('J3', 6);
 const jb = B.createBooking({ court_id: 2, court_name: 'P2', date: D9, start_min: 900, duration_min: 75, titular_member_no: 'J1', players: [], open_spots: 3 });
 ok(!jb.error && B.getBooking(jb.id).open_spots === 3, 'abierto con 3 plazas');

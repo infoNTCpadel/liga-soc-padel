@@ -350,7 +350,7 @@ const TOM = dayStr(1), D3 = dayStr(3), D4 = dayStr(4), D5 = dayStr(5), D6 = dayS
   process.env.DATA_DIR = DATA;
   const B = require('../src/lib/bookings');
   const nowHM = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
-  B.upsertMember('1004', 'Socio Cuatro', '600555666');
+  B.upsertMember('1004', 'Socio Cuatro', '600444555');
   B.bdb.prepare(`INSERT INTO bookings(court_id, court_name, date, start_min, end_min, titular_member_no, titular_name, payment_status, open_spots)
     VALUES(4, 'Pista 4', ?, ?, ?, '1004', 'Socio Cuatro', 'ok', 0)`)
     .run(B.todayStr(), nowHM() - 120, nowHM() - 60);

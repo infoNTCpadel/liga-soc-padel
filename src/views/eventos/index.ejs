@@ -1,0 +1,25 @@
+<h1>Eventos del club</h1>
+<p class="mut">Quedadas y americanas del club. Apúntate con tu teléfono: si ya eres socio o juegas la liga, te reconocemos al momento.</p>
+
+<% if (!upcoming.length && !past.length) { %>
+<div class="card"><p class="mut">De momento no hay eventos publicados. Vuelve pronto 🎾</p></div>
+<% } %>
+
+<% for (const ev of upcoming) { %>
+<div class="card">
+  <h3><a href="/eventos/<%= ev.slug %>"><%= ev.name %></a></h3>
+  <p><span class="badge cat"><%= formatName(ev.format) %></span>
+    <span class="small">📅 <%= fmtDate(ev.event_date) %><%= ev.event_time ? ' · ' + ev.event_time : '' %></span>
+    <% if (ev.price_cents > 0) { %><span class="small"> · 💶 <%= eur(ev.price_cents) %></span><% } else { %><span class="small"> · Gratis</span><% } %>
+  </p>
+  <p class="small mut"><%= ev.inscritos %> inscrito(s)<%= ev.left !== null ? ` · ${ev.left} plazas libres` : '' %></p>
+  <p><a class="btn small" href="/eventos/<%= ev.slug %>">Ver y apuntarme →</a></p>
+</div>
+<% } %>
+
+<% if (past.length) { %>
+<h2>Anteriores</h2>
+<% for (const ev of past) { %>
+<p class="small"><span class="mut"><%= fmtDate(ev.event_date) %></span> · <%= ev.name %> <span class="mut">(<%= ev.inscritos %> participantes)</span></p>
+<% } %>
+<% } %>

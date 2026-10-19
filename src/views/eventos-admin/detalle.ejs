@@ -1,0 +1,63 @@
+<p class="small"><a href="/admin/eventos">← Eventos</a></p>
+<h1><%= ev.name %></h1>
+<p class="small">📅 <%= ev.event_date %><%= ev.event_time ? ' · ' + ev.event_time : '' %> ·
+  <a href="/eventos/<%= ev.slug %>" target="_blank" rel="noopener">Ver landing →</a>
+  <%- ev.inscriptions_open ? '<span class="badge ok">inscripciones abiertas</span>' : '<span class="badge warn">inscripciones cerradas</span>' %>
+</p>
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+
+<div class="card">
+  <h3>Inscritos (<%= inscritos.length %>)<%= left !== null ? ` · ${left} plazas libres` : '' %></h3>
+  <p>
+    <a class="btn small" href="/admin/eventos/<%= ev.id %>/csv">Exportar CSV</a>
+    <% if (ev.inscriptions_open) { %>
+      <form method="post" action="/admin/eventos/<%= ev.id %>/cerrar" style="display:inline"><button class="btn small ghost" type="submit">Cerrar inscripciones</button></form>
+    <% } else { %>
+      <form method="post" action="/admin/eventos/<%= ev.id %>/abrir" style="display:inline"><button class="btn small ghost" type="submit">Abrir inscripciones</button></form>
+    <% } %>
+    <form method="post" action="/admin/eventos/<%= ev.id %>/eliminar" style="display:inline" onsubmit="return confirm('¿Eliminar el evento y sus inscripciones?')"><button class="btn small danger" type="submit">Eliminar</button></form>
+  </p>
+  <% if (!inscritos.length) { %><p class="mut">Sin inscritos todavía.</p><% } else { %>
+  <div class="tblwrap"><table class="tbl">
+    <tr><th>Nombre</th><th>Teléfono</th><th>Nivel</th><th>Nº socio</th><th>Pagado</th><th></th><th></th></tr>
+    <% for (const r of inscritos) { %>
+    <tr>
+      <td><strong><%= r.name %></strong><br><span class="mut small"><%= (r.created_at || '').slice(0, 16).replace('T', ' ') %></span></td>
+      <td class="small"><%= r.phone %></td>
+      <td class="num"><%= r.level == null ? '—' : r.level %></td>
+      <td class="small"><%= r.member_no %></td>
+      <td>
+        <form method="post" action="/admin/eventos/<%= ev.id %>/inscripcion/<%= r.id %>/pagado" style="display:inline">
+          <input type="hidden" name="paid" value="<%= r.paid ? '0' : '1' %>">
+          <button class="btn small <%= r.paid ? '' : 'ghost' %>" type="submit"><%= r.paid ? '● cobrado' : '○ pdte.' %></button>
+        </form>
+      </td>
+      <td><% if (r.wa) { %><a class="btn small ghost" href="<%= r.wa %>" target="_blank" rel="noopener">WhatsApp</a><% } %></td>
+      <td>
+        <form method="post" action="/admin/eventos/<%= ev.id %>/inscripcion/<%= r.id %>/eliminar" style="display:inline" onsubmit="return confirm('¿Dar de baja a <%= r.name %>?')"><button class="btn small danger" type="submit">Baja</button></form>
+      </td>
+    </tr>
+    <% } %>
+  </table></div>
+  <% } %>
+</div>
+
+<div class="card">
+  <h3>Editar evento</h3>
+  <form method="post" action="/admin/eventos/<%= ev.id %>/editar">
+    <div class="field"><label>Nombre</label><input type="text" name="name" value="<%= ev.name %>" required></div>
+    <div class="field"><label>Descripción</label><textarea name="description" rows="3"><%= ev.description %></textarea></div>
+    <div class="row2">
+      <div class="field"><label>Fecha</label><input type="date" name="event_date" value="<%= ev.event_date %>" required></div>
+      <div class="field"><label>Hora</label><input type="time" name="event_time" value="<%= ev.event_time %>"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Formato</label>
+        <select name="format"><% for (const k of Object.keys(formats)) { %><option value="<%= k %>" <%= ev.format === k ? 'selected' : '' %>><%= formats[k] %></option><% } %></select>
+      </div>
+      <div class="field"><label>Precio (€)</label><input type="number" name="price" step="0.01" min="0" value="<%= (ev.price_cents / 100).toFixed(2) %>"></div>
+    </div>
+    <div class="field"><label>Plazas máximas <span class="hint">(0 = sin límite)</span></label><input type="number" name="max_players" min="0" value="<%= ev.max_players %>"></div>
+    <button class="btn small" type="submit">Guardar cambios</button>
+  </form>
+</div>

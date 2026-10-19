@@ -324,7 +324,13 @@ router.get('/socios', (req, res) => {
 });
 router.post('/socios', (req, res) => {
   const ok = B.upsertMember(req.body.member_no, req.body.name, req.body.phone, req.body.email);
-  res.redirect('/admin/reservas/socios' + (ok ? '?ok=' + encodeURIComponent('Socio guardado.') : ''));
+  if (!ok) {
+    return res.renderPage('reservas-admin/socios', {
+      members: B.listMembers(), ok: null,
+      error: 'No se pudo guardar: ese teléfono ya pertenece a otro socio.', newPin: null,
+    });
+  }
+  res.redirect('/admin/reservas/socios?ok=' + encodeURIComponent('Socio guardado.'));
 });
 router.post('/socios/toggle', (req, res) => {
   B.setMemberActive(req.body.member_no, req.body.active === '1');

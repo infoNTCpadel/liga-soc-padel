@@ -1,0 +1,21 @@
+<h1>Nuevo evento</h1>
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+<div class="card" style="max-width: 560px">
+  <form method="post" action="/admin/eventos/nuevo">
+    <div class="field"><label>Nombre *</label><input type="text" name="name" required></div>
+    <div class="field"><label>Descripción</label><textarea name="description" rows="3"></textarea></div>
+    <div class="row2">
+      <div class="field"><label>Fecha *</label><input type="date" name="event_date" required></div>
+      <div class="field"><label>Hora</label><input type="time" name="event_time"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Formato</label>
+        <select name="format"><% for (const k of Object.keys(formats)) { %><option value="<%= k %>"><%= formats[k] %></option><% } %></select>
+      </div>
+      <div class="field"><label>Precio (€)</label><input type="number" name="price" step="0.01" min="0" value="0"></div>
+    </div>
+    <div class="field"><label>Plazas máximas <span class="hint">(0 = sin límite)</span></label><input type="number" name="max_players" min="0" value="0"></div>
+    <button class="btn" type="submit">Crear evento</button>
+  </form>
+</div>
+<p><a href="/admin/eventos">← Volver</a></p>

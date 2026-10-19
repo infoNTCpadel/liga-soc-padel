@@ -22,6 +22,7 @@
 
 const crypto = require('crypto');
 const { metaDb } = require('../db');
+const L = require('./league');
 
 // `bdb` es el handle de reservas (apunta a meta.db, la BD del club).
 const bdb = metaDb;
@@ -110,9 +111,26 @@ for (const sql of [
   'ALTER TABLE bookings ADD COLUMN kind TEXT NOT NULL DEFAULT \'reserva\'',
   'ALTER TABLE court_blocks ADD COLUMN color TEXT NOT NULL DEFAULT \'\'',
   'ALTER TABLE booking_charges ADD COLUMN booking_player_id INTEGER',
+  'ALTER TABLE club_members ADD COLUMN phone_norm TEXT NOT NULL DEFAULT \'\'',
+  'ALTER TABLE club_members ADD COLUMN gender TEXT NOT NULL DEFAULT \'\'',
 ]) {
   try { bdb.exec(sql); } catch (e) { /* ya existe */ }
 }
+// Directorio único del club: una persona = un teléfono normalizado.
+// Rellena phone_norm en socios existentes; si dos filas comparten teléfono,
+// la segunda recibe un sufijo para no perder datos (no se borra nada).
+try {
+  const seen = new Set(bdb.prepare('SELECT phone_norm FROM club_members WHERE phone_norm != \'\'').all().map(r => r.phone_norm));
+  for (const m of bdb.prepare('SELECT member_no, phone FROM club_members WHERE phone_norm = \'\'').all()) {
+    let pn = L.normPhone(m.phone);
+    if (!pn) pn = 'sin-tel-' + m.member_no;
+    let key = pn, i = 2;
+    while (seen.has(key)) key = pn + '~' + (i++);
+    seen.add(key);
+    bdb.prepare('UPDATE club_members SET phone_norm = ? WHERE member_no = ?').run(key, m.member_no);
+  }
+  bdb.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_members_phone ON club_members(phone_norm)');
+} catch (e) { console.error('migración phone_norm:', e.message); }
 try {
   bdb.exec("UPDATE court_blocks SET date_from = date, date_to = date WHERE date_from = ''");
   bdb.exec('UPDATE waitlist SET duration_min = end_min - start_min WHERE duration_min = 0');
@@ -290,11 +308,56 @@ function listMembers() {
 function upsertMember(no, name, phone = '', email = '') {
   no = (no || '').trim();
   if (!no || !(name || '').trim()) return false;
-  bdb.prepare(`INSERT INTO club_members(member_no, name, phone, email, active) VALUES(?, ?, ?, ?, 1)
-    ON CONFLICT(member_no) DO UPDATE SET name = excluded.name, phone = excluded.phone,
+  const pn = L.normPhone(phone);
+  if (pn) {
+    // Directorio único: el teléfono no puede pertenecer a otro socio
+    const other = bdb.prepare('SELECT member_no FROM club_members WHERE phone_norm = ? AND member_no != ?').get(pn, no);
+    if (other) return false;
+  }
+  bdb.prepare(`INSERT INTO club_members(member_no, name, phone, phone_norm, email, active) VALUES(?, ?, ?, ?, ?, 1)
+    ON CONFLICT(member_no) DO UPDATE SET name = excluded.name, phone = excluded.phone, phone_norm = excluded.phone_norm,
       email = CASE WHEN excluded.email != '' THEN excluded.email ELSE club_members.email END`).run(
-    no, name.trim(), (phone || '').trim(), (email || '').trim());
+    no, name.trim(), (phone || '').trim(), pn, (email || '').trim());
   return true;
+}
+// Directorio único: alta o actualización por TELÉFONO (clave de deduplicación).
+// Si no existe y no hay nº de socio, se genera uno interno estable (NV-<teléfono>).
+// Nunca sobrescribe datos existentes: solo rellena vacíos. Devuelve el member_no.
+function upsertMemberByPhone({ phone, name = '', member_no = '', email = '', level = null, gender = '' }) {
+  const pn = L.normPhone(phone);
+  if (!pn) return null;
+  // Nivel del directorio: se acepta cualquier escala numérica (social 0-6, reservas 1-7)
+  const ln = (level === '' || level == null) ? null : Number(level);
+  const lvl = Number.isFinite(ln) ? Math.round(ln * 4) / 4 : null;
+  const existing = bdb.prepare('SELECT * FROM club_members WHERE phone_norm = ?').get(pn);
+  if (existing) {
+    bdb.prepare(`UPDATE club_members SET
+        name = CASE WHEN name = '' THEN ? ELSE name END,
+        email = CASE WHEN email = '' THEN ? ELSE email END,
+        level = CASE WHEN level IS NULL THEN ? ELSE level END,
+        gender = CASE WHEN gender = '' THEN ? ELSE gender END
+      WHERE member_no = ?`)
+      .run((name || '').trim(), (email || '').trim(), lvl, (gender || '').toUpperCase(), existing.member_no);
+    return existing.member_no;
+  }
+  let no = (member_no || '').trim();
+  if (!no) no = 'NV-' + pn;
+  // Por si el nº ya existiera con otro teléfono, no colisionar la PK
+  if (bdb.prepare('SELECT 1 FROM club_members WHERE member_no = ?').get(no)) {
+    let i = 2;
+    while (bdb.prepare('SELECT 1 FROM club_members WHERE member_no = ?').get(no + '-' + i)) i++;
+    no = no + '-' + i;
+  }
+  bdb.prepare(`INSERT INTO club_members(member_no, name, phone, phone_norm, email, level, gender, active)
+               VALUES(?, ?, ?, ?, ?, ?, ?, 1)`)
+    .run(no, (name || '').trim() || no, (phone || '').trim(), pn, (email || '').trim(),
+      lvl, (gender || '').toUpperCase());
+  return no;
+}
+function getMemberByPhone(phone) {
+  const pn = L.normPhone(phone);
+  if (!pn) return null;
+  return bdb.prepare('SELECT * FROM club_members WHERE phone_norm = ?').get(pn) || null;
 }
 function setMemberActive(no, active) {
   bdb.prepare('UPDATE club_members SET active = ? WHERE member_no = ?').run(active ? 1 : 0, no);
@@ -304,6 +367,8 @@ function updateMemberContact(no, phone, email) {
     .run((phone || '').trim(), (email || '').trim(), (no || '').trim());
 }
 // Importa socios de la temporada activa (filas {member_no, name, phone, email, level}).
+// Directorio único: si el teléfono ya existe en el directorio (p. ej. entró por
+// un evento), se reutiliza esa ficha en vez de duplicar a la persona.
 // El nivel de la liga solo rellena los vacíos: nunca sobrescribe uno ya existente.
 function importMembers(rows) {
   let n = 0, lvl = 0;
@@ -311,16 +376,18 @@ function importMembers(rows) {
     const no = (r.member_no || '').trim();
     if (!no) continue;
     const level = validLevel(r.level);
-    const m = getMember(no);
+    const phone = (r.phone || '').trim();
+    let m = phone ? getMemberByPhone(phone) : getMember(no);
     if (!m) {
-      upsertMember(no, r.name || no, r.phone || '', r.email || '');
-      if (level != null) {
-        bdb.prepare('UPDATE club_members SET level = ? WHERE member_no = ?').run(level, no);
-        lvl++;
+      if (phone) upsertMemberByPhone({ phone, name: r.name || no, member_no: no, email: r.email || '', level });
+      else upsertMember(no, r.name || no, '', r.email || '');
+      m = phone ? getMemberByPhone(phone) : getMember(no);
+      if (m) {
+        n++;
+        if (level != null && m.level !== null && m.level !== undefined && m.level !== '') lvl++;
       }
-      n++;
     } else if ((m.level === null || m.level === undefined || m.level === '') && level != null) {
-      bdb.prepare('UPDATE club_members SET level = ? WHERE member_no = ?').run(level, no);
+      bdb.prepare('UPDATE club_members SET level = ? WHERE member_no = ?').run(level, m.member_no);
       lvl++;
     }
   }
@@ -1256,7 +1323,7 @@ function staffGrid(date, urls, courts) {
 module.exports = {
   bdb, cfg, setCfg, getConfig, validateConfig, parseDurations,
   minToStr, strToMin, todayStr, addDays, nowMin, overlaps, normPhone, weekdayName,
-  getMember, listMembers, upsertMember, setMemberActive, updateMemberContact, importMembers,
+  getMember, getMemberByPhone, listMembers, upsertMember, upsertMemberByPhone, setMemberActive, updateMemberContact, importMembers,
   validPin, setPin, hasPin, checkPin, resetPin,
   dayBookings, dayBlocks, freeSegments, reachableSet, validStarts,
   isBookable, isPotentiallyValid, gridFor,

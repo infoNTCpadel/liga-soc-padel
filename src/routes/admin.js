@@ -8,6 +8,21 @@ const { db, getSetting, setSetting, getAdminHash, setAdminHash, getReceptionHash
   middayDb, middayOpenTournamentId } = require('../db');
 const L = require('../lib/league');
 const { advanceWinner } = require('./pair');
+const B = require('../lib/bookings');
+
+// Puente al directorio único del club (solo escritura): vuelca los jugadores
+// de una pareja del social en club_members, sin duplicar por teléfono.
+// Nunca debe romper el flujo del social: cualquier error se registra y se ignora.
+function syncPairToDirectory(pairId) {
+  try {
+    const p = db.prepare('SELECT * FROM pairs WHERE id = ?').get(pairId);
+    if (!p) return;
+    for (const pid of [p.player1_id, p.player2_id]) {
+      const pl = db.prepare('SELECT * FROM players WHERE id = ?').get(pid);
+      if (pl) B.upsertMemberByPhone({ phone: pl.phone, name: pl.name, member_no: pl.member_no, email: pl.email, level: pl.level, gender: pl.gender });
+    }
+  } catch (e) { console.error('syncPairToDirectory:', e.message); }
+}
 
 function requireAdmin(req, res, next) {
   res.locals.section = 'admin';
@@ -229,6 +244,7 @@ router.post('/inscripciones/:id/estado', (req, res) => {
     }
   }
   db.prepare('UPDATE pairs SET status = ? WHERE id = ?').run(st, req.params.id);
+  if (st === 'active') syncPairToDirectory(req.params.id); // puente al directorio único
   res.redirect('/admin/inscripciones/' + req.params.id);
 });
 
@@ -545,6 +561,10 @@ router.post('/parejas/nueva', (req, res) => {
               VALUES(?, ?, ?, ?, ?, ?, ?)`)
     .run(code, category, Number(r1.lastInsertRowid), Number(r2.lastInsertRowid),
       Number(r1.lastInsertRowid), avg, status);
+  if (status === 'active') {
+    const newPairId = db.prepare('SELECT id FROM pairs WHERE code = ?').get(code).id;
+    syncPairToDirectory(newPairId); // puente al directorio único
+  }
   res.redirect('/admin/parejas');
 });
 

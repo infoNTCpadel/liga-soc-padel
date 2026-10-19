@@ -166,6 +166,8 @@ app.use('/admin/reservas', require('./routes/reservas-admin'));
 app.use('/recepcion/reservas', require('./routes/reservas-recepcion'));
 app.use('/mediodia', middayPublicRouter); // vista previa desde el dominio principal
 app.use('/admin/mediodia', require('./routes/midday-admin'));
+app.use('/eventos', require('./routes/eventos'));
+app.use('/admin/eventos', require('./routes/eventos-admin'));
 
 // 404
 app.use((req, res) => res.status(404).renderPage('public/404', {}));

@@ -1,0 +1,11 @@
+<h1>Eventos del club</h1>
+<p><a class="btn" href="/admin/eventos/nuevo">Nuevo evento</a></p>
+<% if (!events.length) { %><div class="card"><p class="mut">Aún no hay eventos. Crea el primero 🎾</p></div><% } %>
+<% for (const ev of events) { %>
+<div class="card">
+  <h3><a href="/admin/eventos/<%= ev.id %>"><%= ev.name %></a></h3>
+  <p class="small">📅 <%= ev.event_date %><%= ev.event_time ? ' · ' + ev.event_time : '' %> · <%= ev.inscritos %> inscritos
+    <%- ev.inscriptions_open ? '<span class="badge ok">abierto</span>' : '<span class="badge warn">cerrado</span>' %></p>
+  <p class="small"><a href="/eventos/<%= ev.slug %>" target="_blank" rel="noopener">Ver landing →</a></p>
+</div>
+<% } %>

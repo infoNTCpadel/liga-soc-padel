@@ -141,6 +141,12 @@ function createPair(mdb, data) {
     data.player2_name, data.player2_email, data.player2_phone,
     data.level1, data.level2, data.level_avg,
     data.slot_prefs, data.weekdays_off, data.blackout_dates, data.notes);
+  // Puente al directorio único del club (solo escritura; nunca rompe la inscripción)
+  try {
+    const B = require('./bookings');
+    B.upsertMemberByPhone({ phone: data.player1_phone, name: data.player1_name, email: data.player1_email, level: data.level1 });
+    B.upsertMemberByPhone({ phone: data.player2_phone, name: data.player2_name, email: data.player2_email, level: data.level2 });
+  } catch (e) { console.error('midday→directorio:', e.message); }
   return { id: Number(r.lastInsertRowid), code, tournament_id: tid };
 }
 
