@@ -9,11 +9,13 @@
 <div class="card">
   <h3><a href="/eventos/<%= ev.slug %>"><%= ev.name %></a></h3>
   <p><span class="badge cat"><%= formatName(ev.format) %></span>
+    <% if (ev.status === 'en_juego') { %><span class="badge info">En juego</span><% } %>
+    <% if (ev.status === 'cerrada') { %><span class="badge warn">Inscripción cerrada</span><% } %>
     <span class="small">📅 <%= fmtDate(ev.event_date) %><%= ev.event_time ? ' · ' + ev.event_time : '' %></span>
-    <% if (ev.price_cents > 0) { %><span class="small"> · 💶 <%= eur(ev.price_cents) %></span><% } else { %><span class="small"> · Gratis</span><% } %>
+    <% if (ev.price_cents > 0) { %><span class="small"> · 💶 <%= eur(ev.price_cents) %> / pers.</span><% } else { %><span class="small"> · Gratis</span><% } %>
   </p>
-  <p class="small mut"><%= ev.inscritos %> inscrito(s)<%= ev.left !== null ? ` · ${ev.left} plazas libres` : '' %></p>
-  <p><a class="btn small" href="/eventos/<%= ev.slug %>">Ver y apuntarme →</a></p>
+  <p class="small mut"><%= ev.inscritos %> inscrito(s)<%= ev.left !== null && ev.status === 'abierta' ? ` · ${ev.left} plazas libres` : '' %></p>
+  <p><a class="btn small" href="/eventos/<%= ev.slug %>"><%= ev.status === 'abierta' ? 'Ver y apuntarme →' : 'Ver →' %></a></p>
 </div>
 <% } %>
 

@@ -16,22 +16,22 @@ router.use(requireAdmin);
 // Listado
 router.get('/', (req, res) => {
   const events = E.listEvents().map(ev => ({ ...ev, inscritos: E.countInscriptions(ev.id) }));
-  res.renderPage('eventos-admin/lista', { events });
+  res.renderPage('eventos-admin/lista', { events, statusName: E.statusName });
 });
 
 // Nuevo evento
 router.get('/nuevo', (req, res) => {
-  res.renderPage('eventos-admin/nuevo', { error: null, formats: E.FORMATS, modes: E.MODES });
+  res.renderPage('eventos-admin/nuevo', { error: null, formats: E.FORMATS, modes: E.MODES, statuses: E.STATUSES });
 });
 router.post('/nuevo', (req, res) => {
   const b = req.body;
   if (!(b.name || '').trim() || !b.event_date) {
-    return res.renderPage('eventos-admin/nuevo', { error: 'Faltan el nombre o la fecha.', formats: E.FORMATS, modes: E.MODES });
+    return res.renderPage('eventos-admin/nuevo', { error: 'Faltan el nombre o la fecha.', formats: E.FORMATS, modes: E.MODES, statuses: E.STATUSES });
   }
   const ev = E.createEvent({
     name: b.name, description: b.description, event_date: b.event_date, event_time: b.event_time,
     format: b.format, price_cents: Math.round(parseFloat(b.price || '0') * 100), max_players: b.max_players,
-    mode: b.mode,
+    mode: b.mode, status: b.status,
   });
   res.redirect('/admin/eventos/' + ev.id);
 });
@@ -47,7 +47,7 @@ router.get('/:id', (req, res) => {
   const parejas = inscritos.filter(r => r.partner && r.id < r.partner.id).length;
   res.renderPage('eventos-admin/detalle', {
     ev, inscritos, parejas, left: E.spotsLeft(ev), formats: E.FORMATS, modes: E.MODES,
-    modeName: E.modeName, error: req.query.error || null,
+    statuses: E.STATUSES, modeName: E.modeName, statusName: E.statusName, error: req.query.error || null,
   });
 });
 
@@ -57,14 +57,17 @@ router.post('/:id/editar', (req, res) => {
   E.updateEvent(req.params.id, {
     name: b.name, description: b.description, event_date: b.event_date, event_time: b.event_time,
     format: b.format, price_cents: Math.round(parseFloat(b.price || '0') * 100), max_players: b.max_players,
-    mode: b.mode,
+    mode: b.mode, status: b.status,
   });
   res.redirect('/admin/eventos/' + req.params.id);
 });
 
-// Abrir / cerrar inscripciones / eliminar
-router.post('/:id/abrir', (req, res) => { E.setEventOpen(req.params.id, true); res.redirect('/admin/eventos/' + req.params.id); });
-router.post('/:id/cerrar', (req, res) => { E.setEventOpen(req.params.id, false); res.redirect('/admin/eventos/' + req.params.id); });
+// Cambiar estado
+router.post('/:id/estado', (req, res) => {
+  E.setStatus(req.params.id, req.body.status);
+  res.redirect('/admin/eventos/' + req.params.id);
+});
+// Eliminar evento
 router.post('/:id/eliminar', (req, res) => { E.deleteEvent(req.params.id); res.redirect('/admin/eventos'); });
 
 // Cobro / baja de un inscrito

@@ -12,16 +12,15 @@
 <% if (ok) { %>
 <div class="card">
   <h3>¡Apuntado/a! 🎾</h3>
-  <p>Tu inscripción está registrada.</p>
-  <% if (memberNo) { %>
-  <% const mnos = memberNo.split(','); %>
-  <p class="small">Tu nº de socio para la <strong>reserva de pistas</strong>: <span class="code"><%= mnos.join(' · ') %></span><br>
-  <span class="mut">Si aún no tienes acceso a las reservas, entra en <a href="/reservar/entrar">Reservar pista</a> y usa «Activar mi acceso» con este número.</span></p>
-  <% } %>
+  <p>Tu inscripción está registrada. ¡Nos vemos en el evento!</p>
   <p><a class="btn small" href="/eventos">Ver más eventos</a></p>
 </div>
-<% } else if (!ev.inscriptions_open) { %>
+<% } else if (ev.status === 'en_juego') { %>
+<div class="card"><p><span class="badge info">En juego 🎾</span> <span class="mut">Este evento ya está en marcha.</span></p></div>
+<% } else if (ev.status === 'cerrada') { %>
 <div class="card"><p><span class="badge warn">Inscripciones cerradas</span></p></div>
+<% } else if (ev.status === 'finalizada') { %>
+<div class="card"><p><span class="badge">Finalizado</span> <span class="mut">Este evento ya terminó. ¡Gracias por participar!</span></p></div>
 <% } else if (left !== null && left <= 0) { %>
 <div class="card"><p><span class="badge warn">Completo</span> <span class="mut">Ya no quedan plazas.</span></p></div>
 <% } else { %>

@@ -37,12 +37,27 @@ CREATE INDEX IF NOT EXISTS idx_insc_event ON event_inscriptions(event_id);
 `);
 try { edb.exec(`ALTER TABLE events ADD COLUMN inscription_mode TEXT NOT NULL DEFAULT 'individual'`); } catch (e) { /* ya existe */ }
 try { edb.exec(`ALTER TABLE event_inscriptions ADD COLUMN pair_key TEXT NOT NULL DEFAULT ''`); } catch (e) { /* ya existe */ }
+try {
+  edb.exec(`ALTER TABLE events ADD COLUMN status TEXT NOT NULL DEFAULT 'abierta'`);
+  // Los que tenían la inscripción cerrada pasan al estado equivalente
+  edb.exec(`UPDATE events SET status = 'cerrada' WHERE inscriptions_open = 0`);
+} catch (e) { /* ya existe */ }
 
 const FORMATS = { americana: 'Americana', quedada: 'Quedada', torneo: 'Torneo' };
 function formatName(f) { return FORMATS[f] || f; }
 const MODES = { individual: 'Individual', pairs: 'Parejas', mixed: 'Mixto (individual o parejas)' };
 function modeName(m) { return MODES[m] || MODES.individual; }
 function validMode(m) { return MODES[m] ? m : 'individual'; }
+// Estados visibles para el admin: abierta, en_juego, cerrada, finalizada, oculta
+const STATUSES = {
+  abierta: 'Inscripción abierta',
+  en_juego: 'En juego',
+  cerrada: 'Inscripción cerrada',
+  finalizada: 'Finalizado',
+  oculta: 'No visible',
+};
+function statusName(s) { return STATUSES[s] || STATUSES.abierta; }
+function validStatus(s) { return STATUSES[s] ? s : 'abierta'; }
 
 function slugify(name) {
   let s = (name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -56,9 +71,13 @@ function slugify(name) {
 function listEvents() {
   return edb.prepare('SELECT * FROM events ORDER BY event_date DESC, id DESC').all();
 }
-function upcomingEvents() {
-  const today = new Date().toISOString().slice(0, 10);
-  return edb.prepare(`SELECT * FROM events WHERE event_date >= ? ORDER BY event_date ASC, id ASC`).all(today);
+// Eventos visibles en la web pública (los ocultos no salen)
+function publicEvents() {
+  const upcoming = edb.prepare(`SELECT * FROM events
+    WHERE status IN ('abierta', 'en_juego', 'cerrada') ORDER BY event_date ASC, id ASC`).all();
+  const past = edb.prepare(`SELECT * FROM events
+    WHERE status = 'finalizada' ORDER BY event_date DESC, id DESC LIMIT 12`).all();
+  return { upcoming, past };
 }
 function getEvent(slug) {
   return edb.prepare('SELECT * FROM events WHERE slug = ?').get(slug) || null;
@@ -66,28 +85,28 @@ function getEvent(slug) {
 function getEventById(id) {
   return edb.prepare('SELECT * FROM events WHERE id = ?').get(id) || null;
 }
-function createEvent({ name, description, event_date, event_time, format, price_cents, max_players, mode }) {
+function createEvent({ name, description, event_date, event_time, format, price_cents, max_players, mode, status }) {
   const slug = slugify(name);
-  const r = edb.prepare(`INSERT INTO events(slug, name, description, event_date, event_time, format, price_cents, max_players, inscription_mode)
-    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+  const r = edb.prepare(`INSERT INTO events(slug, name, description, event_date, event_time, format, price_cents, max_players, inscription_mode, status)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(slug, (name || '').trim(), (description || '').trim(), event_date, (event_time || '').trim(),
       FORMATS[format] ? format : 'americana', Math.max(0, parseInt(price_cents, 10) || 0), Math.max(0, parseInt(max_players, 10) || 0),
-      validMode(mode));
+      validMode(mode), validStatus(status));
   return getEventById(Number(r.lastInsertRowid));
 }
 function updateEvent(id, fields) {
   const e = getEventById(id);
   if (!e) return null;
   edb.prepare(`UPDATE events SET name = ?, description = ?, event_date = ?, event_time = ?,
-    format = ?, price_cents = ?, max_players = ?, inscription_mode = ? WHERE id = ?`)
+    format = ?, price_cents = ?, max_players = ?, inscription_mode = ?, status = ? WHERE id = ?`)
     .run((fields.name || e.name).trim(), (fields.description || '').trim(), fields.event_date || e.event_date,
       (fields.event_time || '').trim(), FORMATS[fields.format] ? fields.format : e.format,
       Math.max(0, parseInt(fields.price_cents, 10) || 0), Math.max(0, parseInt(fields.max_players, 10) || 0),
-      validMode(fields.mode || e.inscription_mode), id);
+      validMode(fields.mode || e.inscription_mode), validStatus(fields.status || e.status), id);
   return getEventById(id);
 }
-function setEventOpen(id, open) {
-  edb.prepare('UPDATE events SET inscriptions_open = ? WHERE id = ?').run(open ? 1 : 0, id);
+function setStatus(id, status) {
+  edb.prepare('UPDATE events SET status = ? WHERE id = ?').run(validStatus(status), id);
 }
 function deleteEvent(id) {
   edb.prepare('DELETE FROM event_inscriptions WHERE event_id = ?').run(id);
@@ -105,7 +124,7 @@ function spotsLeft(ev) {
 function inscribe(eventId, { phone, name, member_no, email, level, gender }) {
   const ev = getEventById(eventId);
   if (!ev) return { error: 'Evento no encontrado.' };
-  if (!ev.inscriptions_open) return { error: 'Las inscripciones están cerradas.' };
+  if (ev.status !== 'abierta') return { error: 'Las inscripciones no están abiertas en este momento.' };
   const left = spotsLeft(ev);
   if (left !== null && left <= 0) return { error: 'Ya no quedan plazas.' };
   const no = B.upsertMemberByPhone({ phone, name, member_no, email, level, gender });
@@ -146,7 +165,7 @@ function inscribePair(eventId, { p1, p2 }) {
   const ev = getEventById(eventId);
   if (!ev) return { error: 'Evento no encontrado.' };
   if (!['pairs', 'mixed'].includes(ev.inscription_mode)) return { error: 'Este evento no admite inscripción por parejas.' };
-  if (!ev.inscriptions_open) return { error: 'Las inscripciones están cerradas.' };
+  if (ev.status !== 'abierta') return { error: 'Las inscripciones no están abiertas en este momento.' };
   const left = spotsLeft(ev);
   if (left !== null && left < 2) return { error: left <= 0 ? 'Ya no quedan plazas.' : 'Solo queda 1 plaza libre.' };
   const pn1 = (p1.phone || '').replace(/\D/g, ''), pn2 = (p2.phone || '').replace(/\D/g, '');
@@ -201,8 +220,9 @@ function fmtDate(iso) {
 }
 
 module.exports = {
-  FORMATS, formatName, MODES, modeName, validMode, listEvents, upcomingEvents, getEvent, getEventById,
-  createEvent, updateEvent, setEventOpen, deleteEvent, countInscriptions, spotsLeft,
+  FORMATS, formatName, MODES, modeName, validMode, STATUSES, statusName, validStatus,
+  listEvents, publicEvents, getEvent, getEventById,
+  createEvent, updateEvent, setStatus, deleteEvent, countInscriptions, spotsLeft,
   inscribe, inscribePair, listInscriptions, inscriptionsWithPairs, pairUp, unpair,
   setPaid, removeInscription, eur, fmtDate,
 };

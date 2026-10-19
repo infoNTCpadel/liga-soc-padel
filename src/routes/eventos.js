@@ -13,21 +13,23 @@ const levelOptions = L.PLAYTOMIC_BRACKETS.map(b => ({
 
 // Índice de eventos
 router.get('/', (req, res) => {
-  const upcoming = E.upcomingEvents().map(ev => ({ ...ev, inscritos: E.countInscriptions(ev.id), left: E.spotsLeft(ev) }));
-  const past = E.listEvents().filter(e => !upcoming.some(u => u.id === e.id)).slice(0, 6)
-    .map(ev => ({ ...ev, inscritos: E.countInscriptions(ev.id) }));
-  res.renderPage('eventos/index', { upcoming, past, fmtDate: E.fmtDate, eur: E.eur, formatName: E.formatName });
+  const { upcoming, past } = E.publicEvents();
+  const withCounts = (list) => list.map(ev => ({ ...ev, inscritos: E.countInscriptions(ev.id), left: E.spotsLeft(ev) }));
+  res.renderPage('eventos/index', {
+    upcoming: withCounts(upcoming), past: withCounts(past),
+    fmtDate: E.fmtDate, eur: E.eur, formatName: E.formatName, statusName: E.statusName,
+  });
 });
 
 // Landing de un evento + formulario
 router.get('/:slug', (req, res) => {
   const ev = E.getEvent(req.params.slug);
-  if (!ev) return res.status(404).renderPage('public/404', {});
+  if (!ev || ev.status === 'oculta') return res.status(404).renderPage('public/404', {});
   const inscritos = E.countInscriptions(ev.id);
   res.renderPage('eventos/evento', {
     ev, inscritos, left: E.spotsLeft(ev), levelOptions,
-    ok: req.query.ok === '1', memberNo: req.query.mno || null, error: req.query.error || null,
-    fmtDate: E.fmtDate, eur: E.eur, formatName: E.formatName, modeName: E.modeName,
+    ok: req.query.ok === '1', error: req.query.error || null,
+    fmtDate: E.fmtDate, eur: E.eur, formatName: E.formatName, modeName: E.modeName, statusName: E.statusName,
   });
 });
 
@@ -51,7 +53,7 @@ function validPlayer(b, pfx) {
 // Inscripción
 router.post('/:slug/inscribir', (req, res) => {
   const ev = E.getEvent(req.params.slug);
-  if (!ev) return res.status(404).renderPage('public/404', {});
+  if (!ev || ev.status === 'oculta') return res.status(404).renderPage('public/404', {});
   const b = req.body;
   const back = (msg) => res.redirect(`/eventos/${ev.slug}?error=` + encodeURIComponent(msg));
   const wantPair = (ev.inscription_mode === 'pairs') || (ev.inscription_mode === 'mixed' && b.kind === 'pareja');
@@ -61,7 +63,7 @@ router.post('/:slug/inscribir', (req, res) => {
     if (r2.error) return back(r2.error);
     const r = E.inscribePair(ev.id, { p1: r1.player, p2: r2.player });
     if (r.error) return back(r.error);
-    return res.redirect(`/eventos/${ev.slug}?ok=1&mno=` + encodeURIComponent(r.member_nos.join(',')));
+    return res.redirect(`/eventos/${ev.slug}?ok=1`);
   }
   if (ev.inscription_mode === 'individual' && (b.p1_name || b.p2_name)) {
     return back('Este evento no admite inscripción por parejas.');
@@ -78,7 +80,7 @@ router.post('/:slug/inscribir', (req, res) => {
     email: (b[pfx + 'email'] || '').trim(), level, gender: (b[pfx + 'gender'] || '').toUpperCase(),
   });
   if (r.error) return back(r.error); // p. ej. ya inscrito: avisa sin duplicar
-  res.redirect(`/eventos/${ev.slug}?ok=1&mno=` + encodeURIComponent(r.member_no));
+  res.redirect(`/eventos/${ev.slug}?ok=1`);
 });
 
 module.exports = router;

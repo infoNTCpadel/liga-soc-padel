@@ -92,12 +92,19 @@ const srv = spawn('node', ['src/index.js'], { cwd: dir, env, stdio: 'ignore' });
   r = await admin.req('GET', `/admin/eventos/${evId}/csv`);
   ok(r.statusCode === 200 && r.text.includes('Laura Gómez') && r.text.includes('612111001'), 'CSV exporta inscritos');
 
-  // 8. Cerrar inscripciones → la landing lo refleja
-  await admin.req('POST', `/admin/eventos/${evId}/cerrar`, {});
+  // 8. Cambiar estado a cerrada → la landing lo refleja
+  await admin.req('POST', `/admin/eventos/${evId}/estado`, { status: 'cerrada' });
   r = await pub.req('GET', '/eventos/' + slug);
   ok(r.text.includes('cerradas'), 'landing muestra cierre');
   r = await pub.req('POST', `/eventos/${slug}/inscribir`, { name: 'X', phone: '612111009', level: '2' });
-  ok(decodeURIComponent(r.location).includes('cerradas'), 'inscribir en cerrado → error');
+  ok(decodeURIComponent(r.location).includes('no están abiertas'), 'inscribir en cerrado → error');
+  // 8b. Estado oculta → la landing da 404 y no sale en el índice
+  await admin.req('POST', `/admin/eventos/${evId}/estado`, { status: 'oculta' });
+  r = await pub.req('GET', '/eventos/' + slug);
+  ok(r.statusCode === 404, 'evento oculto → 404');
+  r = await pub.req('GET', '/eventos');
+  ok(!r.text.includes('Americana de Navidad'), 'evento oculto no sale en el índice');
+  await admin.req('POST', `/admin/eventos/${evId}/estado`, { status: 'abierta' });
 
   // 9. Puente social → directorio: alta manual activa vuelca los jugadores
   r = await admin.req('POST', '/admin/parejas/nueva', { category: 'M',

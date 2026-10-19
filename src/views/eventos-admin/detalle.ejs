@@ -2,20 +2,26 @@
 <h1><%= ev.name %></h1>
 <p class="small">📅 <%= ev.event_date %><%= ev.event_time ? ' · ' + ev.event_time : '' %> ·
   <span class="badge cat"><%= modeName(ev.inscription_mode) %></span>
+  <span class="badge <%= ev.status === 'abierta' ? 'ok' : ev.status === 'oculta' ? 'warn' : '' %>"><%= statusName(ev.status) %></span>
   <a href="/eventos/<%= ev.slug %>" target="_blank" rel="noopener">Ver landing →</a>
-  <%- ev.inscriptions_open ? '<span class="badge ok">inscripciones abiertas</span>' : '<span class="badge warn">inscripciones cerradas</span>' %>
 </p>
 <% if (error) { %><div class="alert error"><%= error %></div><% } %>
+
+<div class="card">
+  <h3>Estado del evento</h3>
+  <form method="post" action="/admin/eventos/<%= ev.id %>/estado" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap">
+    <div class="field" style="margin:0"><label>Estado</label>
+      <select name="status"><% for (const k of Object.keys(statuses)) { %><option value="<%= k %>" <%= ev.status === k ? 'selected' : '' %>><%= statuses[k] %></option><% } %></select>
+    </div>
+    <button class="btn small" type="submit">Cambiar estado</button>
+  </form>
+  <p class="small mut">Abierta: se ve y admite inscripciones · En juego: se ve pero ya no admite · Cerrada: se ve sin inscribir · Finalizado: pasa a «Anteriores» · No visible: no se muestra en la web.</p>
+</div>
 
 <div class="card">
   <h3>Inscritos (<%= inscritos.length %>)<%= parejas ? ` · ${parejas} pareja(s)` : '' %><%= left !== null ? ` · ${left} plazas libres` : '' %></h3>
   <p>
     <a class="btn small" href="/admin/eventos/<%= ev.id %>/csv">Exportar CSV</a>
-    <% if (ev.inscriptions_open) { %>
-      <form method="post" action="/admin/eventos/<%= ev.id %>/cerrar" style="display:inline"><button class="btn small ghost" type="submit">Cerrar inscripciones</button></form>
-    <% } else { %>
-      <form method="post" action="/admin/eventos/<%= ev.id %>/abrir" style="display:inline"><button class="btn small ghost" type="submit">Abrir inscripciones</button></form>
-    <% } %>
     <form method="post" action="/admin/eventos/<%= ev.id %>/eliminar" style="display:inline" onsubmit="return confirm('¿Eliminar el evento y sus inscripciones?')"><button class="btn small danger" type="submit">Eliminar</button></form>
   </p>
   <% if (!inscritos.length) { %><p class="mut">Sin inscritos todavía.</p><% } else { %>
@@ -73,8 +79,11 @@
       <div class="field"><label>Inscripción</label>
         <select name="mode"><% for (const k of Object.keys(modes)) { %><option value="<%= k %>" <%= ev.inscription_mode === k ? 'selected' : '' %>><%= modes[k] %></option><% } %></select>
       </div>
-      <div class="field"><label>Plazas máximas <span class="hint">(0 = sin límite; se cuentan personas)</span></label><input type="number" name="max_players" min="0" value="<%= ev.max_players %>"></div>
+      <div class="field"><label>Estado</label>
+        <select name="status"><% for (const k of Object.keys(statuses)) { %><option value="<%= k %>" <%= ev.status === k ? 'selected' : '' %>><%= statuses[k] %></option><% } %></select>
+      </div>
     </div>
+    <div class="field"><label>Plazas máximas <span class="hint">(0 = sin límite; se cuentan personas)</span></label><input type="number" name="max_players" min="0" value="<%= ev.max_players %>"></div>
     <button class="btn small" type="submit">Guardar cambios</button>
   </form>
 </div>
