@@ -4,6 +4,7 @@ const router = express.Router();
 const { getSetting, getAdminHash } = require('../db');
 const L = require('../lib/league');
 const E = require('../lib/events');
+const U = require('../lib/upload');
 
 function requireAdmin(req, res, next) {
   res.locals.section = 'admin';
@@ -12,6 +13,16 @@ function requireAdmin(req, res, next) {
   next();
 }
 router.use(requireAdmin);
+
+// Los formularios de eventos usan multipart (cartel); si no, urlencoded normal.
+async function formData(req) {
+  const ct = String(req.headers['content-type'] || '');
+  if (ct.includes('multipart/form-data')) {
+    const mp = await U.parseMultipart(req);
+    return { fields: mp.fields, file: mp.file };
+  }
+  return { fields: req.body, file: null };
+}
 
 // Listado
 router.get('/', (req, res) => {
@@ -23,16 +34,27 @@ router.get('/', (req, res) => {
 router.get('/nuevo', (req, res) => {
   res.renderPage('eventos-admin/nuevo', { error: null, formats: E.FORMATS, modes: E.MODES, statuses: E.STATUSES });
 });
-router.post('/nuevo', (req, res) => {
-  const b = req.body;
+router.post('/nuevo', async (req, res) => {
+  let fields, file;
+  try {
+    ({ fields, file } = await formData(req));
+  } catch (e) {
+    return res.renderPage('eventos-admin/nuevo', { error: e.message, formats: E.FORMATS, modes: E.MODES, statuses: E.STATUSES });
+  }
+  const b = fields;
+  const imgErr = U.validImage(file);
   if (!(b.name || '').trim() || !b.event_date) {
     return res.renderPage('eventos-admin/nuevo', { error: 'Faltan el nombre o la fecha.', formats: E.FORMATS, modes: E.MODES, statuses: E.STATUSES });
+  }
+  if (imgErr) {
+    return res.renderPage('eventos-admin/nuevo', { error: imgErr, formats: E.FORMATS, modes: E.MODES, statuses: E.STATUSES });
   }
   const ev = E.createEvent({
     name: b.name, description: b.description, event_date: b.event_date, event_time: b.event_time,
     format: b.format, price_cents: Math.round(parseFloat(b.price || '0') * 100), max_players: b.max_players,
     mode: b.mode, status: b.status,
   });
+  if (file && file.data && file.data.length) E.setPoster(ev.id, U.savePoster(ev.id, file));
   res.redirect('/admin/eventos/' + ev.id);
 });
 
@@ -52,13 +74,31 @@ router.get('/:id', (req, res) => {
 });
 
 // Editar
-router.post('/:id/editar', (req, res) => {
-  const b = req.body;
+router.post('/:id/editar', async (req, res) => {
+  let fields, file;
+  try {
+    ({ fields, file } = await formData(req));
+  } catch (e) {
+    return res.redirect('/admin/eventos/' + req.params.id + '?error=' + encodeURIComponent(e.message));
+  }
+  const b = fields;
+  const imgErr = U.validImage(file);
+  if (imgErr) {
+    return res.redirect('/admin/eventos/' + req.params.id + '?error=' + encodeURIComponent(imgErr));
+  }
   E.updateEvent(req.params.id, {
     name: b.name, description: b.description, event_date: b.event_date, event_time: b.event_time,
     format: b.format, price_cents: Math.round(parseFloat(b.price || '0') * 100), max_players: b.max_players,
     mode: b.mode, status: b.status,
   });
+  if (file && file.data && file.data.length) E.setPoster(req.params.id, U.savePoster(req.params.id, file));
+  res.redirect('/admin/eventos/' + req.params.id);
+});
+
+// Quitar cartel
+router.post('/:id/poster/quitar', (req, res) => {
+  U.removePoster(req.params.id);
+  E.setPoster(req.params.id, '');
   res.redirect('/admin/eventos/' + req.params.id);
 });
 

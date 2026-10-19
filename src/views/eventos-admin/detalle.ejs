@@ -62,9 +62,19 @@
 
 <div class="card">
   <h3>Editar evento</h3>
-  <form method="post" action="/admin/eventos/<%= ev.id %>/editar">
+  <form method="post" action="/admin/eventos/<%= ev.id %>/editar" enctype="multipart/form-data">
     <div class="field"><label>Nombre</label><input type="text" name="name" value="<%= ev.name %>" required></div>
     <div class="field"><label>Descripción</label><textarea name="description" rows="3"><%= ev.description %></textarea></div>
+    <div class="field"><label>Cartel <span class="hint">(opcional; se reduce solo para que pese poco)</span></label>
+      <% if (ev.poster) { %>
+      <p><img src="/eventos/<%= ev.slug %>/poster" alt="Cartel actual" style="max-width:280px;height:auto;border-radius:8px"></p>
+      <% } %>
+      <input type="file" id="poster-input" name="poster" accept="image/*">
+      <img id="poster-preview" alt="" style="display:none;max-width:280px;height:auto;margin-top:8px;border-radius:8px">
+      <% if (ev.poster) { %>
+      <p><button class="btn small ghost" type="submit" form="f-quitar-poster">Quitar cartel actual</button></p>
+      <% } %>
+    </div>
     <div class="row2">
       <div class="field"><label>Fecha</label><input type="date" name="event_date" value="<%= ev.event_date %>" required></div>
       <div class="field"><label>Hora</label><input type="time" name="event_time" value="<%= ev.event_time %>"></div>
@@ -86,4 +96,32 @@
     <div class="field"><label>Plazas máximas <span class="hint">(0 = sin límite; se cuentan personas)</span></label><input type="number" name="max_players" min="0" value="<%= ev.max_players %>"></div>
     <button class="btn small" type="submit">Guardar cambios</button>
   </form>
+  <% if (ev.poster) { %>
+  <form id="f-quitar-poster" method="post" action="/admin/eventos/<%= ev.id %>/poster/quitar" style="display:none"></form>
+  <% } %>
 </div>
+<script>
+// Reduce el cartel en el navegador: máx 1200 px de ancho, JPG calidad 82.
+document.getElementById('poster-input').addEventListener('change', async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  try {
+    const img = new Image();
+    img.src = URL.createObjectURL(f);
+    await img.decode();
+    const scale = Math.min(1, 1200 / img.width);
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.width * scale);
+    c.height = Math.round(img.height * scale);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.82));
+    if (!blob) return;
+    const dt = new DataTransfer();
+    dt.items.add(new File([blob], 'cartel.jpg', { type: 'image/jpeg' }));
+    e.target.files = dt.files;
+    const pv = document.getElementById('poster-preview');
+    pv.src = URL.createObjectURL(blob);
+    pv.style.display = 'block';
+  } catch (err) { /* se sube el original y el servidor valida */ }
+});
+</script>

@@ -4,12 +4,24 @@ const express = require('express');
 const router = express.Router();
 const L = require('../lib/league');
 const E = require('../lib/events');
+const U = require('../lib/upload');
 
 router.use((req, res, next) => { res.locals.sub = 'eventos'; next(); });
 
 const levelOptions = L.PLAYTOMIC_BRACKETS.map(b => ({
   name: b.name, value: Math.round(((b.min + b.max) / 2) * 100) / 100,
 }));
+
+// Cartel del evento
+router.get('/:slug/poster', (req, res) => {
+  const ev = E.getEvent(req.params.slug);
+  if (!ev || ev.status === 'oculta' || !ev.poster) return res.status(404).end();
+  const fp = U.posterPath(ev.poster);
+  if (!fp) return res.status(404).end();
+  res.setHeader('Content-Type', ev.poster.endsWith('.png') ? 'image/png' : 'image/jpeg');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.sendFile(fp);
+});
 
 // Índice de eventos
 router.get('/', (req, res) => {

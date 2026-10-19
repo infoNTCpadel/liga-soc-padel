@@ -1,9 +1,13 @@
 <h1>Nuevo evento</h1>
 <% if (error) { %><div class="alert error"><%= error %></div><% } %>
 <div class="card" style="max-width: 560px">
-  <form method="post" action="/admin/eventos/nuevo">
+  <form method="post" action="/admin/eventos/nuevo" enctype="multipart/form-data">
     <div class="field"><label>Nombre *</label><input type="text" name="name" required></div>
     <div class="field"><label>Descripción</label><textarea name="description" rows="3"></textarea></div>
+    <div class="field"><label>Cartel <span class="hint">(opcional; se reduce solo para que pese poco)</span></label>
+      <input type="file" id="poster-input" name="poster" accept="image/*">
+      <img id="poster-preview" alt="" style="display:none;max-width:100%;height:auto;margin-top:8px;border-radius:8px">
+    </div>
     <div class="row2">
       <div class="field"><label>Fecha *</label><input type="date" name="event_date" required></div>
       <div class="field"><label>Hora</label><input type="time" name="event_time"></div>
@@ -26,4 +30,29 @@
     <button class="btn" type="submit">Crear evento</button>
   </form>
 </div>
+<script>
+// Reduce el cartel en el navegador: máx 1200 px de ancho, JPG calidad 82.
+document.getElementById('poster-input').addEventListener('change', async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  try {
+    const img = new Image();
+    img.src = URL.createObjectURL(f);
+    await img.decode();
+    const scale = Math.min(1, 1200 / img.width);
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.width * scale);
+    c.height = Math.round(img.height * scale);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.82));
+    if (!blob) return;
+    const dt = new DataTransfer();
+    dt.items.add(new File([blob], 'cartel.jpg', { type: 'image/jpeg' }));
+    e.target.files = dt.files;
+    const pv = document.getElementById('poster-preview');
+    pv.src = URL.createObjectURL(blob);
+    pv.style.display = 'block';
+  } catch (err) { /* se sube el original y el servidor valida */ }
+});
+</script>
 <p><a href="/admin/eventos">← Volver</a></p>

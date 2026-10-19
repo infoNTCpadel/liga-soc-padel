@@ -1,4 +1,7 @@
 <p class="small"><a href="/eventos">← Todos los eventos</a></p>
+<% if (ev.poster) { %>
+<p><img src="/eventos/<%= ev.slug %>/poster" alt="Cartel de <%= ev.name %>" style="max-width:100%;height:auto;border-radius:10px"></p>
+<% } %>
 <h1><%= ev.name %></h1>
 <p><span class="badge cat"><%= formatName(ev.format) %></span>
   <span>📅 <strong><%= fmtDate(ev.event_date) %></strong><%= ev.event_time ? ' · ' + ev.event_time : '' %></span>

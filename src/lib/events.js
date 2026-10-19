@@ -42,6 +42,7 @@ try {
   // Los que tenían la inscripción cerrada pasan al estado equivalente
   edb.exec(`UPDATE events SET status = 'cerrada' WHERE inscriptions_open = 0`);
 } catch (e) { /* ya existe */ }
+try { edb.exec(`ALTER TABLE events ADD COLUMN poster TEXT NOT NULL DEFAULT ''`); } catch (e) { /* ya existe */ }
 
 const FORMATS = { americana: 'Americana', quedada: 'Quedada', torneo: 'Torneo' };
 function formatName(f) { return FORMATS[f] || f; }
@@ -109,8 +110,12 @@ function setStatus(id, status) {
   edb.prepare('UPDATE events SET status = ? WHERE id = ?').run(validStatus(status), id);
 }
 function deleteEvent(id) {
+  try { require('./upload').removePoster(id); } catch (e) { /* sin cartel */ }
   edb.prepare('DELETE FROM event_inscriptions WHERE event_id = ?').run(id);
   edb.prepare('DELETE FROM events WHERE id = ?').run(id);
+}
+function setPoster(id, filename) {
+  edb.prepare('UPDATE events SET poster = ? WHERE id = ?').run(filename || '', id);
 }
 function countInscriptions(eventId) {
   return edb.prepare('SELECT COUNT(*) c FROM event_inscriptions WHERE event_id = ?').get(eventId).c;
@@ -222,7 +227,7 @@ function fmtDate(iso) {
 module.exports = {
   FORMATS, formatName, MODES, modeName, validMode, STATUSES, statusName, validStatus,
   listEvents, publicEvents, getEvent, getEventById,
-  createEvent, updateEvent, setStatus, deleteEvent, countInscriptions, spotsLeft,
+  createEvent, updateEvent, setStatus, deleteEvent, setPoster, countInscriptions, spotsLeft,
   inscribe, inscribePair, listInscriptions, inscriptionsWithPairs, pairUp, unpair,
   setPaid, removeInscription, eur, fmtDate,
 };

@@ -571,6 +571,6 @@ module.exports = {
   getReceptionHash, setReceptionHash,
   listSeasons, getActiveSeason, getActiveSeasonId,
   createSeason, activateSeason, renameSeason, deleteSeason,
-  seasonDb, metaDb: meta,
+  seasonDb, metaDb: meta, dataDir: DATA_DIR,
   middayDb: midday, middayGet, middaySet, middayOpenTournamentId, MIDDAY_DEFAULTS, nextMondayISO,
 };
