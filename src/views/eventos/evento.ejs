@@ -14,7 +14,8 @@
   <h3>¡Apuntado/a! 🎾</h3>
   <p>Tu inscripción está registrada.</p>
   <% if (memberNo) { %>
-  <p class="small">Tu nº de socio para la <strong>reserva de pistas</strong>: <span class="code"><%= memberNo %></span><br>
+  <% const mnos = memberNo.split(','); %>
+  <p class="small">Tu nº de socio para la <strong>reserva de pistas</strong>: <span class="code"><%= mnos.join(' · ') %></span><br>
   <span class="mut">Si aún no tienes acceso a las reservas, entra en <a href="/reservar/entrar">Reservar pista</a> y usa «Activar mi acceso» con este número.</span></p>
   <% } %>
   <p><a class="btn small" href="/eventos">Ver más eventos</a></p>
@@ -25,30 +26,87 @@
 <div class="card"><p><span class="badge warn">Completo</span> <span class="mut">Ya no quedan plazas.</span></p></div>
 <% } else { %>
 <div class="card" style="max-width: 560px">
+  <% if (ev.inscription_mode === 'individual') { %>
   <h3>Apuntarme</h3>
-  <p class="small mut">Si ya eres socio del club o juegas la liga social, con tu teléfono te reconocemos automáticamente.</p>
-  <form method="post" action="/eventos/<%= ev.slug %>/inscribir">
-    <div class="row2">
-      <div class="field"><label>Nombre *</label><input type="text" name="name" required></div>
-      <div class="field"><label>Teléfono móvil *</label><input type="tel" name="phone" required></div>
-    </div>
-    <div class="row2">
-      <div class="field"><label>Nivel *</label>
-        <select name="level" required>
-          <option value="">—</option>
-          <% for (const o of levelOptions) { %><option value="<%= o.value %>"><%= o.name %></option><% } %>
-        </select>
+  <% } else if (ev.inscription_mode === 'pairs') { %>
+  <h3>Apuntar a la pareja</h3>
+  <% } else { %>
+  <h3>Apuntarme</h3>
+  <div class="field"><label>¿Cómo os apuntáis?</label>
+    <label class="small"><input type="radio" name="kind" value="solo" checked> Voy solo/a</label>
+    <label class="small"><input type="radio" name="kind" value="pareja"> Vamos en pareja</label>
+  </div>
+  <% } %>
+  <p class="small mut">Si ya sois socios del club o jugáis la liga social, con el teléfono os reconocemos automáticamente.</p>
+  <form method="post" action="/eventos/<%= ev.slug %>/inscribir" id="f-insc">
+    <% if (ev.inscription_mode === 'mixed') { %><input type="hidden" name="kind" value="solo" id="f-kind"><% } %>
+    <div id="f-p1">
+      <h4><%= ev.inscription_mode === 'individual' ? 'Tus datos' : 'Jugador 1' %></h4>
+      <div class="row2">
+        <div class="field"><label>Nombre *</label><input type="text" name="<%= ev.inscription_mode === 'individual' ? 'name' : 'p1_name' %>" required></div>
+        <div class="field"><label>Teléfono móvil *</label><input type="tel" name="<%= ev.inscription_mode === 'individual' ? 'phone' : 'p1_phone' %>" required></div>
       </div>
-      <div class="field"><label>Sexo</label>
-        <select name="gender"><option value="">—</option><option value="M">Hombre</option><option value="F">Mujer</option></select>
+      <div class="row2">
+        <div class="field"><label>Nivel *</label>
+          <select name="<%= ev.inscription_mode === 'individual' ? 'level' : 'p1_level' %>" required>
+            <option value="">—</option>
+            <% for (const o of levelOptions) { %><option value="<%= o.value %>"><%= o.name %></option><% } %>
+          </select>
+        </div>
+        <div class="field"><label>Sexo</label>
+          <select name="<%= ev.inscription_mode === 'individual' ? 'gender' : 'p1_gender' %>"><option value="">—</option><option value="M">Hombre</option><option value="F">Mujer</option></select>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Nº de socio <span class="hint">(si lo tienes)</span></label><input type="text" name="<%= ev.inscription_mode === 'individual' ? 'member_no' : 'p1_member_no' %>"></div>
+        <div class="field"><label>Email</label><input type="email" name="<%= ev.inscription_mode === 'individual' ? 'email' : 'p1_email' %>"></div>
       </div>
     </div>
-    <div class="row2">
-      <div class="field"><label>Nº de socio <span class="hint">(si lo tienes)</span></label><input type="text" name="member_no"></div>
-      <div class="field"><label>Email</label><input type="email" name="email"></div>
+    <% if (ev.inscription_mode !== 'individual') { %>
+    <div id="f-p2" style="<%= ev.inscription_mode === 'mixed' ? 'display:none' : '' %>">
+      <h4>Jugador 2</h4>
+      <div class="row2">
+        <div class="field"><label>Nombre *</label><input type="text" name="p2_name"></div>
+        <div class="field"><label>Teléfono móvil *</label><input type="tel" name="p2_phone"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Nivel *</label>
+          <select name="p2_level">
+            <option value="">—</option>
+            <% for (const o of levelOptions) { %><option value="<%= o.value %>"><%= o.name %></option><% } %>
+          </select>
+        </div>
+        <div class="field"><label>Sexo</label>
+          <select name="p2_gender"><option value="">—</option><option value="M">Hombre</option><option value="F">Mujer</option></select>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Nº de socio <span class="hint">(si lo tiene)</span></label><input type="text" name="p2_member_no"></div>
+        <div class="field"><label>Email</label><input type="email" name="p2_email"></div>
+      </div>
     </div>
-    <button class="btn" type="submit">Inscribirme<%= ev.price_cents > 0 ? ' · ' + eur(ev.price_cents) : '' %></button>
+    <% } %>
+    <button class="btn" type="submit">Inscribirme<%= ev.price_cents > 0 ? ' · ' + eur(ev.price_cents) + ' / pers.' : '' %></button>
   </form>
   <% if (ev.price_cents > 0) { %><p class="small mut">El pago se realiza en el club.</p><% } %>
 </div>
+<% if (ev.inscription_mode === 'mixed') { %>
+<script>
+(function () {
+  var kind = document.getElementById('f-kind');
+  var p2 = document.getElementById('f-p2');
+  document.querySelectorAll('input[name="kind"]').forEach(function (r) {
+    r.addEventListener('change', function () {
+      var isPair = this.value === 'pareja';
+      kind.value = this.value;
+      p2.style.display = isPair ? 'block' : 'none';
+      ['p2_name', 'p2_phone', 'p2_level'].forEach(function (n) {
+        var el = document.querySelector('[name="' + n + '"]');
+        if (el) el.required = isPair;
+      });
+    });
+  });
+})();
+</script>
+<% } %>
 <% } %>

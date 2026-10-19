@@ -1,13 +1,14 @@
 <p class="small"><a href="/admin/eventos">← Eventos</a></p>
 <h1><%= ev.name %></h1>
 <p class="small">📅 <%= ev.event_date %><%= ev.event_time ? ' · ' + ev.event_time : '' %> ·
+  <span class="badge cat"><%= modeName(ev.inscription_mode) %></span>
   <a href="/eventos/<%= ev.slug %>" target="_blank" rel="noopener">Ver landing →</a>
   <%- ev.inscriptions_open ? '<span class="badge ok">inscripciones abiertas</span>' : '<span class="badge warn">inscripciones cerradas</span>' %>
 </p>
 <% if (error) { %><div class="alert error"><%= error %></div><% } %>
 
 <div class="card">
-  <h3>Inscritos (<%= inscritos.length %>)<%= left !== null ? ` · ${left} plazas libres` : '' %></h3>
+  <h3>Inscritos (<%= inscritos.length %>)<%= parejas ? ` · ${parejas} pareja(s)` : '' %><%= left !== null ? ` · ${left} plazas libres` : '' %></h3>
   <p>
     <a class="btn small" href="/admin/eventos/<%= ev.id %>/csv">Exportar CSV</a>
     <% if (ev.inscriptions_open) { %>
@@ -19,10 +20,17 @@
   </p>
   <% if (!inscritos.length) { %><p class="mut">Sin inscritos todavía.</p><% } else { %>
   <div class="tblwrap"><table class="tbl">
-    <tr><th>Nombre</th><th>Teléfono</th><th>Nivel</th><th>Nº socio</th><th>Pagado</th><th></th><th></th></tr>
+    <tr><th></th><th>Nombre</th><th>Pareja</th><th>Teléfono</th><th>Nivel</th><th>Nº socio</th><th>Pagado</th><th></th><th></th></tr>
     <% for (const r of inscritos) { %>
     <tr>
+      <td><% if (!r.partner) { %><input type="checkbox" name="sel" value="<%= r.id %>" form="f-emparejar" title="Seleccionar para emparejar"><% } %></td>
       <td><strong><%= r.name %></strong><br><span class="mut small"><%= (r.created_at || '').slice(0, 16).replace('T', ' ') %></span></td>
+      <td class="small">
+        <% if (r.partner) { %>
+          🤝 <%= r.partner.name %>
+          <form method="post" action="/admin/eventos/<%= ev.id %>/inscripcion/<%= r.id %>/desemparejar" style="display:inline"><button class="btn small ghost" type="submit" title="Desemparejar">✕</button></form>
+        <% } else { %><span class="mut">—</span><% } %>
+      </td>
       <td class="small"><%= r.phone %></td>
       <td class="num"><%= r.level == null ? '—' : r.level %></td>
       <td class="small"><%= r.member_no %></td>
@@ -39,6 +47,10 @@
     </tr>
     <% } %>
   </table></div>
+  <form id="f-emparejar" method="post" action="/admin/eventos/<%= ev.id %>/emparejar">
+    <p><button class="btn small" type="submit">Emparejar los 2 seleccionados</button>
+    <span class="small mut">Para americanas: selecciona 2 inscritos sueltos y emparéjalos.</span></p>
+  </form>
   <% } %>
 </div>
 
@@ -57,7 +69,12 @@
       </div>
       <div class="field"><label>Precio (€)</label><input type="number" name="price" step="0.01" min="0" value="<%= (ev.price_cents / 100).toFixed(2) %>"></div>
     </div>
-    <div class="field"><label>Plazas máximas <span class="hint">(0 = sin límite)</span></label><input type="number" name="max_players" min="0" value="<%= ev.max_players %>"></div>
+    <div class="row2">
+      <div class="field"><label>Inscripción</label>
+        <select name="mode"><% for (const k of Object.keys(modes)) { %><option value="<%= k %>" <%= ev.inscription_mode === k ? 'selected' : '' %>><%= modes[k] %></option><% } %></select>
+      </div>
+      <div class="field"><label>Plazas máximas <span class="hint">(0 = sin límite; se cuentan personas)</span></label><input type="number" name="max_players" min="0" value="<%= ev.max_players %>"></div>
+    </div>
     <button class="btn small" type="submit">Guardar cambios</button>
   </form>
 </div>

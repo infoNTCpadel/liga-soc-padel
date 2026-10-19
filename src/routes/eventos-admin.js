@@ -21,16 +21,17 @@ router.get('/', (req, res) => {
 
 // Nuevo evento
 router.get('/nuevo', (req, res) => {
-  res.renderPage('eventos-admin/nuevo', { error: null, formats: E.FORMATS });
+  res.renderPage('eventos-admin/nuevo', { error: null, formats: E.FORMATS, modes: E.MODES });
 });
 router.post('/nuevo', (req, res) => {
   const b = req.body;
   if (!(b.name || '').trim() || !b.event_date) {
-    return res.renderPage('eventos-admin/nuevo', { error: 'Faltan el nombre o la fecha.', formats: E.FORMATS });
+    return res.renderPage('eventos-admin/nuevo', { error: 'Faltan el nombre o la fecha.', formats: E.FORMATS, modes: E.MODES });
   }
   const ev = E.createEvent({
     name: b.name, description: b.description, event_date: b.event_date, event_time: b.event_time,
     format: b.format, price_cents: Math.round(parseFloat(b.price || '0') * 100), max_players: b.max_players,
+    mode: b.mode,
   });
   res.redirect('/admin/eventos/' + ev.id);
 });
@@ -39,12 +40,14 @@ router.post('/nuevo', (req, res) => {
 router.get('/:id', (req, res) => {
   const ev = E.getEventById(req.params.id);
   if (!ev) return res.redirect('/admin/eventos');
-  const inscritos = E.listInscriptions(ev.id).map(r => ({
+  const inscritos = E.inscriptionsWithPairs(ev.id).map(r => ({
     ...r,
     wa: r.phone ? L.waLink(r.phone, `Hola ${r.name}, te escribimos del ${getSetting('club_name', 'club')}: estás inscrito/a en "${ev.name}" (${E.fmtDate(ev.event_date)}${ev.event_time ? ' ' + ev.event_time : ''}). ¡Nos vemos allí! 🎾`) : null,
   }));
+  const parejas = inscritos.filter(r => r.partner && r.id < r.partner.id).length;
   res.renderPage('eventos-admin/detalle', {
-    ev, inscritos, left: E.spotsLeft(ev), formats: E.FORMATS, error: req.query.error || null,
+    ev, inscritos, parejas, left: E.spotsLeft(ev), formats: E.FORMATS, modes: E.MODES,
+    modeName: E.modeName, error: req.query.error || null,
   });
 });
 
@@ -54,6 +57,7 @@ router.post('/:id/editar', (req, res) => {
   E.updateEvent(req.params.id, {
     name: b.name, description: b.description, event_date: b.event_date, event_time: b.event_time,
     format: b.format, price_cents: Math.round(parseFloat(b.price || '0') * 100), max_players: b.max_players,
+    mode: b.mode,
   });
   res.redirect('/admin/eventos/' + req.params.id);
 });
@@ -73,15 +77,26 @@ router.post('/:id/inscripcion/:iid/eliminar', (req, res) => {
   res.redirect('/admin/eventos/' + req.params.id);
 });
 
+// Emparejar dos inscritos sueltos (americanas) / desemparejar
+router.post('/:id/emparejar', (req, res) => {
+  const sel = [].concat(req.body.sel || []).map(Number).filter(Number.isFinite);
+  const ok = sel.length === 2 && E.pairUp(req.params.id, sel[0], sel[1]);
+  res.redirect('/admin/eventos/' + req.params.id + (ok ? '' : '?error=' + encodeURIComponent('Selecciona exactamente 2 inscritos sin pareja.')));
+});
+router.post('/:id/inscripcion/:iid/desemparejar', (req, res) => {
+  E.unpair(req.params.iid);
+  res.redirect('/admin/eventos/' + req.params.id);
+});
+
 // Exportar CSV
 router.get('/:id/csv', (req, res) => {
   const ev = E.getEventById(req.params.id);
   if (!ev) return res.redirect('/admin/eventos');
-  const rows = E.listInscriptions(ev.id);
+  const rows = E.inscriptionsWithPairs(ev.id);
   const q = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
-  const csv = ['nombre;telefono;email;nivel;n_socio;pagado;inscrito_el']
+  const csv = ['nombre;telefono;email;nivel;n_socio;pareja;pagado;inscrito_el']
     .concat(rows.map(r => [r.name, r.phone, (r.member && r.member.email) || '', r.level == null ? '' : r.level,
-      r.member_no, r.paid ? 'sí' : 'no', (r.created_at || '').slice(0, 16).replace('T', ' ')].map(q).join(';')))
+      r.member_no, r.partner ? r.partner.name : '', r.paid ? 'sí' : 'no', (r.created_at || '').slice(0, 16).replace('T', ' ')].map(q).join(';')))
     .join('\n');
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="evento-${ev.slug}.csv"`);

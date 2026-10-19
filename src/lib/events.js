@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS events(
   price_cents INTEGER NOT NULL DEFAULT 0,
   max_players INTEGER NOT NULL DEFAULT 0,
   inscriptions_open INTEGER NOT NULL DEFAULT 1,
+  inscription_mode TEXT NOT NULL DEFAULT 'individual',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS event_inscriptions(
@@ -28,14 +29,20 @@ CREATE TABLE IF NOT EXISTS event_inscriptions(
   phone TEXT NOT NULL DEFAULT '',
   level REAL,
   paid INTEGER NOT NULL DEFAULT 0,
+  pair_key TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(event_id, member_no)
 );
 CREATE INDEX IF NOT EXISTS idx_insc_event ON event_inscriptions(event_id);
 `);
+try { edb.exec(`ALTER TABLE events ADD COLUMN inscription_mode TEXT NOT NULL DEFAULT 'individual'`); } catch (e) { /* ya existe */ }
+try { edb.exec(`ALTER TABLE event_inscriptions ADD COLUMN pair_key TEXT NOT NULL DEFAULT ''`); } catch (e) { /* ya existe */ }
 
 const FORMATS = { americana: 'Americana', quedada: 'Quedada', torneo: 'Torneo' };
 function formatName(f) { return FORMATS[f] || f; }
+const MODES = { individual: 'Individual', pairs: 'Parejas', mixed: 'Mixto (individual o parejas)' };
+function modeName(m) { return MODES[m] || MODES.individual; }
+function validMode(m) { return MODES[m] ? m : 'individual'; }
 
 function slugify(name) {
   let s = (name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -59,22 +66,24 @@ function getEvent(slug) {
 function getEventById(id) {
   return edb.prepare('SELECT * FROM events WHERE id = ?').get(id) || null;
 }
-function createEvent({ name, description, event_date, event_time, format, price_cents, max_players }) {
+function createEvent({ name, description, event_date, event_time, format, price_cents, max_players, mode }) {
   const slug = slugify(name);
-  const r = edb.prepare(`INSERT INTO events(slug, name, description, event_date, event_time, format, price_cents, max_players)
-    VALUES(?, ?, ?, ?, ?, ?, ?, ?)`)
+  const r = edb.prepare(`INSERT INTO events(slug, name, description, event_date, event_time, format, price_cents, max_players, inscription_mode)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(slug, (name || '').trim(), (description || '').trim(), event_date, (event_time || '').trim(),
-      FORMATS[format] ? format : 'americana', Math.max(0, parseInt(price_cents, 10) || 0), Math.max(0, parseInt(max_players, 10) || 0));
+      FORMATS[format] ? format : 'americana', Math.max(0, parseInt(price_cents, 10) || 0), Math.max(0, parseInt(max_players, 10) || 0),
+      validMode(mode));
   return getEventById(Number(r.lastInsertRowid));
 }
 function updateEvent(id, fields) {
   const e = getEventById(id);
   if (!e) return null;
   edb.prepare(`UPDATE events SET name = ?, description = ?, event_date = ?, event_time = ?,
-    format = ?, price_cents = ?, max_players = ? WHERE id = ?`)
+    format = ?, price_cents = ?, max_players = ?, inscription_mode = ? WHERE id = ?`)
     .run((fields.name || e.name).trim(), (fields.description || '').trim(), fields.event_date || e.event_date,
       (fields.event_time || '').trim(), FORMATS[fields.format] ? fields.format : e.format,
-      Math.max(0, parseInt(fields.price_cents, 10) || 0), Math.max(0, parseInt(fields.max_players, 10) || 0), id);
+      Math.max(0, parseInt(fields.price_cents, 10) || 0), Math.max(0, parseInt(fields.max_players, 10) || 0),
+      validMode(fields.mode || e.inscription_mode), id);
   return getEventById(id);
 }
 function setEventOpen(id, open) {
@@ -119,6 +128,65 @@ function listInscriptions(eventId) {
   }
   return rows.map(r => ({ ...r, member: members[r.member_no] || null }));
 }
+// Inscripciones con su pareja resuelta (partner = la otra fila con el mismo pair_key)
+function inscriptionsWithPairs(eventId) {
+  const rows = listInscriptions(eventId);
+  const byKey = {};
+  for (const r of rows) if (r.pair_key) (byKey[r.pair_key] = byKey[r.pair_key] || []).push(r);
+  return rows.map(r => ({
+    ...r,
+    partner: r.pair_key ? (byKey[r.pair_key] || []).find(x => x.id !== r.id) || null : null,
+  }));
+}
+function newPairKey() {
+  return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+// Inscribe una PAREJA (dos personas vinculadas). Devuelve {member_nos} o {error}.
+function inscribePair(eventId, { p1, p2 }) {
+  const ev = getEventById(eventId);
+  if (!ev) return { error: 'Evento no encontrado.' };
+  if (!['pairs', 'mixed'].includes(ev.inscription_mode)) return { error: 'Este evento no admite inscripción por parejas.' };
+  if (!ev.inscriptions_open) return { error: 'Las inscripciones están cerradas.' };
+  const left = spotsLeft(ev);
+  if (left !== null && left < 2) return { error: left <= 0 ? 'Ya no quedan plazas.' : 'Solo queda 1 plaza libre.' };
+  const pn1 = (p1.phone || '').replace(/\D/g, ''), pn2 = (p2.phone || '').replace(/\D/g, '');
+  if (pn1 && pn1 === pn2) return { error: 'Los dos jugadores no pueden compartir teléfono.' };
+  const no1 = B.upsertMemberByPhone({ phone: p1.phone, name: p1.name, member_no: p1.member_no, email: p1.email, level: p1.level, gender: p1.gender });
+  const no2 = B.upsertMemberByPhone({ phone: p2.phone, name: p2.name, member_no: p2.member_no, email: p2.email, level: p2.level, gender: p2.gender });
+  if (!no1 || !no2) return { error: 'Revisa los teléfonos de la pareja.' };
+  if (no1 === no2) return { error: 'Los dos jugadores no pueden ser la misma persona.' };
+  const dup = edb.prepare('SELECT COUNT(*) c FROM event_inscriptions WHERE event_id = ? AND member_no IN (?, ?)')
+    .get(eventId, no1, no2).c;
+  if (dup > 0) return { error: 'Uno de los dos ya está inscrito en este evento.' };
+  const key = newPairKey();
+  try {
+    const ins = edb.prepare(`INSERT INTO event_inscriptions(event_id, member_no, name, phone, level, pair_key)
+                             VALUES(?, ?, ?, ?, ?, ?)`);
+    ins.run(eventId, no1, (p1.name || '').trim(), (p1.phone || '').trim(), p1.level == null || p1.level === '' ? null : Number(p1.level), key);
+    ins.run(eventId, no2, (p2.name || '').trim(), (p2.phone || '').trim(), p2.level == null || p2.level === '' ? null : Number(p2.level), key);
+  } catch (e) {
+    edb.prepare('DELETE FROM event_inscriptions WHERE event_id = ? AND pair_key = ?').run(eventId, key);
+    return { error: 'No se pudo completar la inscripción de la pareja.' };
+  }
+  return { member_nos: [no1, no2] };
+}
+// Empareja manualmente dos inscritos individuales (para americanas). Devuelve true/false.
+function pairUp(eventId, inscId1, inscId2) {
+  const a = edb.prepare('SELECT * FROM event_inscriptions WHERE id = ? AND event_id = ?').get(inscId1, eventId);
+  const b = edb.prepare('SELECT * FROM event_inscriptions WHERE id = ? AND event_id = ?').get(inscId2, eventId);
+  if (!a || !b || a.id === b.id) return false;
+  if (a.pair_key || b.pair_key) return false; // ya emparejados
+  if (a.member_no === b.member_no) return false;
+  const key = newPairKey();
+  edb.prepare('UPDATE event_inscriptions SET pair_key = ? WHERE id IN (?, ?)').run(key, a.id, b.id);
+  return true;
+}
+function unpair(inscId) {
+  const r = edb.prepare('SELECT * FROM event_inscriptions WHERE id = ?').get(inscId);
+  if (!r || !r.pair_key) return false;
+  edb.prepare('UPDATE event_inscriptions SET pair_key = ? WHERE pair_key = ? AND event_id = ?').run('', r.pair_key, r.event_id);
+  return true;
+}
 function setPaid(inscId, paid) {
   edb.prepare('UPDATE event_inscriptions SET paid = ? WHERE id = ?').run(paid ? 1 : 0, inscId);
 }
@@ -133,7 +201,8 @@ function fmtDate(iso) {
 }
 
 module.exports = {
-  FORMATS, formatName, listEvents, upcomingEvents, getEvent, getEventById,
+  FORMATS, formatName, MODES, modeName, validMode, listEvents, upcomingEvents, getEvent, getEventById,
   createEvent, updateEvent, setEventOpen, deleteEvent, countInscriptions, spotsLeft,
-  inscribe, listInscriptions, setPaid, removeInscription, eur, fmtDate,
+  inscribe, inscribePair, listInscriptions, inscriptionsWithPairs, pairUp, unpair,
+  setPaid, removeInscription, eur, fmtDate,
 };
