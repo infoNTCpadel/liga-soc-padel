@@ -43,6 +43,18 @@ try {
   edb.exec(`UPDATE events SET status = 'cerrada' WHERE inscriptions_open = 0`);
 } catch (e) { /* ya existe */ }
 try { edb.exec(`ALTER TABLE events ADD COLUMN poster TEXT NOT NULL DEFAULT ''`); } catch (e) { /* ya existe */ }
+// Doble precio: price_cents = socios; price_nonmember_cents NULL = mismo precio para todos
+try { edb.exec(`ALTER TABLE events ADD COLUMN price_nonmember_cents INTEGER`); } catch (e) { /* ya existe */ }
+// Precio congelado por inscrito (el que le tocaba al inscribirse) + si era socio
+try { edb.exec(`ALTER TABLE event_inscriptions ADD COLUMN price_cents INTEGER`); } catch (e) { /* ya existe */ }
+try { edb.exec(`ALTER TABLE event_inscriptions ADD COLUMN is_member INTEGER`); } catch (e) { /* ya existe */ }
+// Slugs antiguos: al renombrar un evento, el enlace viejo redirige al nuevo
+edb.exec(`
+CREATE TABLE IF NOT EXISTS event_slug_redirects(
+  old_slug TEXT PRIMARY KEY,
+  event_id INTEGER NOT NULL
+);
+`);
 
 const FORMATS = { americana: 'Americana', quedada: 'Quedada', torneo: 'Torneo' };
 function formatName(f) { return FORMATS[f] || f; }
@@ -68,6 +80,28 @@ function slugify(name) {
   while (edb.prepare('SELECT 1 FROM events WHERE slug = ?').get(slug)) slug = s + '-' + (i++);
   return slug;
 }
+// Normaliza un slug escrito a mano por el admin (minúsculas, sin acentos, guiones)
+function normalizeSlug(raw) {
+  return (raw || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+}
+// Valida un slug para un evento (excludeId = el propio evento al editar).
+// Devuelve mensaje de error o null si vale.
+function validateSlug(raw, excludeId = null) {
+  const s = normalizeSlug(raw);
+  if (s.length < 3) return 'La dirección (slug) debe tener al menos 3 caracteres: letras, números y guiones.';
+  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(s)) return 'La dirección (slug) solo puede llevar letras, números y guiones.';
+  const other = edb.prepare('SELECT id FROM events WHERE slug = ?').get(s);
+  if (other && Number(other.id) !== Number(excludeId)) return 'Esa dirección ya la usa otro evento.';
+  const red = edb.prepare('SELECT event_id FROM event_slug_redirects WHERE old_slug = ?').get(s);
+  if (red && Number(red.event_id) !== Number(excludeId)) return 'Esa dirección fue de otro evento y redirige a él; elige otra.';
+  return null;
+}
+// Resuelve un slug antiguo → evento actual (para redirigir enlaces ya compartidos)
+function eventForOldSlug(oldSlug) {
+  const r = edb.prepare('SELECT event_id FROM event_slug_redirects WHERE old_slug = ?').get(oldSlug || '');
+  return r ? getEventById(r.event_id) : null;
+}
 
 function listEvents() {
   return edb.prepare('SELECT * FROM events ORDER BY event_date DESC, id DESC').all();
@@ -86,23 +120,67 @@ function getEvent(slug) {
 function getEventById(id) {
   return edb.prepare('SELECT * FROM events WHERE id = ?').get(id) || null;
 }
-function createEvent({ name, description, event_date, event_time, format, price_cents, max_players, mode, status }) {
-  const slug = slugify(name);
-  const r = edb.prepare(`INSERT INTO events(slug, name, description, event_date, event_time, format, price_cents, max_players, inscription_mode, status)
-    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(slug, (name || '').trim(), (description || '').trim(), event_date, (event_time || '').trim(),
-      FORMATS[format] ? format : 'americana', Math.max(0, parseInt(price_cents, 10) || 0), Math.max(0, parseInt(max_players, 10) || 0),
+// --- Precios socios / no socios ---
+// price_cents = precio de socio. price_nonmember_cents NULL = precio único.
+function hasDualPrice(ev) {
+  return ev && ev.price_nonmember_cents != null && Number(ev.price_nonmember_cents) !== Number(ev.price_cents);
+}
+// Socio = nº de socio real del directorio; NV-* = ficha sin nº (no socio)
+function isMemberNo(memberNo) {
+  const no = String(memberNo || '').trim();
+  return !!no && !no.startsWith('NV-');
+}
+// Precio que toca a una persona según sea socia o no
+function priceFor(ev, memberNo) {
+  const member = isMemberNo(memberNo);
+  const cents = (!member && hasDualPrice(ev)) ? Number(ev.price_nonmember_cents) : Number(ev.price_cents || 0);
+  return { cents, is_member: member ? 1 : 0 };
+}
+// Precio a mostrar de un inscrito: el congelado al inscribirse; si es antiguo (NULL), se calcula
+function inscPrice(ev, r) {
+  if (r && r.price_cents != null) return { cents: Number(r.price_cents), is_member: r.is_member == null ? (isMemberNo(r.member_no) ? 1 : 0) : Number(r.is_member) };
+  return priceFor(ev, r && r.member_no);
+}
+// Texto de precios para la web: "10,00 €" o "Socios 10,00 € · No socios 15,00 €"
+function priceLabel(ev) {
+  if (!ev) return '';
+  if (hasDualPrice(ev)) return `Socios ${eur(ev.price_cents)} · No socios ${eur(ev.price_nonmember_cents)}`;
+  return Number(ev.price_cents || 0) > 0 ? eur(ev.price_cents) : 'Gratis';
+}
+
+function createEvent({ name, description, event_date, event_time, format, price_cents, price_nonmember_cents, max_players, mode, status, slug }) {
+  let finalSlug = slug ? normalizeSlug(slug) : '';
+  if (!finalSlug) finalSlug = slugify(name);
+  const r = edb.prepare(`INSERT INTO events(slug, name, description, event_date, event_time, format, price_cents, price_nonmember_cents, max_players, inscription_mode, status)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(finalSlug, (name || '').trim(), (description || '').trim(), event_date, (event_time || '').trim(),
+      FORMATS[format] ? format : 'americana', Math.max(0, parseInt(price_cents, 10) || 0),
+      price_nonmember_cents == null || price_nonmember_cents === '' ? null : Math.max(0, parseInt(price_nonmember_cents, 10) || 0),
+      Math.max(0, parseInt(max_players, 10) || 0),
       validMode(mode), validStatus(status));
   return getEventById(Number(r.lastInsertRowid));
 }
 function updateEvent(id, fields) {
   const e = getEventById(id);
   if (!e) return null;
-  edb.prepare(`UPDATE events SET name = ?, description = ?, event_date = ?, event_time = ?,
-    format = ?, price_cents = ?, max_players = ?, inscription_mode = ?, status = ? WHERE id = ?`)
-    .run((fields.name || e.name).trim(), (fields.description || '').trim(), fields.event_date || e.event_date,
+  // Slug: si cambia, el antiguo queda como redirección al nuevo
+  let newSlug = e.slug;
+  if (fields.slug != null && String(fields.slug).trim() !== '') {
+    const cand = normalizeSlug(fields.slug);
+    if (cand && cand !== e.slug) {
+      edb.prepare('INSERT OR REPLACE INTO event_slug_redirects(old_slug, event_id) VALUES(?, ?)').run(e.slug, id);
+      edb.prepare('DELETE FROM event_slug_redirects WHERE old_slug = ?').run(cand); // renombrar "hacia atrás"
+      newSlug = cand;
+    }
+  }
+  const nm = fields.price_nonmember_cents;
+  edb.prepare(`UPDATE events SET slug = ?, name = ?, description = ?, event_date = ?, event_time = ?,
+    format = ?, price_cents = ?, price_nonmember_cents = ?, max_players = ?, inscription_mode = ?, status = ? WHERE id = ?`)
+    .run(newSlug, (fields.name || e.name).trim(), (fields.description || '').trim(), fields.event_date || e.event_date,
       (fields.event_time || '').trim(), FORMATS[fields.format] ? fields.format : e.format,
-      Math.max(0, parseInt(fields.price_cents, 10) || 0), Math.max(0, parseInt(fields.max_players, 10) || 0),
+      Math.max(0, parseInt(fields.price_cents, 10) || 0),
+      nm === undefined ? e.price_nonmember_cents : (nm === null || nm === '' ? null : Math.max(0, parseInt(nm, 10) || 0)),
+      Math.max(0, parseInt(fields.max_players, 10) || 0),
       validMode(fields.mode || e.inscription_mode), validStatus(fields.status || e.status), id);
   return getEventById(id);
 }
@@ -111,6 +189,7 @@ function setStatus(id, status) {
 }
 function deleteEvent(id) {
   try { require('./upload').removePoster(id); } catch (e) { /* sin cartel */ }
+  edb.prepare('DELETE FROM event_slug_redirects WHERE event_id = ?').run(id);
   edb.prepare('DELETE FROM event_inscriptions WHERE event_id = ?').run(id);
   edb.prepare('DELETE FROM events WHERE id = ?').run(id);
 }
@@ -134,10 +213,11 @@ function inscribe(eventId, { phone, name, member_no, email, level, gender }) {
   if (left !== null && left <= 0) return { error: 'Ya no quedan plazas.' };
   const no = B.upsertMemberByPhone({ phone, name, member_no, email, level, gender });
   if (!no) return { error: 'El teléfono no parece un móvil válido.' };
+  const pr = priceFor(ev, no);
   try {
-    edb.prepare(`INSERT INTO event_inscriptions(event_id, member_no, name, phone, level)
-                 VALUES(?, ?, ?, ?, ?)`)
-      .run(eventId, no, (name || '').trim(), (phone || '').trim(), level == null || level === '' ? null : Number(level));
+    edb.prepare(`INSERT INTO event_inscriptions(event_id, member_no, name, phone, level, price_cents, is_member)
+                 VALUES(?, ?, ?, ?, ?, ?, ?)`)
+      .run(eventId, no, (name || '').trim(), (phone || '').trim(), level == null || level === '' ? null : Number(level), pr.cents, pr.is_member);
   } catch (e) {
     if (String(e.message).includes('UNIQUE')) return { error: 'Este teléfono ya está inscrito en el evento.', member_no: no };
     throw e;
@@ -183,11 +263,12 @@ function inscribePair(eventId, { p1, p2 }) {
     .get(eventId, no1, no2).c;
   if (dup > 0) return { error: 'Uno de los dos ya está inscrito en este evento.' };
   const key = newPairKey();
+  const pr1 = priceFor(ev, no1), pr2 = priceFor(ev, no2);
   try {
-    const ins = edb.prepare(`INSERT INTO event_inscriptions(event_id, member_no, name, phone, level, pair_key)
-                             VALUES(?, ?, ?, ?, ?, ?)`);
-    ins.run(eventId, no1, (p1.name || '').trim(), (p1.phone || '').trim(), p1.level == null || p1.level === '' ? null : Number(p1.level), key);
-    ins.run(eventId, no2, (p2.name || '').trim(), (p2.phone || '').trim(), p2.level == null || p2.level === '' ? null : Number(p2.level), key);
+    const ins = edb.prepare(`INSERT INTO event_inscriptions(event_id, member_no, name, phone, level, pair_key, price_cents, is_member)
+                             VALUES(?, ?, ?, ?, ?, ?, ?, ?)`);
+    ins.run(eventId, no1, (p1.name || '').trim(), (p1.phone || '').trim(), p1.level == null || p1.level === '' ? null : Number(p1.level), key, pr1.cents, pr1.is_member);
+    ins.run(eventId, no2, (p2.name || '').trim(), (p2.phone || '').trim(), p2.level == null || p2.level === '' ? null : Number(p2.level), key, pr2.cents, pr2.is_member);
   } catch (e) {
     edb.prepare('DELETE FROM event_inscriptions WHERE event_id = ? AND pair_key = ?').run(eventId, key);
     return { error: 'No se pudo completar la inscripción de la pareja.' };
@@ -214,6 +295,17 @@ function unpair(inscId) {
 function setPaid(inscId, paid) {
   edb.prepare('UPDATE event_inscriptions SET paid = ? WHERE id = ?').run(paid ? 1 : 0, inscId);
 }
+// Corrige el tipo de un inscrito (socio ↔ no socio) y le aplica el precio actual del evento
+function setInscriptionMemberType(eventId, inscId, isMember) {
+  const ev = getEventById(eventId);
+  const r = edb.prepare('SELECT * FROM event_inscriptions WHERE id = ? AND event_id = ?').get(inscId, eventId);
+  if (!ev || !r) return false;
+  const cents = isMember ? Number(ev.price_cents || 0)
+    : (hasDualPrice(ev) ? Number(ev.price_nonmember_cents) : Number(ev.price_cents || 0));
+  edb.prepare('UPDATE event_inscriptions SET is_member = ?, price_cents = ? WHERE id = ?')
+    .run(isMember ? 1 : 0, cents, inscId);
+  return true;
+}
 function removeInscription(inscId) {
   edb.prepare('DELETE FROM event_inscriptions WHERE id = ?').run(inscId);
 }
@@ -226,8 +318,10 @@ function fmtDate(iso) {
 
 module.exports = {
   FORMATS, formatName, MODES, modeName, validMode, STATUSES, statusName, validStatus,
+  normalizeSlug, validateSlug, eventForOldSlug,
+  hasDualPrice, isMemberNo, priceFor, inscPrice, priceLabel,
   listEvents, publicEvents, getEvent, getEventById,
   createEvent, updateEvent, setStatus, deleteEvent, setPoster, countInscriptions, spotsLeft,
   inscribe, inscribePair, listInscriptions, inscriptionsWithPairs, pairUp, unpair,
-  setPaid, removeInscription, eur, fmtDate,
+  setPaid, setInscriptionMemberType, removeInscription, eur, fmtDate,
 };

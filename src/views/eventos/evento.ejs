@@ -5,8 +5,7 @@
 <h1><%= ev.name %></h1>
 <p><span class="badge cat"><%= formatName(ev.format) %></span>
   <span>📅 <strong><%= fmtDate(ev.event_date) %></strong><%= ev.event_time ? ' · ' + ev.event_time : '' %></span>
-  <% if (ev.price_cents > 0) { %><span> · 💶 <strong><%= eur(ev.price_cents) %></strong></span><% } else { %><span> · <strong>Gratis</strong></span><% } %>
-</p>
+  <span> · 💶 <strong><%= priceLabel(ev) %></strong></span></p>
 <% if (ev.description) { %><div class="card"><p><%= ev.description %></p></div><% } %>
 <p class="small mut"><%= inscritos %> inscrito(s)<%= left !== null ? ` · ${left} plazas libres` : '' %></p>
 
@@ -91,9 +90,9 @@
       </div>
     </div>
     <% } %>
-    <button class="btn" type="submit">Inscribirme<%= ev.price_cents > 0 ? ' · ' + eur(ev.price_cents) + ' / pers.' : '' %></button>
+    <button class="btn" type="submit">Inscribirme<% if (!hasDualPrice && ev.price_cents > 0) { %> · <%= eur(ev.price_cents) %> / pers.<% } %></button>
   </form>
-  <% if (ev.price_cents > 0) { %><p class="small mut">El pago se realiza en el club.</p><% } %>
+  <% if (priceLabel(ev) !== 'Gratis') { %><p class="small mut">El pago se realiza en el club.<% if (hasDualPrice) { %> Te aplicamos el precio según seas socio/a o no: te reconocemos por tu teléfono o tu nº de socio.<% } %></p><% } %>
 </div>
 <% if (ev.inscription_mode === 'mixed') { %>
 <script>

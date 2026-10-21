@@ -20,13 +20,14 @@
 
 <div class="card">
   <h3>Inscritos (<%= inscritos.length %>)<%= parejas ? ` · ${parejas} pareja(s)` : '' %><%= left !== null ? ` · ${left} plazas libres` : '' %></h3>
+  <% if (inscritos.length) { %><p class="small">💶 Cobrado: <strong><%= eur(cobrado) %></strong> · Pendiente: <strong><%= eur(pendiente) %></strong><% if (hasDualPrice) { %> · <span class="mut">En cada inscrito puedes corregir Socio ↔ No socio y se le aplica su precio.</span><% } %></p><% } %>
   <p>
     <a class="btn small" href="/admin/eventos/<%= ev.id %>/csv">Exportar CSV</a>
     <form method="post" action="/admin/eventos/<%= ev.id %>/eliminar" style="display:inline" onsubmit="return confirm('¿Eliminar el evento y sus inscripciones?')"><button class="btn small danger" type="submit">Eliminar</button></form>
   </p>
   <% if (!inscritos.length) { %><p class="mut">Sin inscritos todavía.</p><% } else { %>
   <div class="tblwrap"><table class="tbl">
-    <tr><th></th><th>Nombre</th><th>Pareja</th><th>Teléfono</th><th>Nivel</th><th>Nº socio</th><th>Pagado</th><th></th><th></th></tr>
+    <tr><th></th><th>Nombre</th><th>Pareja</th><th>Teléfono</th><th>Nivel</th><th>Nº socio</th><th>Precio</th><th>Pagado</th><th></th><th></th></tr>
     <% for (const r of inscritos) { %>
     <tr>
       <td><% if (!r.partner) { %><input type="checkbox" name="sel" value="<%= r.id %>" form="f-emparejar" title="Seleccionar para emparejar"><% } %></td>
@@ -40,6 +41,15 @@
       <td class="small"><%= r.phone %></td>
       <td class="num"><%= r.level == null ? '—' : r.level %></td>
       <td class="small"><%= r.member_no %></td>
+      <td class="small">
+        <strong><%= eur(r.priceInfo.cents) %></strong>
+        <% if (hasDualPrice) { %>
+        <form method="post" action="/admin/eventos/<%= ev.id %>/inscripcion/<%= r.id %>/tipo" style="display:inline">
+          <input type="hidden" name="member" value="<%= r.priceInfo.is_member ? '0' : '1' %>">
+          <button class="btn small ghost" type="submit" title="Pulsa para cambiar entre socio y no socio"><%= r.priceInfo.is_member ? 'Socio' : 'No socio' %></button>
+        </form>
+        <% } %>
+      </td>
       <td>
         <form method="post" action="/admin/eventos/<%= ev.id %>/inscripcion/<%= r.id %>/pagado" style="display:inline">
           <input type="hidden" name="paid" value="<%= r.paid ? '0' : '1' %>">
@@ -64,6 +74,7 @@
   <h3>Editar evento</h3>
   <form method="post" action="/admin/eventos/<%= ev.id %>/editar" enctype="multipart/form-data">
     <div class="field"><label>Nombre</label><input type="text" name="name" value="<%= ev.name %>" required></div>
+    <div class="field"><label>Dirección web (slug) <span class="hint">(la landing es /eventos/<%= ev.slug %>; si la cambias, la antigua redirigirá a la nueva)</span></label><input type="text" name="slug" value="<%= ev.slug %>"></div>
     <div class="field"><label>Descripción</label><textarea name="description" rows="3"><%= ev.description %></textarea></div>
     <div class="field"><label>Cartel <span class="hint">(opcional; se reduce solo para que pese poco)</span></label>
       <% if (ev.poster) { %>
@@ -83,8 +94,9 @@
       <div class="field"><label>Formato</label>
         <select name="format"><% for (const k of Object.keys(formats)) { %><option value="<%= k %>" <%= ev.format === k ? 'selected' : '' %>><%= formats[k] %></option><% } %></select>
       </div>
-      <div class="field"><label>Precio (€)</label><input type="number" name="price" step="0.01" min="0" value="<%= (ev.price_cents / 100).toFixed(2) %>"></div>
+      <div class="field"><label>Precio socios (€)</label><input type="number" name="price" step="0.01" min="0" value="<%= (ev.price_cents / 100).toFixed(2) %>"></div>
     </div>
+    <div class="field"><label>Precio no socios (€) <span class="hint">(vacío = mismo precio que socios)</span></label><input type="number" name="price_nonmember" step="0.01" min="0" placeholder="mismo que socios" value="<%= ev.price_nonmember_cents == null ? '' : (ev.price_nonmember_cents / 100).toFixed(2) %>"></div>
     <div class="row2">
       <div class="field"><label>Inscripción</label>
         <select name="mode"><% for (const k of Object.keys(modes)) { %><option value="<%= k %>" <%= ev.inscription_mode === k ? 'selected' : '' %>><%= modes[k] %></option><% } %></select>

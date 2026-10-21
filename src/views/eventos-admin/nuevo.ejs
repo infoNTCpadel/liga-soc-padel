@@ -3,6 +3,7 @@
 <div class="card" style="max-width: 560px">
   <form method="post" action="/admin/eventos/nuevo" enctype="multipart/form-data">
     <div class="field"><label>Nombre *</label><input type="text" name="name" required></div>
+    <div class="field"><label>Dirección web (slug) <span class="hint">(opcional; si lo dejas vacío se genera del nombre. Ej.: americana-halloween-31-octubre → /eventos/americana-halloween-31-octubre)</span></label><input type="text" name="slug" placeholder="se genera solo si lo dejas vacío"></div>
     <div class="field"><label>Descripción</label><textarea name="description" rows="3"></textarea></div>
     <div class="field"><label>Cartel <span class="hint">(opcional; se reduce solo para que pese poco)</span></label>
       <input type="file" id="poster-input" name="poster" accept="image/*">
@@ -16,8 +17,9 @@
       <div class="field"><label>Formato</label>
         <select name="format"><% for (const k of Object.keys(formats)) { %><option value="<%= k %>"><%= formats[k] %></option><% } %></select>
       </div>
-      <div class="field"><label>Precio (€)</label><input type="number" name="price" step="0.01" min="0" value="0"></div>
+      <div class="field"><label>Precio socios (€)</label><input type="number" name="price" step="0.01" min="0" value="0"></div>
     </div>
+    <div class="field"><label>Precio no socios (€) <span class="hint">(déjalo vacío si pagan lo mismo que los socios)</span></label><input type="number" name="price_nonmember" step="0.01" min="0" placeholder="mismo que socios"></div>
     <div class="row2">
       <div class="field"><label>Inscripción</label>
         <select name="mode"><% for (const k of Object.keys(modes)) { %><option value="<%= k %>"><%= modes[k] %></option><% } %></select>

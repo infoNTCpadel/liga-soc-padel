@@ -15,7 +15,12 @@ const levelOptions = L.PLAYTOMIC_BRACKETS.map(b => ({
 // Cartel del evento
 router.get('/:slug/poster', (req, res) => {
   const ev = E.getEvent(req.params.slug);
-  if (!ev || ev.status === 'oculta' || !ev.poster) return res.status(404).end();
+  if (!ev) {
+    const old = E.eventForOldSlug(req.params.slug);
+    if (old) return res.redirect(302, `/eventos/${old.slug}/poster`);
+    return res.status(404).end();
+  }
+  if (ev.status === 'oculta' || !ev.poster) return res.status(404).end();
   const fp = U.posterPath(ev.poster);
   if (!fp) return res.status(404).end();
   res.setHeader('Content-Type', ev.poster.endsWith('.png') ? 'image/png' : 'image/jpeg');
@@ -29,14 +34,19 @@ router.get('/', (req, res) => {
   const withCounts = (list) => list.map(ev => ({ ...ev, inscritos: E.countInscriptions(ev.id), left: E.spotsLeft(ev) }));
   res.renderPage('eventos/index', {
     upcoming: withCounts(upcoming), past: withCounts(past),
-    fmtDate: E.fmtDate, eur: E.eur, formatName: E.formatName, statusName: E.statusName,
+    fmtDate: E.fmtDate, eur: E.eur, priceLabel: E.priceLabel, hasDualPrice: E.hasDualPrice, formatName: E.formatName, statusName: E.statusName,
   });
 });
 
 // Landing de un evento + formulario
 router.get('/:slug', (req, res) => {
   const ev = E.getEvent(req.params.slug);
-  if (!ev || ev.status === 'oculta') return res.status(404).renderPage('public/404', {});
+  if (!ev) {
+    const old = E.eventForOldSlug(req.params.slug);
+    if (old) return res.redirect(301, `/eventos/${old.slug}`);
+    return res.status(404).renderPage('public/404', {});
+  }
+  if (ev.status === 'oculta') return res.status(404).renderPage('public/404', {});
   const inscritos = E.countInscriptions(ev.id);
   // Si la inscripción anterior falló, se repuebla el formulario con lo que había escrito
   let form = null;
@@ -47,7 +57,8 @@ router.get('/:slug', (req, res) => {
   res.renderPage('eventos/evento', {
     ev, inscritos, left: E.spotsLeft(ev), levelOptions, form,
     ok: req.query.ok === '1', error: req.query.error || null,
-    fmtDate: E.fmtDate, eur: E.eur, formatName: E.formatName, modeName: E.modeName, statusName: E.statusName,
+    fmtDate: E.fmtDate, eur: E.eur, priceLabel: E.priceLabel, hasDualPrice: E.hasDualPrice(ev),
+    formatName: E.formatName, modeName: E.modeName, statusName: E.statusName,
   });
 });
 
@@ -70,7 +81,11 @@ function validPlayer(b, pfx) {
 
 // Inscripción
 router.post('/:slug/inscribir', (req, res) => {
-  const ev = E.getEvent(req.params.slug);
+  let ev = E.getEvent(req.params.slug);
+  if (!ev) {
+    const old = E.eventForOldSlug(req.params.slug);
+    if (old) ev = old;
+  }
   if (!ev || ev.status === 'oculta') return res.status(404).renderPage('public/404', {});
   const b = req.body;
   // Guarda lo escrito para repoblar el formulario si hay un error de validación
