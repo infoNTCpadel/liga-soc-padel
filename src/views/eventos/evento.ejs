@@ -10,8 +10,8 @@
   </div>
   <% if (ev.poster) { %>
   <div class="ev-poster">
-    <a href="/eventos/<%= ev.slug %>/poster" target="_blank" rel="noopener" title="Ver el cartel a tamaño completo">
-      <img src="/eventos/<%= ev.slug %>/poster" alt="Cartel de <%= ev.name %>">
+    <a href="/eventos/<%= ev.slug %>/poster?v=<%= ev.poster %>" target="_blank" rel="noopener" title="Ver el cartel a tamaño completo">
+      <img src="/eventos/<%= ev.slug %>/poster?v=<%= ev.poster %>" alt="Cartel de <%= ev.name %>">
     </a>
   </div>
   <% } %>

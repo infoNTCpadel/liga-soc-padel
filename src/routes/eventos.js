@@ -17,7 +17,7 @@ router.get('/:slug/poster', (req, res) => {
   const ev = E.getEvent(req.params.slug);
   if (!ev) {
     const old = E.eventForOldSlug(req.params.slug);
-    if (old) return res.redirect(302, `/eventos/${old.slug}/poster`);
+    if (old) return res.redirect(302, `/eventos/${old.slug}/poster${old.poster ? '?v=' + encodeURIComponent(old.poster) : ''}`);
     return res.status(404).end();
   }
   if (ev.status === 'oculta' || !ev.poster) return res.status(404).end();

@@ -92,28 +92,35 @@ function imageExt(file) {
   return (d[0] === 0x89) ? 'png' : 'jpg';
 }
 
+// Archivos de un evento: nombre exacto antiguo (`12.jpg`) o versionado (`12-abc.jpg`)
+function isPosterOf(f, eventId) {
+  return f === `${eventId}.jpg` || f === `${eventId}.png` || f.startsWith(`${eventId}-`);
+}
+function deletePostersOf(dir, eventId) {
+  for (const f of fs.readdirSync(dir)) {
+    if (isPosterOf(f, eventId)) fs.rmSync(path.join(dir, f), { force: true });
+  }
+}
+
 // Guarda el cartel del evento (id) y devuelve el nombre de archivo, o '' si no hay.
+// El nombre lleva una marca única por subida: así la URL cambia y ningún
+// navegador/CDN sirve el cartel anterior desde la caché.
 function savePoster(eventId, file) {
   const dir = postersDir();
-  // Borra versiones anteriores (jpg/png)
-  for (const f of fs.readdirSync(dir)) {
-    if (f === `${eventId}.jpg` || f === `${eventId}.png`) fs.rmSync(path.join(dir, f), { force: true });
-  }
+  deletePostersOf(dir, eventId); // borra versiones anteriores
   if (!file || !file.data || file.data.length === 0) return '';
-  const name = `${eventId}.${imageExt(file)}`;
+  const stamp = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const name = `${eventId}-${stamp}.${imageExt(file)}`;
   fs.writeFileSync(path.join(dir, name), file.data);
   return name;
 }
 
 function removePoster(eventId) {
-  const dir = postersDir();
-  for (const f of fs.readdirSync(dir)) {
-    if (f === `${eventId}.jpg` || f === `${eventId}.png`) fs.rmSync(path.join(dir, f), { force: true });
-  }
+  deletePostersOf(postersDir(), eventId);
 }
 
 function posterPath(filename) {
-  if (!/^\d+\.(jpg|png)$/.test(filename || '')) return null;
+  if (!/^\d+(?:-[a-z0-9]+)?\.(jpg|png)$/.test(filename || '')) return null;
   const fp = path.join(postersDir(), filename);
   return fs.existsSync(fp) ? fp : null;
 }

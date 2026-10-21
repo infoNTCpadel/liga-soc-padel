@@ -78,7 +78,7 @@
     <div class="field"><label>Descripción <span class="hint">(los saltos de línea se ven tal cual en la web)</span></label><textarea name="description" rows="3"><%= ev.description %></textarea></div>
     <div class="field"><label>Cartel <span class="hint">(opcional; se reduce solo para que pese poco)</span></label>
       <% if (ev.poster) { %>
-      <p><img src="/eventos/<%= ev.slug %>/poster" alt="Cartel actual" style="max-width:280px;height:auto;border-radius:8px"></p>
+      <p><img src="/eventos/<%= ev.slug %>/poster?v=<%= ev.poster %>" alt="Cartel actual" style="max-width:280px;height:auto;border-radius:8px"></p>
       <% } %>
       <input type="file" id="poster-input" name="poster" accept="image/*">
       <img id="poster-preview" alt="" style="display:none;max-width:280px;height:auto;margin-top:8px;border-radius:8px">
