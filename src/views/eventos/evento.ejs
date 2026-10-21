@@ -1,13 +1,21 @@
 <p class="small"><a href="/eventos">← Todos los eventos</a></p>
-<% if (ev.poster) { %>
-<p><img src="/eventos/<%= ev.slug %>/poster" alt="Cartel de <%= ev.name %>" style="max-width:100%;height:auto;border-radius:10px"></p>
-<% } %>
-<h1><%= ev.name %></h1>
-<p><span class="badge cat"><%= formatName(ev.format) %></span>
-  <span>📅 <strong><%= fmtDate(ev.event_date) %></strong><%= ev.event_time ? ' · ' + ev.event_time : '' %></span>
-  <span> · 💶 <strong><%= priceLabel(ev) %></strong></span></p>
-<% if (ev.description) { %><div class="card"><p><%= ev.description %></p></div><% } %>
-<p class="small mut"><%= inscritos %> inscrito(s)<%= left !== null ? ` · ${left} plazas libres` : '' %></p>
+<div class="ev-head">
+  <div class="ev-main">
+    <h1><%= ev.name %></h1>
+    <p><span class="badge cat"><%= formatName(ev.format) %></span>
+      <span>📅 <strong><%= fmtDate(ev.event_date) %></strong><%= ev.event_time ? ' · ' + ev.event_time : '' %></span>
+      <span> · 💶 <strong><%= priceLabel(ev) %></strong></span></p>
+    <% if (ev.description) { %><div class="card"><p class="ev-desc"><%= ev.description %></p></div><% } %>
+    <p class="small mut"><%= inscritos %> inscrito(s)<%= left !== null ? ` · ${left} plazas libres` : '' %></p>
+  </div>
+  <% if (ev.poster) { %>
+  <div class="ev-poster">
+    <a href="/eventos/<%= ev.slug %>/poster" target="_blank" rel="noopener" title="Ver el cartel a tamaño completo">
+      <img src="/eventos/<%= ev.slug %>/poster" alt="Cartel de <%= ev.name %>">
+    </a>
+  </div>
+  <% } %>
+</div>
 
 <% if (error) { %><div class="alert error"><%= error %></div><% } %>
 

@@ -75,7 +75,7 @@
   <form method="post" action="/admin/eventos/<%= ev.id %>/editar" enctype="multipart/form-data">
     <div class="field"><label>Nombre</label><input type="text" name="name" value="<%= ev.name %>" required></div>
     <div class="field"><label>Dirección web (slug) <span class="hint">(la landing es /eventos/<%= ev.slug %>; si la cambias, la antigua redirigirá a la nueva)</span></label><input type="text" name="slug" value="<%= ev.slug %>"></div>
-    <div class="field"><label>Descripción</label><textarea name="description" rows="3"><%= ev.description %></textarea></div>
+    <div class="field"><label>Descripción <span class="hint">(los saltos de línea se ven tal cual en la web)</span></label><textarea name="description" rows="3"><%= ev.description %></textarea></div>
     <div class="field"><label>Cartel <span class="hint">(opcional; se reduce solo para que pese poco)</span></label>
       <% if (ev.poster) { %>
       <p><img src="/eventos/<%= ev.slug %>/poster" alt="Cartel actual" style="max-width:280px;height:auto;border-radius:8px"></p>

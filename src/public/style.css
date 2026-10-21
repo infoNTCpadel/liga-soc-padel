@@ -166,6 +166,17 @@ tr.warnrow td { background: #2b2214; }
 .hero p { color: var(--mut); max-width: 640px; margin: 0 auto 18px; }
 .center { text-align: center; }
 
+/* Eventos: cabecera con cartel a la derecha y descripción con saltos de línea */
+.ev-head { display: flex; gap: 20px; align-items: flex-start; }
+.ev-head .ev-main { flex: 1 1 auto; min-width: 0; }
+.ev-poster { flex: 0 0 300px; }
+.ev-poster img { width: 100%; max-height: 430px; object-fit: contain; border-radius: 10px; display: block; }
+.ev-desc { white-space: pre-line; }
+@media (max-width: 760px) {
+  .ev-head { flex-direction: column; }
+  .ev-poster { flex: none; width: 100%; max-width: 340px; }
+}
+
 @media (max-width: 760px) {
   .nav { display: none; position: absolute; top: 100%; left: 0; right: 0; background: #0a0d08; flex-direction: column; padding: 10px; border-bottom: 1px solid var(--line); }
   .nav.open { display: flex; }

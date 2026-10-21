@@ -4,7 +4,7 @@
   <form method="post" action="/admin/eventos/nuevo" enctype="multipart/form-data">
     <div class="field"><label>Nombre *</label><input type="text" name="name" required></div>
     <div class="field"><label>Dirección web (slug) <span class="hint">(opcional; si lo dejas vacío se genera del nombre. Ej.: americana-halloween-31-octubre → /eventos/americana-halloween-31-octubre)</span></label><input type="text" name="slug" placeholder="se genera solo si lo dejas vacío"></div>
-    <div class="field"><label>Descripción</label><textarea name="description" rows="3"></textarea></div>
+    <div class="field"><label>Descripción <span class="hint">(los saltos de línea se ven tal cual en la web)</span></label><textarea name="description" rows="3"></textarea></div>
     <div class="field"><label>Cartel <span class="hint">(opcional; se reduce solo para que pese poco)</span></label>
       <input type="file" id="poster-input" name="poster" accept="image/*">
       <img id="poster-preview" alt="" style="display:none;max-width:100%;height:auto;margin-top:8px;border-radius:8px">
