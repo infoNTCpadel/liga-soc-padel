@@ -51,7 +51,7 @@ const srv = spawn('node', ['src/index.js'], { cwd: dir, env, stdio: 'ignore' });
   ok((r.location || '').includes('ok=1'), 'alta inicial completa');
 
   // 1. La API de reconocimiento la encuentra con lo justo (sin email ni nº)
-  r = await pub.req('GET', '/eventos/api/reconocer?phone=612345678');
+  r = await pub.req('GET', '/eventos/api/reconocer?phone=612345678&member_no=S200');
   const j = JSON.parse(r.text);
   ok(j.found === true && j.name === 'Conocida Uno' && j.level === 3 && j.gender === 'F' && j.socio === true,
     'reconocer devuelve nombre/nivel/sexo/socio: ' + r.text);
@@ -68,7 +68,7 @@ const srv = spawn('node', ['src/index.js'], { cwd: dir, env, stdio: 'ignore' });
     name: 'Evento B', event_date: '2026-12-21', format: 'americana', price: '0', max_players: '0', mode: 'individual', status: 'abierta',
   });
   const evB = mdb("SELECT * FROM events WHERE name = 'Evento B'")[0];
-  r = await pub.req('POST', `/eventos/${evB.slug}/inscribir`, { phone: '612345678' });
+  r = await pub.req('POST', `/eventos/${evB.slug}/inscribir`, { phone: '612345678', member_no: 'S200' });
   ok((r.location || '').includes('ok=1'), 'inscripción solo con teléfono: ' + r.location);
   const insc = mdb('SELECT * FROM event_inscriptions WHERE event_id = ?', evB.id)[0];
   ok(insc && insc.name === 'Conocida Uno' && insc.level === 3, 'nombre y nivel tomados de su ficha');
@@ -85,7 +85,7 @@ const srv = spawn('node', ['src/index.js'], { cwd: dir, env, stdio: 'ignore' });
   const evC = mdb("SELECT * FROM events WHERE name = 'Evento C'")[0];
   r = await pub.req('POST', `/eventos/${evC.slug}/inscribir`, {
     p1_name: 'Nuevo Uno', p1_phone: '612345679', p1_level: '1.95',
-    p2_phone: '612345678',
+    p2_phone: '612345678', p2_member_no: 'S200',
   });
   ok((r.location || '').includes('ok=1'), 'pareja con p2 solo-teléfono: ' + r.location);
   const par = mdb('SELECT * FROM event_inscriptions WHERE event_id = ? ORDER BY id', evC.id);

@@ -49,7 +49,7 @@
     <label class="small"><input type="radio" name="kind" value="pareja" <%= fv('kind') === 'pareja' ? 'checked' : '' %>> Vamos en pareja</label>
   </div>
   <% } %>
-  <p class="small mut">¿Ya eres socio/a o has jugado antes en el club? Escribe tu móvil y pulsa «Reconocerme» en tu bloque: si te tenemos fichado/a, rellenamos tu nombre y tu nivel solos. El precio de socio se aplica automáticamente al inscribirte.</p>
+  <p class="small mut">¿Ya eres socio/a del club? Escribe tu móvil y tu nº de socio y pulsa «Reconocerme» en tu bloque: si coinciden con tu ficha, rellenamos tu nombre y tu nivel solos. El precio de socio se aplica automáticamente al inscribirte.</p>
   <form method="post" action="/eventos/<%= ev.slug %>/inscribir" id="f-insc">
     <% if (ev.inscription_mode === 'mixed') { %><input type="hidden" name="kind" value="<%= fv('kind') || 'solo' %>" id="f-kind"><% } %>
     <div id="f-p1">
@@ -58,7 +58,6 @@
         <div class="field"><label>Nombre *</label><input type="text" name="<%= f1('name') %>" value="<%= fv(f1('name')) %>" required></div>
         <div class="field"><label>Teléfono móvil *</label><input type="tel" name="<%= f1('phone') %>" value="<%= fv(f1('phone')) %>" required></div>
       </div>
-      <p class="small"><button type="button" class="btn small ghost rec-btn" data-pfx="<%= ev.inscription_mode === 'individual' ? '' : 'p1' %>">🔍 Reconocerme con mi móvil</button> <span class="rec-msg" data-pfx="<%= ev.inscription_mode === 'individual' ? '' : 'p1' %>"></span></p>
       <div class="row2">
         <div class="field"><label>Nivel *</label>
           <select name="<%= f1('level') %>" required>
@@ -74,6 +73,7 @@
         <div class="field"><label>Nº de socio <span class="hint">(si lo tienes)</span></label><input type="text" name="<%= f1('member_no') %>" value="<%= fv(f1('member_no')) %>"></div>
         <div class="field"><label>Email</label><input type="email" name="<%= f1('email') %>" value="<%= fv(f1('email')) %>"></div>
       </div>
+      <p class="small"><button type="button" class="btn small ghost rec-btn" data-pfx="<%= ev.inscription_mode === 'individual' ? '' : 'p1' %>">🔍 Reconocerme con mi móvil</button> <span class="rec-msg" data-pfx="<%= ev.inscription_mode === 'individual' ? '' : 'p1' %>"></span></p>
     </div>
     <% if (ev.inscription_mode !== 'individual') { %>
     <div id="f-p2" style="<%= ev.inscription_mode === 'pairs' || fv('kind') === 'pareja' ? '' : 'display:none' %>">
@@ -82,7 +82,6 @@
         <div class="field"><label>Nombre *</label><input type="text" name="p2_name" value="<%= fv('p2_name') %>"></div>
         <div class="field"><label>Teléfono móvil *</label><input type="tel" name="p2_phone" value="<%= fv('p2_phone') %>"></div>
       </div>
-      <p class="small"><button type="button" class="btn small ghost rec-btn" data-pfx="p2">🔍 Reconocerme con mi móvil</button> <span class="rec-msg" data-pfx="p2"></span></p>
       <div class="row2">
         <div class="field"><label>Nivel *</label>
           <select name="p2_level">
@@ -98,6 +97,7 @@
         <div class="field"><label>Nº de socio <span class="hint">(si lo tiene)</span></label><input type="text" name="p2_member_no" value="<%= fv('p2_member_no') %>"></div>
         <div class="field"><label>Email</label><input type="email" name="p2_email" value="<%= fv('p2_email') %>"></div>
       </div>
+      <p class="small"><button type="button" class="btn small ghost rec-btn" data-pfx="p2">🔍 Reconocerme con mi móvil</button> <span class="rec-msg" data-pfx="p2"></span></p>
     </div>
     <% } %>
     <button class="btn" type="submit">Inscribirme<% if (!hasDualPrice && ev.price_cents > 0) { %> · <%= eur(ev.price_cents) %> / pers.<% } %></button>
@@ -124,20 +124,22 @@
 </script>
 <% } %>
 <script>
-// Reconocimiento por móvil: rellena nombre, nivel y sexo desde la ficha del club.
+// Reconocimiento por móvil + nº de socio: rellena nombre, nivel y sexo desde la ficha del club.
 document.querySelectorAll('.rec-btn').forEach(function (btn) {
   btn.addEventListener('click', async function () {
     var pfx = btn.getAttribute('data-pfx');
     var key = pfx ? pfx + '_' : '';
     var msg = document.querySelector('.rec-msg[data-pfx="' + pfx + '"]');
     var phoneEl = document.querySelector('[name="' + key + 'phone"]');
+    var noEl = document.querySelector('[name="' + key + 'member_no"]');
     var phone = phoneEl ? phoneEl.value.trim() : '';
-    if (!phone) { msg.textContent = 'Escribe primero tu móvil.'; return; }
+    var mno = noEl ? noEl.value.trim() : '';
+    if (!phone || !mno) { msg.textContent = 'Escribe tu móvil y tu nº de socio.'; return; }
     msg.textContent = 'Buscando…';
     try {
-      var r = await fetch('/eventos/api/reconocer?phone=' + encodeURIComponent(phone));
+      var r = await fetch('/eventos/api/reconocer?phone=' + encodeURIComponent(phone) + '&member_no=' + encodeURIComponent(mno));
       var j = await r.json();
-      if (!j.found) { msg.textContent = 'No te hemos encontrado: rellena tus datos, por favor.'; return; }
+      if (!j.found) { msg.textContent = 'El móvil y el nº de socio no coinciden con ninguna ficha: rellena tus datos, por favor.'; return; }
       var set = function (n, v) {
         if (v == null || v === '') return;
         var el = document.querySelector('[name="' + key + n + '"]');

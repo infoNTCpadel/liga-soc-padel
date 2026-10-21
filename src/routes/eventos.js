@@ -29,9 +29,15 @@ router.get('/:slug/poster', (req, res) => {
   res.sendFile(fp);
 });
 
-// Reconocimiento por teléfono: si el móvil ya está en el directorio del club,
-// devuelve solo lo que el formulario necesita (nombre, nivel, sexo) para
-// autorrellenarlo. Nunca email ni nº de socio. Con límite por IP (anti-sondeo).
+// Reconocimiento por teléfono + nº de socio: solo si AMBOS coinciden con la
+// misma ficha del directorio se devuelven los datos para autorrellenar el
+// formulario (nombre, nivel, sexo). Nunca email. Con límite por IP (anti-sondeo).
+// Los nº NV-* (fichas sin nº real) NO valen como clave: se deducen del teléfono.
+function memberNoMatches(member, given) {
+  const real = String((member && member.member_no) || '').trim();
+  if (!real || real.startsWith('NV-')) return false;
+  return real.toLowerCase() === String(given || '').trim().toLowerCase();
+}
 const lookupHits = new Map(); // ip -> [timestamps]
 router.get('/api/reconocer', (req, res) => {
   const ip = req.ip || 'sin-ip';
@@ -44,12 +50,13 @@ router.get('/api/reconocer', (req, res) => {
   if (!L.validSpanishMobile(phone)) return res.json({ found: false });
   const m = B.getMemberByPhone(phone);
   if (!m || !m.active) return res.json({ found: false });
+  if (!memberNoMatches(m, req.query.member_no)) return res.json({ found: false });
   res.json({
     found: true,
     name: m.name || '',
     level: m.level == null ? null : Number(m.level),
     gender: m.gender || '',
-    socio: E.isMemberNo(m.member_no),
+    socio: true,
   });
 });
 
@@ -113,18 +120,17 @@ router.post('/:slug/inscribir', (req, res) => {
   }
   if (!ev || ev.status === 'oculta') return res.status(404).renderPage('public/404', {});
   const b = req.body;
-  // Autorrelleno desde el directorio: si el teléfono ya es del club y faltan
-  // nombre/nivel/sexo, se completan con su ficha (el reconocimiento real).
+  // Autorrelleno desde el directorio: SOLO si el nº de socio enviado coincide
+  // con la ficha de ese teléfono (misma regla que el botón «Reconocerme»).
   const autofill = (pfx) => {
     const phone = (b[pfx + 'phone'] || '').trim();
     if (!phone) return;
     const m = B.getMemberByPhone(phone);
-    if (!m) return;
+    if (!m || !memberNoMatches(m, b[pfx + 'member_no'])) return;
     if (!(b[pfx + 'name'] || '').trim() && m.name) b[pfx + 'name'] = m.name;
     const lvl = parseFloat(b[pfx + 'level']);
     if (!(lvl >= 0 && lvl <= 6) && m.level != null) b[pfx + 'level'] = String(m.level);
     if (!(b[pfx + 'gender'] || '').trim() && m.gender) b[pfx + 'gender'] = m.gender;
-    if (!(b[pfx + 'member_no'] || '').trim() && m.member_no && !String(m.member_no).startsWith('NV-')) b[pfx + 'member_no'] = m.member_no;
     if (!(b[pfx + 'email'] || '').trim() && m.email) b[pfx + 'email'] = m.email;
   };
   autofill('p1_'); autofill('p2_'); autofill('');
