@@ -5,6 +5,7 @@ const router = express.Router();
 const L = require('../lib/league');
 const E = require('../lib/events');
 const U = require('../lib/upload');
+const B = require('../lib/bookings');
 
 router.use((req, res, next) => { res.locals.sub = 'eventos'; next(); });
 
@@ -26,6 +27,30 @@ router.get('/:slug/poster', (req, res) => {
   res.setHeader('Content-Type', ev.poster.endsWith('.png') ? 'image/png' : 'image/jpeg');
   res.setHeader('Cache-Control', 'public, max-age=86400');
   res.sendFile(fp);
+});
+
+// Reconocimiento por teléfono: si el móvil ya está en el directorio del club,
+// devuelve solo lo que el formulario necesita (nombre, nivel, sexo) para
+// autorrellenarlo. Nunca email ni nº de socio. Con límite por IP (anti-sondeo).
+const lookupHits = new Map(); // ip -> [timestamps]
+router.get('/api/reconocer', (req, res) => {
+  const ip = req.ip || 'sin-ip';
+  const now = Date.now();
+  const hits = (lookupHits.get(ip) || []).filter(t => now - t < 60000);
+  if (hits.length >= 30) return res.status(429).json({ found: false, error: 'Demasiadas consultas seguidas. Espera un minuto.' });
+  hits.push(now);
+  lookupHits.set(ip, hits);
+  const phone = String(req.query.phone || '');
+  if (!L.validSpanishMobile(phone)) return res.json({ found: false });
+  const m = B.getMemberByPhone(phone);
+  if (!m || !m.active) return res.json({ found: false });
+  res.json({
+    found: true,
+    name: m.name || '',
+    level: m.level == null ? null : Number(m.level),
+    gender: m.gender || '',
+    socio: E.isMemberNo(m.member_no),
+  });
 });
 
 // Índice de eventos
@@ -88,6 +113,21 @@ router.post('/:slug/inscribir', (req, res) => {
   }
   if (!ev || ev.status === 'oculta') return res.status(404).renderPage('public/404', {});
   const b = req.body;
+  // Autorrelleno desde el directorio: si el teléfono ya es del club y faltan
+  // nombre/nivel/sexo, se completan con su ficha (el reconocimiento real).
+  const autofill = (pfx) => {
+    const phone = (b[pfx + 'phone'] || '').trim();
+    if (!phone) return;
+    const m = B.getMemberByPhone(phone);
+    if (!m) return;
+    if (!(b[pfx + 'name'] || '').trim() && m.name) b[pfx + 'name'] = m.name;
+    const lvl = parseFloat(b[pfx + 'level']);
+    if (!(lvl >= 0 && lvl <= 6) && m.level != null) b[pfx + 'level'] = String(m.level);
+    if (!(b[pfx + 'gender'] || '').trim() && m.gender) b[pfx + 'gender'] = m.gender;
+    if (!(b[pfx + 'member_no'] || '').trim() && m.member_no && !String(m.member_no).startsWith('NV-')) b[pfx + 'member_no'] = m.member_no;
+    if (!(b[pfx + 'email'] || '').trim() && m.email) b[pfx + 'email'] = m.email;
+  };
+  autofill('p1_'); autofill('p2_'); autofill('');
   // Guarda lo escrito para repoblar el formulario si hay un error de validación
   const FORM_KEYS = ['kind', 'name', 'phone', 'level', 'gender', 'member_no', 'email',
     'p1_name', 'p1_phone', 'p1_level', 'p1_gender', 'p1_member_no', 'p1_email',
