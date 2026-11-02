@@ -33,7 +33,9 @@
     <% } %>
   </table></div>
 
-  <h4 style="margin-top:16px">Partidos</h4>
+  <details style="margin-top:16px">
+    <summary class="small" style="cursor:pointer; color: var(--lime)"><strong>Calendario y resultados</strong> <span class="mut">(<%= g.matches.length %> partidos)</span></summary>
+    <div style="margin-top:10px">
   <% for (const m of g.matches) { %>
     <div class="match">
       <span class="teams"><%= pairName(m.pair_a_id) %> <span class="mut">vs</span> <%= pairName(m.pair_b_id) %>
@@ -45,6 +47,8 @@
       </span>
     </div>
   <% } %>
+    </div>
+  </details>
 </div>
 <% } %>
 

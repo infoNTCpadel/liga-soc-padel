@@ -15,6 +15,34 @@
 
 <% if (unscheduled > 0) { %><p><span class="badge pending"><%= unscheduled %> sin programar</span> <span class="mut small">sin pista u horario asignado</span></p><% } %>
 
+<form method="get" action="/admin/partidos" class="card">
+  <input type="hidden" name="stage" value="<%= stage %>">
+  <input type="hidden" name="category" value="<%= category %>">
+  <% if (round) { %><input type="hidden" name="round" value="<%= round %>"><% } %>
+  <% if (block && block !== 'all') { %><input type="hidden" name="block" value="<%= block %>"><% } %>
+  <div class="row2">
+    <div class="field"><label>Buscar pareja</label><input type="text" name="q" value="<%= q %>" placeholder="Nombre de jugador/a"></div>
+    <% if (stage === 'groups' && groupsList.length > 1) { %>
+    <div class="field"><label>Grupo</label>
+      <select name="grupo">
+        <option value="all">Todos</option>
+        <% for (const gn of groupsList) { %><option value="<%= gn %>" <%= grupo === gn ? 'selected' : '' %>>Grupo <%= gn %></option><% } %>
+      </select>
+    </div>
+    <% } %>
+  </div>
+  <div class="row2">
+    <div class="field"><label>Estado del partido</label>
+      <select name="estado">
+        <% const estados = [['all','Todos'],['sin_resultado','Sin resultado'],['pendiente','Pendiente de validación'],['validado','Validado'],['disputado','Disputado'],['auto','Validado automáticamente'],['wo','W.O.'],['no_jugado','No jugado']]; %>
+        <% for (const [v, t] of estados) { %><option value="<%= v %>" <%= estado === v ? 'selected' : '' %>><%= t %></option><% } %>
+      </select>
+    </div>
+    <div class="field"><label>&nbsp;</label><div><button class="btn small" type="submit">Filtrar</button>
+      <a class="btn small ghost" href="/admin/partidos?stage=<%= stage %>&category=<%= category %><% if (round) { %>&round=<%= round %><% } %><% if (block && block !== 'all') { %>&block=<%= block %><% } %>">Limpiar</a></div></div>
+  </div>
+</form>
+
 <% for (const m of matches) { %>
 <div class="card">
   <p><strong><%= pairName(m.pair_a_id) %></strong> <span class="mut">vs</span> <strong><%= pairName(m.pair_b_id) %></strong>
@@ -31,6 +59,13 @@
     <% } %>
     <% if (vb === 'auto') { %><span class="badge auto">validado automáticamente (24h)</span><% } %>
     <% if (vb === 'validado') { %><span class="badge validado">validado</span><% } %>
+    <% if (m.winner_id || m.wo_winner_id || m.unplayed || m.submitted_at) { %>
+      <form method="post" action="/admin/partidos/<%= m.id %>/borrar" style="display:inline"
+        onsubmit="return confirm('¿Borrar el resultado y dejar el partido pendiente? La clasificación se recalculará sola.')">
+        <input type="hidden" name="back" value="<%= backUrl %>">
+        <button class="btn small ghost" type="submit">🗑 Borrar resultado</button>
+      </form>
+    <% } %>
   </p>
   <p class="small">📍 <strong><%= slotStr(m) || 'Sin programar' %></strong></p>
   <details data-sched <% if (m.avail_a || m.avail_b) { %>data-avail data-aa="<%= m.avail_a || '' %>" data-ab="<%= m.avail_b || '' %>" data-na="<%= pairName(m.pair_a_id) %>" data-nb="<%= pairName(m.pair_b_id) %>"<% } %>>
@@ -49,7 +84,7 @@
         <div class="field"><label>Hora</label><input type="time" name="time" value="<%= m.scheduled_at ? m.scheduled_at.slice(11, 16) : '' %>"></div>
         <div class="field"><label>&nbsp;</label><button class="btn small" type="submit">Guardar horario</button></div>
       </div>
-      <input type="hidden" name="back" value="<%= '/admin/partidos?stage=' + stage + '&category=' + category + (round ? '&round=' + round : '') %>">
+      <input type="hidden" name="back" value="<%= backUrl %>">
       <p class="small mut">Deja todo vacío y guarda para quitar la programación. El sistema avisa si la pista ya está ocupada en ese tramo.</p>
     </form>
   </details>
@@ -77,7 +112,7 @@
         <% if (sB) { %><label><input type="checkbox" name="sub_b" value="1" <%= m.sub_b_id ? 'checked' : '' %>> Jugó el sustituto de <%= pairName(m.pair_b_id) %> (<%= sB.name %>)</label><br><% } %>
       </div>
       <div class="field"><label>Notas</label><input type="text" name="notes" value="<%= m.notes %>"></div>
-      <input type="hidden" name="back" value="<%= '/admin/partidos?stage=' + stage + '&category=' + category + (round ? '&round=' + round : '') %>">
+      <input type="hidden" name="back" value="<%= backUrl %>">
       <button class="btn small" type="submit">Guardar resultado</button>
     </form>
   </details>

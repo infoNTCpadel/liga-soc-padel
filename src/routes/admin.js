@@ -716,7 +716,36 @@ router.get('/partidos', (req, res) => {
   const category = L.validCategory(req.query.category);
   const stage = req.query.stage === 'po' ? 'po' : 'groups';
   const courts = db.prepare('SELECT * FROM courts WHERE active = 1 ORDER BY name').all();
-  const common = { category, stage, courts, error: req.query.error || null, pairName: (id) => L.pairName(db, id) };
+  // ---- filtros de búsqueda ----
+  const q = (req.query.q || '').trim();
+  const estado = ['all', 'sin_resultado', 'pendiente', 'validado', 'disputado', 'auto', 'wo', 'no_jugado'].includes(req.query.estado) ? req.query.estado : 'all';
+  const grupo = req.query.grupo === 'all' || !req.query.grupo ? 'all' : parseInt(req.query.grupo, 10);
+  const like = `%${q}%`;
+  const nameJoin = `LEFT JOIN players qa ON qa.id = pa.player1_id
+    LEFT JOIN players qb ON qb.id = pa.player2_id
+    LEFT JOIN players qc ON qc.id = pb.player1_id
+    LEFT JOIN players qd ON qd.id = pb.player2_id`;
+  const nameCond = q ? ` AND (qa.name LIKE ? OR qb.name LIKE ? OR qc.name LIKE ? OR qd.name LIKE ?)` : '';
+  const qParams = () => (q ? [like, like, like, like] : []);
+  const estadoConds = {
+    sin_resultado: `m.winner_id IS NULL AND m.wo_winner_id IS NULL AND m.unplayed = 0`,
+    pendiente: `m.validation = 'pending'`,
+    validado: `m.validation = 'validated'`,
+    disputado: `m.validation = 'disputed'`,
+    auto: `m.validation = 'auto'`,
+    wo: `m.wo_winner_id IS NOT NULL`,
+    no_jugado: `m.unplayed = 1`,
+  };
+  const estadoCond = estado !== 'all' ? ' AND (' + estadoConds[estado] + ')' : '';
+  const fparams = [];
+  if (q) fparams.push('q=' + encodeURIComponent(q));
+  if (estado !== 'all') fparams.push('estado=' + estado);
+  if (grupo !== 'all') fparams.push('grupo=' + grupo);
+  const fstr = fparams.length ? '&' + fparams.join('&') : '';
+  const common = {
+    category, stage, courts, error: req.query.error || null, pairName: (id) => L.pairName(db, id),
+    q, estado, grupo, fstr,
+  };
   // Sustitutos registrados por pareja (para marcar quién jugó al introducir el resultado)
   const subMapFor = (ms) => {
     const map = {};
@@ -728,15 +757,24 @@ router.get('/partidos', (req, res) => {
   let matches, blocks = [], block = 'all';
   if (stage === 'groups') {
     const round = Math.min(3, Math.max(1, parseInt(req.query.round) || 1));
+    const baseWhere = `m.stage = 'groups' AND m.category = ? AND m.round_no = ?`;
+    const unscheduled = db.prepare(
+      `SELECT COUNT(*) c FROM matches m WHERE ${baseWhere} AND (m.court_id IS NULL OR m.scheduled_at IS NULL)`
+    ).get(category, round).c;
+    const grupoCond = grupo !== 'all' ? ' AND g.group_no = ?' : '';
     matches = db.prepare(
       `SELECT m.*, g.group_no, g.round_no, c.name AS court_name, pa.availability AS avail_a, pb.availability AS avail_b
        FROM matches m
        LEFT JOIN groups g ON g.id = m.group_id LEFT JOIN courts c ON c.id = m.court_id
        LEFT JOIN pairs pa ON pa.id = m.pair_a_id LEFT JOIN pairs pb ON pb.id = m.pair_b_id
-       WHERE m.stage = 'groups' AND m.category = ? AND m.round_no = ? ORDER BY g.group_no, m.id`
-    ).all(category, round);
-    const unscheduled = matches.filter(m => !m.court_id || !m.scheduled_at).length;
-    res.renderPage('admin/partidos', { ...common, round, matches, blocks, block, unscheduled, subMap: subMapFor(matches) });
+       ${nameJoin}
+       WHERE ${baseWhere}${grupoCond}${estadoCond}${nameCond} ORDER BY g.group_no, m.id`
+    ).all(category, round, ...(grupo !== 'all' ? [grupo] : []), ...qParams());
+    const groupsList = db.prepare(
+      'SELECT DISTINCT group_no FROM groups WHERE category = ? AND round_no = ? ORDER BY group_no'
+    ).all(category, round).map(r => r.group_no);
+    const backUrl = `/admin/partidos?stage=groups&category=${category}&round=${round}${fstr}`;
+    res.renderPage('admin/partidos', { ...common, round, matches, blocks, block, unscheduled, groupsList, backUrl, subMap: subMapFor(matches) });
   } else {
     blocks = db.prepare(`SELECT DISTINCT stage FROM matches WHERE stage LIKE 'po%' AND category = ? ORDER BY stage`)
       .all(category).map(r => r.stage);
@@ -745,12 +783,18 @@ router.get('/partidos', (req, res) => {
     let sql = `SELECT m.*, c.name AS court_name, pa.availability AS avail_a, pb.availability AS avail_b
        FROM matches m LEFT JOIN courts c ON c.id = m.court_id
        LEFT JOIN pairs pa ON pa.id = m.pair_a_id LEFT JOIN pairs pb ON pb.id = m.pair_b_id
+       ${nameJoin}
        WHERE m.stage LIKE 'po%' AND m.category = ?`;
     if (block !== 'all') { sql += ' AND m.stage = ?'; params.push(block); }
+    const unscheduled = db.prepare(
+      `SELECT COUNT(*) c FROM matches m WHERE m.stage LIKE 'po%' AND m.category = ?` +
+      (block !== 'all' ? ' AND m.stage = ?' : '') + ` AND (m.court_id IS NULL OR m.scheduled_at IS NULL)`
+    ).get(...params).c;
+    sql += estadoCond + nameCond;
     sql += ` ORDER BY m.stage, CASE m.bracket_round WHEN 'R32' THEN 0 WHEN 'R16' THEN 1 WHEN 'QF' THEN 2 WHEN 'SF' THEN 3 WHEN 'F' THEN 4 ELSE 9 END, m.bracket_slot`;
-    matches = db.prepare(sql).all(...params);
-    const unscheduled = matches.filter(m => !m.court_id || !m.scheduled_at).length;
-    res.renderPage('admin/partidos', { ...common, round: null, matches, blocks, block, unscheduled, subMap: subMapFor(matches) });
+    matches = db.prepare(sql).all(...params, ...qParams());
+    const backUrl = `/admin/partidos?stage=po&category=${category}` + (block !== 'all' ? `&block=${block}` : '') + fstr;
+    res.renderPage('admin/partidos', { ...common, round: null, matches, blocks, block, unscheduled, groupsList: [], backUrl, subMap: subMapFor(matches) });
   }
 });
 
@@ -807,6 +851,41 @@ router.post('/partidos/:id/resolver', (req, res) => {
   if (m && m.validation === 'disputed') {
     db.prepare("UPDATE matches SET validation = 'validated' WHERE id = ?").run(m.id);
     advanceWinner(db.prepare('SELECT * FROM matches WHERE id = ?').get(m.id));
+  }
+  res.redirect(back);
+});
+
+// Borrar el resultado de un partido y dejarlo pendiente (como antes de subirse).
+// No toca la programación (pista/horario); la clasificación se recalcula sola.
+router.post('/partidos/:id/borrar', (req, res) => {
+  const m = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.id);
+  const back = req.body.back || '/admin/partidos';
+  if (!m) return res.redirect(back);
+  if (L.matchStageClosed(getSetting, m)) {
+    return res.redirect(back + (back.includes('?') ? '&' : '?') + 'error=' +
+      encodeURIComponent('La fase está cerrada: reábrela para corregir resultados.'));
+  }
+  if (!m.winner_id && !m.wo_winner_id && !m.unplayed && !m.submitted_at) return res.redirect(back);
+  const outcome = L.matchOutcome(m);
+  db.prepare(`UPDATE matches SET s1a=NULL, s1b=NULL, s2a=NULL, s2b=NULL, s3a=NULL, s3b=NULL,
+              stb_a=NULL, stb_b=NULL, winner_id=NULL, wo_winner_id=NULL, unplayed=0,
+              submitted_by=NULL, submitted_at=NULL, validation='none', validation_deadline=NULL,
+              sub_a_id=NULL, sub_b_id=NULL WHERE id = ?`).run(m.id);
+  // Si el resultado había avanzado al ganador en el cuadro, retraerlo, pero solo
+  // si la siguiente eliminatoria aún no tiene resultado (si lo tiene, no se toca).
+  if (L.isPlayoffStage(m.stage) && outcome) {
+    const next = L.BRACKET_NEXT[m.bracket_round];
+    if (next) {
+      const slot = Math.floor(m.bracket_slot / 2);
+      const col = m.bracket_slot % 2 === 0 ? 'pair_a_id' : 'pair_b_id';
+      const nm = db.prepare(
+        'SELECT * FROM matches WHERE stage = ? AND category = ? AND bracket_round = ? AND bracket_slot = ?'
+      ).get(m.stage, m.category, next, slot);
+      const nmHasResult = nm && (nm.winner_id || nm.wo_winner_id || nm.unplayed);
+      if (nm && nm[col] === outcome.winnerId && !nmHasResult) {
+        db.prepare(`UPDATE matches SET ${col} = NULL WHERE id = ?`).run(nm.id);
+      }
+    }
   }
   res.redirect(back);
 });
