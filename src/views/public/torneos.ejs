@@ -1,0 +1,64 @@
+<h1>Torneos KNB</h1>
+<p class="mut">Competiciones del club: liga social por parejas, competición de mediodía y eventos.</p>
+
+<div class="grid c3">
+  <div class="card portal-card">
+    <h3>Liga social</h3>
+    <p class="mut small">Fase de grupos con ascensos y descensos, ranking por puntos y playoffs finales. Todo con las reglas oficiales de la competición.</p>
+    <p class="portal-cta">
+      <% if (registrationClosed) { %><span class="btn ghost" style="opacity:.6;pointer-events:none">Inscripción cerrada</span><% } else { %><a class="btn ghost" href="/inscripcion">Inscribir a mi pareja</a><% } %>
+      <a class="btn" href="/liga">Ver la liga →</a>
+    </p>
+    <% if (currentPhase) { %><p class="small mut"><%= currentPhase.label %><% if (currentPhase.countdown) { %> · <%= currentPhase.countdown %><% } %></p><% } %>
+  </div>
+
+  <div class="card portal-card">
+    <h3>Mediodía Padel</h3>
+    <p class="mut small">Competición de mediodía por bombos de nivel, como la Champions: cada pareja se mide con rivales de todos los niveles.</p>
+    <p class="portal-cta"><a class="btn" href="https://kanbe-mediodia.padelvalles.com">Ir a Mediodía →</a></p>
+  </div>
+
+  <div class="card portal-card">
+    <h3>Eventos</h3>
+    <p class="mut small">Americanas, quedadas y torneos exprés del club, con inscripción desde la web.</p>
+    <p class="portal-cta"><a class="btn" href="/eventos">Ver eventos →</a></p>
+  </div>
+</div>
+
+<div class="grid c3">
+  <div class="stat"><b><%= counts.pairs %></b><span>parejas en competición</span></div>
+  <div class="stat"><b>3 + playoffs</b><span>rondas de grupos y fase final</span></div>
+  <div class="stat"><b>3</b><span>categorías: masculina, femenina y mixta</span></div>
+</div>
+
+<% if (recentResults.length) { %>
+<div class="card">
+  <h3>Últimos resultados</h3>
+  <% for (const r of recentResults) { %>
+    <p class="recent-row"><span class="mut small"><%= r.context %></span><br>
+    <strong><%= r.winner %></strong> <span class="score"><%= r.score %></span><% if (r.loser) { %> <span class="mut">· <%= r.loser %></span><% } %></p>
+  <% } %>
+  <p><a href="/liga">Ver la liga →</a></p>
+</div>
+<% } %>
+
+<h2>Calendario <%= seasonName %></h2>
+<div class="timeline">
+  <% for (const p of phases) { %>
+    <div class="phase <%= p.current ? 'current' : '' %> <%= p.past ? 'past' : '' %>">
+      <span class="dot"></span>
+      <div>
+        <div class="dates"><%= p.dates || (fmtDate(p.ini) + ' – ' + fmtDate(p.fin)) %></div>
+        <div class="plabel"><%= p.label %></div>
+        <% if (p.countdown) { %><div class="countdown"><%= p.countdown %></div><% } %>
+      </div>
+      <% if (p.current) { %><span class="badge ok" style="margin-left:auto">En curso</span><% } %>
+    </div>
+  <% } %>
+</div>
+
+<div class="card">
+  <h3>¿Cómo funciona?</h3>
+  <p>Grupos de 4 parejas por nivel. Cada ronda juegas 3 partidos en tu club. Al terminar la ronda, <strong>subes o bajas de grupo</strong> según tu clasificación, y sumas <strong>puntos para el ranking</strong> según el grupo y la posición. Tras 3 rondas, el ranking se divide en <strong>bloques de 16 parejas</strong> (Playoff de 1.ª, 2.ª, 3.ª… categoría), que deciden los campeones de la temporada.</p>
+  <p><a href="/normativa">Leer la normativa completa →</a></p>
+</div>

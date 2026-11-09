@@ -220,3 +220,17 @@ tr.warnrow td { background: #2b2214; }
 .nbadge.zero { background: transparent; border: 1px solid var(--line); color: var(--mut); }
 .dash-sec { margin-top: 22px; }
 .dash-sec > h2 { margin-bottom: 2px; }
+
+/* ---- Portal KNB (portada en padel.kanbesport.com) ---- */
+.portal-hero { text-align: center; margin: 8px 0 20px; }
+.portal-logo { width: 112px; height: 112px; border-radius: 50%; background: #fff; padding: 8px; }
+.portal-hero h1 { margin: 12px 0 2px; letter-spacing: .03em; }
+.portal-cards { align-items: stretch; }
+.portal-card { display: flex; flex-direction: column; }
+.portal-card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+.portal-ico { font-size: 1.35rem; line-height: 1; background: #24485c; border-radius: 10px; padding: 9px 11px; }
+.portal-sub { color: var(--lime); font-size: .78rem; font-weight: 700; letter-spacing: .06em; margin: 0 0 8px; }
+.portal-cta { margin-top: auto; }
+.portal-foot { text-align: center; color: var(--mut); margin: 28px 0 6px; font-size: .9rem; }
+.portal-foot p { margin: 4px 0; }
+.portal-foot a { color: var(--txt); }

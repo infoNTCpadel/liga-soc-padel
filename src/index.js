@@ -128,10 +128,14 @@ function res_render(res, view, data = {}) {
 const BOOKING_HOST = (process.env.BOOKING_HOST || '').toLowerCase();
 // Dominio propio para la competición de mediodía (p. ej. kanbe-mediodia.padelvalles.com).
 const MIDDAY_HOST = (process.env.MIDDAY_HOST || '').toLowerCase();
+// Dominio propio del portal del club (p. ej. padel.kanbesport.com): en ese
+// dominio la portada es el portal KNB; en el resto sigue la portada de la liga.
+const PORTAL_HOST = (process.env.PORTAL_HOST || 'padel.kanbesport.com').toLowerCase();
 
 app.use((req, res, next) => {
   res.locals.isBookingHost = BOOKING_HOST !== '' && req.hostname.toLowerCase() === BOOKING_HOST;
   res.locals.isMiddayHost = MIDDAY_HOST !== '' && req.hostname.toLowerCase() === MIDDAY_HOST;
+  res.locals.isPortalHost = req.hostname.toLowerCase() === PORTAL_HOST;
   res.locals.bookingMemberNo = req.session.bookingMemberNo || null;
   res.renderPage = (v, d) => res_render(res, v, d); next();
 });

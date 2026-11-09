@@ -30,7 +30,8 @@ function fmtDate(iso) {
 }
 
 // ---- Portada ----
-router.get('/', (req, res) => {
+// Datos compartidos por la portada clásica, el portal KNB y el hub de Torneos.
+function homeData() {
   const counts = {
     pairs: db.prepare("SELECT COUNT(*) c FROM pairs WHERE status = 'active'").get().c,
     pending: db.prepare("SELECT COUNT(*) c FROM pairs WHERE status = 'pending'").get().c,
@@ -47,8 +48,22 @@ router.get('/', (req, res) => {
     return { context: RN.matchContext(db, m), winner: L.pairName(db, wId),
              loser: lId ? L.pairName(db, lId) : null, score: RN.formatScore(m) };
   });
-  res.renderPage('public/home', { phases: phases(), fmtDate, counts, recentResults,
-    registrationClosed: getSetting('registration_closed', '0') === '1' });
+  const ph = phases();
+  return { phases: ph, currentPhase: ph.find(p => p.current) || null, fmtDate, counts,
+    recentResults, registrationClosed: getSetting('registration_closed', '0') === '1' };
+}
+
+router.get('/', (req, res) => {
+  const data = homeData();
+  // En el dominio del club la portada es el portal KNB; en el resto (p. ej.
+  // kanbe.padelvalles.com) sigue la portada clásica de la liga.
+  if (res.locals.isPortalHost) return res.renderPage('public/portal', data);
+  res.renderPage('public/home', data);
+});
+
+// ---- Hub de Torneos (destino de la tarjeta «Torneos KNB» del portal) ----
+router.get('/torneos', (req, res) => {
+  res.renderPage('public/torneos', homeData());
 });
 
 // ---- Normativa (resumen fiel al documento oficial) ----
@@ -244,8 +259,13 @@ router.post('/inscripcion', (req, res) => {
 });
 
 // ---- Consulta de la liga: grupos y clasificaciones ----
+// /liga abre en la primera ronda no cerrada (si todas cerradas, la R3).
 router.get('/liga', (req, res) => {
-  res.redirect('/liga/M/1');
+  let round = 3;
+  for (const n of [1, 2, 3]) {
+    if (getSetting(`round${n}_closed`, '0') !== '1') { round = n; break; }
+  }
+  res.redirect(`/liga/M/${round}`);
 });
 
 router.get('/liga/:category/:round', (req, res) => {
@@ -289,7 +309,20 @@ router.get('/ranking/:category', (req, res) => {
     ).all(r.pair_id);
     return { ...r, rows };
   });
-  res.renderPage('public/ranking', { category, ranking: detail });
+  // Vista previa de los cuadros de playoff según el ranking actual, con la
+  // misma lógica que la generación real: exclusiones primero, luego reparto
+  // por los tamaños configurados. Solo visualización, no genera nada.
+  const excluded = new Set(
+    db.prepare('SELECT pair_id FROM playoff_excluded WHERE category = ?').all(category).map(r => r.pair_id)
+  );
+  const playing = detail.filter(r => !excluded.has(r.pair_id));
+  const parsed = L.parsePlayoffSizes(getSetting('playoff_sizes_' + category, ''));
+  const split = L.splitPlayoffCategories(playing.map(r => r.pair_id), parsed.sizes || []);
+  const byId = Object.fromEntries(detail.map(r => [r.pair_id, r]));
+  const blocks = split.cats.map(ids => ids.map(id => byId[id]).filter(Boolean));
+  const unused = split.unused.map(id => byId[id]).filter(Boolean);
+  const excludedList = detail.filter(r => excluded.has(r.pair_id));
+  res.renderPage('public/ranking', { category, ranking: detail, blocks, unused, excludedList });
 });
 
 // ---- Playoffs ----

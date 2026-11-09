@@ -22,3 +22,28 @@
   <% }) %>
 </table></div></div>
 <% } %>
+
+<% if (blocks && blocks.length) { %>
+<h2 style="margin-top:26px">Vista previa de los cuadros de playoff</h2>
+<p class="mut small">Según el ranking actual y los tamaños configurados. No se ha generado nada: es solo una previsualización. Las parejas excluidas por el admin salen del ranking y las siguientes ascienden de cuadro.</p>
+<% blocks.forEach((b, i) => { %>
+  <div class="card">
+    <h3>Cuadro <%= i + 1 %> · Playoff de <%= i + 1 %>.ª categoría (<%= b.length %> parejas)</h3>
+    <ol class="small">
+      <% b.forEach(r => { %><li><strong><%= r.name1 %> / <%= r.name2 %></strong> <span class="mut">· <%= r.total %> pts</span></li><% }) %>
+    </ol>
+  </div>
+<% }) %>
+<% if (unused && unused.length) { %>
+  <div class="card">
+    <h3>Sin playoff</h3>
+    <p class="small mut">Estas parejas quedarían fuera de los cuadros con el ranking actual:</p>
+    <ul class="small">
+      <% unused.forEach(r => { %><li><%= r.name1 %> / <%= r.name2 %> · <%= r.total %> pts</li><% }) %>
+    </ul>
+  </div>
+<% } %>
+<% if (excludedList && excludedList.length) { %>
+  <p class="small mut">Excluidas por el admin: <%= excludedList.map(r => r.name1 + ' / ' + r.name2).join(' · ') %></p>
+<% } %>
+<% } %>

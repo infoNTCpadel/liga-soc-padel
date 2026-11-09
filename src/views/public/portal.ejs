@@ -1,0 +1,48 @@
+<div class="portal">
+  <div class="portal-hero">
+    <img class="portal-logo" src="/knb-logo.png" alt="KNB Padel">
+    <h1>KNB PADEL CLUB</h1>
+    <p class="mut">Club deportivo de pádel · Portal oficial</p>
+  </div>
+
+  <div class="grid c3 portal-cards">
+    <div class="card portal-card">
+      <div class="portal-card-top">
+        <span class="portal-ico">🏆</span>
+        <% if (currentPhase) { %><span class="badge ok">En juego · <%= currentPhase.label %></span><% } %>
+      </div>
+      <h2>Torneos KNB</h2>
+      <p class="portal-sub">SOCIAL · MEDIODÍA · EVENTOS</p>
+      <p>Competiciones del club para todos los niveles: liga social por parejas, competición de mediodía y eventos.</p>
+      <p class="portal-cta"><a class="btn" href="/torneos">Entrar a Torneos →</a></p>
+      <% if (currentPhase) { %><p class="small mut"><%= currentPhase.label %><% if (currentPhase.countdown) { %> · <%= currentPhase.countdown %><% } %></p><% } %>
+    </div>
+
+    <div class="card portal-card">
+      <div class="portal-card-top">
+        <span class="portal-ico">👥</span>
+        <span class="badge warn">Próximamente</span>
+      </div>
+      <h2>Equipos Federados KNB</h2>
+      <p class="portal-sub">MASCULINO · FEMENINO · MIXTO · +40</p>
+      <p>Representación oficial federada del club. Estamos preparando la sección de equipos y jugadores.</p>
+      <p class="portal-cta"><a class="btn ghost" href="https://www.fcpadel.cat" target="_blank" rel="noopener">Ver resultados en la FCP →</a></p>
+    </div>
+
+    <div class="card portal-card">
+      <div class="portal-card-top">
+        <span class="portal-ico">🎓</span>
+      </div>
+      <h2>Academia de Pádel</h2>
+      <p class="portal-sub">MENORES · ADULTOS</p>
+      <p>Clases de pádel para menores y adultos en el club.</p>
+      <p class="portal-cta"><a class="btn" href="https://academia.kanbesport.com" target="_blank" rel="noopener">Conocer Programas →</a></p>
+    </div>
+  </div>
+
+  <footer class="portal-foot">
+    <p><strong>El nostre club</strong></p>
+    <p>Av. de la Pau 52, 08206 Sabadell · <a href="mailto:info@kanbesport.com">info@kanbesport.com</a> · Instagram: <a href="https://www.instagram.com/kanbesport/" target="_blank" rel="noopener">@kanbesport</a></p>
+    <p class="small mut">kanbesport© 2026. All rights reserved. · Política de privacitat · Avís Legal · Política de Cookies</p>
+  </footer>
+</div>
