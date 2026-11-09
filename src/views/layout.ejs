@@ -5,14 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><%= clubName %> · <%= seasonName %></title>
 <link rel="stylesheet" href="/style.css">
+<% if (locals.portalPage) { %><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&display=swap"><% } %>
 </head>
-<body>
+<body<% if (locals.portalPage) { %> class="portal-page"<% } %>>
 <header class="topbar">
   <div class="wrap topbar-in">
     <a class="brand" href="/">
       <span class="brand-ball">◉</span>
       <span><strong><%= clubName %></strong><small><%= seasonName %></small></span>
     </a>
+    <% if (!locals.hideNav) { %>
     <nav class="nav">
       <% if (locals.isMiddayHost) { %>
       <a href="/mediodia" class="<%= section==='midday' && !locals.sub ? 'on' : '' %>">Inicio</a>
@@ -34,6 +36,7 @@
       <a href="/eventos" class="<%= section==='public' && locals.sub==='eventos' ? 'on' : '' %>">Eventos</a>
       <% } %>
     </nav>
+    <% } %>
     <div class="userbox">
       <% if (isAdmin) { %>
         <a class="btn small" href="/admin">Panel</a>
@@ -55,7 +58,7 @@
         <a class="btn small" href="/acceso">Acceso parejas</a>
       <% } %>
     </div>
-    <button class="burger" onclick="document.querySelector('.nav').classList.toggle('open')" aria-label="Menú">☰</button>
+    <% if (!locals.hideNav) { %><button class="burger" onclick="document.querySelector('.nav').classList.toggle('open')" aria-label="Menú">☰</button><% } %>
   </div>
 </header>
 

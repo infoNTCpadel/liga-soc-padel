@@ -221,16 +221,30 @@ tr.warnrow td { background: #2b2214; }
 .dash-sec { margin-top: 22px; }
 .dash-sec > h2 { margin-bottom: 2px; }
 
-/* ---- Portal KNB (portada en padel.kanbesport.com) ---- */
+/* ---- Portal KNB (portada en padel.kanbesport.com) ----
+   Tema claro unificado con kanbesport.com: verde #277151, fondo #f9f9f9,
+   texto #191919, titulares en Barlow Condensed (la del club). Solo afecta
+   al portal: el resto de la app sigue con su tema oscuro. */
+body.portal-page { background: #f9f9f9; color: #191919; }
 .portal-hero { text-align: center; margin: 8px 0 20px; }
 .portal-logo { width: 112px; height: 112px; border-radius: 50%; background: #fff; padding: 8px; }
-.portal-hero h1 { margin: 12px 0 2px; letter-spacing: .03em; }
+.portal-hero h1 { margin: 12px 0 2px; letter-spacing: .03em; color: #191919; font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; font-size: 2.4rem; }
+.portal-hero .mut { color: #5a5a5a; }
 .portal-cards { align-items: stretch; }
 .portal-card { display: flex; flex-direction: column; }
 .portal-card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
-.portal-ico { font-size: 1.35rem; line-height: 1; background: #24485c; border-radius: 10px; padding: 9px 11px; }
-.portal-sub { color: var(--lime); font-size: .78rem; font-weight: 700; letter-spacing: .06em; margin: 0 0 8px; }
+.portal-ico { font-size: 1.35rem; line-height: 1; background: #277151; border-radius: 10px; padding: 9px 11px; }
+.portal-sub { color: #277151; font-size: .78rem; font-weight: 700; letter-spacing: .06em; margin: 0 0 8px; }
 .portal-cta { margin-top: auto; }
-.portal-foot { text-align: center; color: var(--mut); margin: 28px 0 6px; font-size: .9rem; }
+.portal-foot { text-align: center; color: #666; margin: 28px 0 6px; font-size: .9rem; }
 .portal-foot p { margin: 4px 0; }
-.portal-foot a { color: var(--txt); }
+.portal-foot a { color: #277151; }
+.portal .card { background: #fff; border: 1px solid #e7e7e7; color: #191919; }
+.portal .card h2 { color: #191919; font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; font-size: 1.6rem; }
+.portal .card .mut { color: #5a5a5a; }
+.portal .btn { background: #277151; color: #fff; }
+.portal .btn:hover { background: #1e5a40; }
+.portal .btn.ghost { background: transparent; color: #277151; border: 1px solid #277151; }
+.portal .btn.ghost:hover { color: #1e5a40; border-color: #1e5a40; }
+.portal .badge.ok { background: #EDF9EB; color: #277151; }
+.portal .badge.warn { background: #fdf0d5; color: #7a5b00; }

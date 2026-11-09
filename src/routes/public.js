@@ -56,8 +56,9 @@ function homeData() {
 router.get('/', (req, res) => {
   const data = homeData();
   // En el dominio del club la portada es el portal KNB; en el resto (p. ej.
-  // kanbe.padelvalles.com) sigue la portada clásica de la liga.
-  if (res.locals.isPortalHost) return res.renderPage('public/portal', data);
+  // kanbe.padelvalles.com) sigue la portada clásica de la liga. En el portal
+  // no se muestra la navegación de la liga: solo las tarjetas para elegir.
+  if (res.locals.isPortalHost) return res.renderPage('public/portal', { ...data, hideNav: true, portalPage: true });
   res.renderPage('public/home', data);
 });
 

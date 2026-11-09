@@ -76,10 +76,21 @@ const srv = spawn('node', ['src/index.js'], { cwd: dir, env, stdio: 'ignore' });
   ok(portal.includes('Academia de Pádel') && portal.includes('https://academia.kanbesport.com'), 'portal: Academia enlaza a academia.kanbesport.com');
   ok(portal.includes('Av. de la Pau 52') && portal.includes('info@kanbesport.com') && portal.includes('@kanbesport'), 'portal: pie con los datos de kanbesport.com');
   ok(!portal.includes('/reservar') && !portal.includes('Reservar pista'), 'portal: ni rastro de reservas');
+  ok(portal.includes('Sport & Social · Portal oficial'), 'portal: subtítulo Sport & Social · Portal oficial');
+  ok(!portal.includes('Club deportivo de pádel'), 'portal: sin el texto Club deportivo de pádel');
+  ok(!portal.includes('href="/normativa"') && !portal.includes('href="/liga"') && !portal.includes('href="/ranking"')
+    && !portal.includes('href="/playoffs"') && !portal.includes('href="/eventos"') && !portal.includes('class="burger"'),
+    'portal: sin navegación de la liga arriba, solo las tarjetas');
+  ok(portal.includes('Barlow+Condensed'), 'portal: tipografía del club (Barlow Condensed)');
+  const css = (await pub.req('GET', '/style.css')).text;
+  ok(css.includes('#277151') && css.includes('body.portal-page') && css.includes('Barlow Condensed'),
+    'CSS: tema claro del club (verde #277151, fondo claro, Barlow Condensed)');
 
   const classic = (await pub.req('GET', '/', null, { Host: 'localhost' })).text;
   ok(classic.includes('Liga de pádel por parejas'), 'otro dominio: portada clásica de la liga');
   ok(!classic.includes('KNB PADEL CLUB'), 'otro dominio: sin portal KNB');
+  ok(classic.includes('href="/liga"') && classic.includes('href="/normativa"'), 'otro dominio: navegación de la liga intacta');
+  ok(!classic.includes('Barlow+Condensed'), 'otro dominio: sin la fuente del portal');
 
   // --- 3. fase en curso: el portal y el hub muestran la ronda actual ---
   srun("INSERT OR REPLACE INTO settings(key, value) VALUES('phase_r2_label', 'Ronda 2')");
