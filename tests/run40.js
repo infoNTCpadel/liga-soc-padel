@@ -82,14 +82,19 @@ const srv = spawn('node', ['src/index.js'], { cwd: dir, env, stdio: 'ignore' });
     && !portal.includes('href="/playoffs"') && !portal.includes('href="/eventos"') && !portal.includes('class="burger"'),
     'portal: sin navegación de la liga arriba, solo las tarjetas');
   ok(portal.includes('Barlow+Condensed'), 'portal: tipografía del club (Barlow Condensed)');
+  ok(!portal.includes('class="topbar"') && !portal.includes('class="footer"'),
+    'portal: sin barra superior ni pie de la liga');
+  ok(!portal.includes('Liga de pádel por parejas'), 'portal: sin el pie de la liga');
   const css = (await pub.req('GET', '/style.css')).text;
   ok(css.includes('#277151') && css.includes('body.portal-page') && css.includes('Barlow Condensed'),
     'CSS: tema claro del club (verde #277151, fondo claro, Barlow Condensed)');
+  ok(css.includes('body.portal-page { background: #fff'), 'CSS: fondo blanco en el portal');
 
   const classic = (await pub.req('GET', '/', null, { Host: 'localhost' })).text;
   ok(classic.includes('Liga de pádel por parejas'), 'otro dominio: portada clásica de la liga');
   ok(!classic.includes('KNB PADEL CLUB'), 'otro dominio: sin portal KNB');
   ok(classic.includes('href="/liga"') && classic.includes('href="/normativa"'), 'otro dominio: navegación de la liga intacta');
+  ok(classic.includes('class="topbar"') && classic.includes('class="footer"'), 'otro dominio: barra superior y pie intactos');
   ok(!classic.includes('Barlow+Condensed'), 'otro dominio: sin la fuente del portal');
 
   // --- 3. fase en curso: el portal y el hub muestran la ronda actual ---

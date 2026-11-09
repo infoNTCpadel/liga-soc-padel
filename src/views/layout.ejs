@@ -8,13 +8,13 @@
 <% if (locals.portalPage) { %><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&display=swap"><% } %>
 </head>
 <body<% if (locals.portalPage) { %> class="portal-page"<% } %>>
+<% if (!locals.portalPage) { %>
 <header class="topbar">
   <div class="wrap topbar-in">
     <a class="brand" href="/">
       <span class="brand-ball">◉</span>
       <span><strong><%= clubName %></strong><small><%= seasonName %></small></span>
     </a>
-    <% if (!locals.hideNav) { %>
     <nav class="nav">
       <% if (locals.isMiddayHost) { %>
       <a href="/mediodia" class="<%= section==='midday' && !locals.sub ? 'on' : '' %>">Inicio</a>
@@ -36,7 +36,6 @@
       <a href="/eventos" class="<%= section==='public' && locals.sub==='eventos' ? 'on' : '' %>">Eventos</a>
       <% } %>
     </nav>
-    <% } %>
     <div class="userbox">
       <% if (isAdmin) { %>
         <a class="btn small" href="/admin">Panel</a>
@@ -58,9 +57,10 @@
         <a class="btn small" href="/acceso">Acceso parejas</a>
       <% } %>
     </div>
-    <% if (!locals.hideNav) { %><button class="burger" onclick="document.querySelector('.nav').classList.toggle('open')" aria-label="Menú">☰</button><% } %>
+    <button class="burger" onclick="document.querySelector('.nav').classList.toggle('open')" aria-label="Menú">☰</button>
   </div>
 </header>
+<% } %>
 
 <% if (section === 'admin') { %>
 <div class="adminbar"><div class="wrap adminbar-in">
@@ -139,8 +139,10 @@
 
 <main class="wrap"><%- body %></main>
 
+<% if (!locals.portalPage) { %>
 <footer class="footer"><div class="wrap">
   <p><%= clubName %> · <%= seasonName %> — Liga de pádel por parejas</p>
 </div></footer>
+<% } %>
 </body>
 </html>
