@@ -28,7 +28,7 @@ function validCategory(v) {
 // ---------------------------------------------------------------------------
 // Puntos de ranking por ronda (escala acortada el 2026-11-09 a petición de Mathius:
 // la diferencia 1º-2º era de 58 puntos en el grupo 1, demasiado grande).
-// Base por posición en el grupo 1, con -5 por cada grupo más abajo (igual para
+// Base por posición en el grupo 1, con -15 por cada grupo más abajo (igual para
 // todas las posiciones). 1º 200 · 2º 175 · 3º 155 · 4º 140 · 5º 130;
 // del 6º en adelante, -10 por posición. Mínimo 0.
 function roundPoints(groupNo, position) {
@@ -36,7 +36,7 @@ function roundPoints(groupNo, position) {
   if (position <= 0) return 0;
   const base = [200, 175, 155, 140, 130][position - 1] ??
     Math.max(0, 130 - (position - 5) * 10);
-  return Math.max(0, base - 5 * (n - 1));
+  return Math.max(0, base - 15 * (n - 1));
 }
 
 // ---------------------------------------------------------------------------

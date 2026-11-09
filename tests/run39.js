@@ -1,5 +1,5 @@
 // Escala de puntos de ranking por ronda (acortada 2026-11-09):
-// 1º 200 · 2º 175 · 3º 155 · 4º 140 · 5º 130 en el grupo 1, -5 por grupo más abajo.
+// 1º 200 · 2º 175 · 3º 155 · 4º 140 · 5º 130 en el grupo 1, -15 por grupo más abajo.
 const L = require('../src/lib/league');
 
 let pass = 0, fail = 0;
@@ -8,10 +8,10 @@ const eq = (a, b, n) => ok(a === b, n + ` (esperado ${b}, obtenido ${a})`);
 
 const exp = {
   1: [200, 175, 155, 140, 130],
-  2: [195, 170, 150, 135, 125],
-  3: [190, 165, 145, 130, 120],
-  4: [185, 160, 140, 125, 115],
-  5: [180, 155, 135, 120, 110],
+  2: [185, 160, 140, 125, 115],
+  3: [170, 145, 125, 110, 100],
+  4: [155, 130, 110, 95, 85],
+  5: [140, 115, 95, 80, 70],
 };
 for (const g of [1, 2, 3, 4, 5]) {
   for (let p = 1; p <= 5; p++) eq(L.roundPoints(g, p), exp[g][p - 1], `grupo ${g} posición ${p}`);
@@ -21,10 +21,10 @@ eq(L.roundPoints(1, 1) - L.roundPoints(1, 2), 25, '1º-2º en grupo 1 = 25 (ante
 eq(L.roundPoints(1, 2) - L.roundPoints(1, 3), 20, '2º-3º en grupo 1 = 20 (antes 46)');
 eq(L.roundPoints(1, 3) - L.roundPoints(1, 4), 15, '3º-4º en grupo 1 = 15 (antes 39)');
 eq(L.roundPoints(1, 4) - L.roundPoints(1, 5), 10, '4º-5º en grupo 1 = 10 (antes 3)');
-// Penalización por grupo: -5 uniforme para todas las posiciones
+// Penalización por grupo: -15 uniforme para todas las posiciones
 for (let p = 1; p <= 5; p++) {
-  eq(L.roundPoints(1, p) - L.roundPoints(2, p), 5, `grupo 1 → 2, posición ${p}: -5`);
-  eq(L.roundPoints(2, p) - L.roundPoints(5, p), 15, `grupo 2 → 5, posición ${p}: -15`);
+  eq(L.roundPoints(1, p) - L.roundPoints(2, p), 15, `grupo 1 → 2, posición ${p}: -15`);
+  eq(L.roundPoints(2, p) - L.roundPoints(5, p), 45, `grupo 2 → 5, posición ${p}: -45`);
 }
 // Extrapolación: 6º en adelante, -10 por posición; nunca negativo
 eq(L.roundPoints(1, 6), 120, '6º grupo 1 = 120');
