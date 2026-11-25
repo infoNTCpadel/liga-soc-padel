@@ -1,0 +1,84 @@
+<h1>Equipos federados — Equipos y capitanes</h1>
+<p class="small"><a href="/admin">← Panel</a> · <a href="/admin/equipos">Inscripciones</a> · <a href="/admin/equipos/ajustes">Ajustes de temporada</a></p>
+
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+
+<div class="card" style="max-width: 640px">
+  <h3>Nuevo equipo</h3>
+  <form method="post" action="/admin/equipos/equipos/nuevo">
+    <div class="row2">
+      <div class="field"><label>Nombre *</label><input type="text" name="name" required placeholder="Masculino A"></div>
+      <div class="field"><label>Categoría FCP *</label><input type="text" name="category" placeholder="2ª" required></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Modalidad</label>
+        <select name="modality"><option value="absoluto">Absoluto</option><option value="veteranos">Veteranos</option></select>
+      </div>
+      <div class="field"><label>Sexo</label>
+        <select name="sex"><option value="M">Masculino</option><option value="F">Femenino</option></select>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Grupo FCP</label><input type="text" name="fcp_group" placeholder="Barcelona · Vallès"></div>
+      <div class="field"><label>Dirección web (slug)</label><input type="text" name="slug" placeholder="opcional: masculino-a"></div>
+    </div>
+    <p><button class="btn" type="submit">Crear equipo</button></p>
+  </form>
+</div>
+
+<% for (const t of teams) { %>
+<div class="card">
+  <h3><%= t.name %> <%- t.active ? '<span class="badge ok">activo</span>' : '<span class="badge warn">inactivo</span>' %>
+    <span class="badge cat"><%= modalityName(t.modality) %></span> <span class="badge cat"><%= sexName(t.sex) %></span>
+    <% if (t.category) { %><span class="badge cat"><%= t.category %> categoría</span><% } %></h3>
+  <p class="small mut"><%= t.assigned %> jugador(es) asignado(s) · /equipos/<%= t.slug %><% if (t.fcp_group) { %> · Grupo FCP: <%= t.fcp_group %><% } %></p>
+  <p><strong>Capitanía:</strong>
+    <% if (t.captains.length) { %><%= t.captains.map(c => `${c.member ? c.member.name : c.member_no} (${c.role === 'capitan' ? 'capitán/a' : 'subcapitán/a'})`).join(' · ') %>
+    <% } else { %><span class="mut">sin capitanes</span><% } %></p>
+  <form method="post" action="/admin/equipos/equipos/<%= t.id %>/capitanes">
+    <div class="row2">
+      <div class="field"><label>Añadir capitán/a o subcapitán/a (nº de socio)</label><input type="text" name="member_no" placeholder="Nº de socio" required></div>
+      <div class="field"><label>Rol</label>
+        <select name="role"><option value="capitan">Capitán/a</option><option value="subcapitan">Subcapitán/a</option></select>
+      </div>
+    </div>
+    <p><button class="btn small" type="submit">Añadir a la capitanía</button></p>
+  </form>
+  <% for (const c of t.captains) { %>
+    <form method="post" action="/admin/equipos/equipos/<%= t.id %>/capitanes/quitar" style="display:inline">
+      <input type="hidden" name="member_no" value="<%= c.member_no %>">
+      <button class="btn small ghost" type="submit">Quitar <%= c.member ? c.member.name : c.member_no %> (<%= c.role === 'capitan' ? 'capitán/a' : 'subcapitán/a' %>)</button>
+    </form>
+  <% } %>
+  <details><summary>Editar equipo</summary>
+    <form method="post" action="/admin/equipos/equipos/<%= t.id %>/editar">
+      <div class="row2">
+        <div class="field"><label>Nombre</label><input type="text" name="name" value="<%= t.name %>" required></div>
+        <div class="field"><label>Categoría FCP</label><input type="text" name="category" value="<%= t.category %>"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Modalidad</label>
+          <select name="modality"><option value="absoluto" <%= t.modality === 'absoluto' ? 'selected' : '' %>>Absoluto</option><option value="veteranos" <%= t.modality === 'veteranos' ? 'selected' : '' %>>Veteranos</option></select>
+        </div>
+        <div class="field"><label>Sexo</label>
+          <select name="sex"><option value="M" <%= t.sex === 'M' ? 'selected' : '' %>>Masculino</option><option value="F" <%= t.sex === 'F' ? 'selected' : '' %>>Femenino</option></select>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Grupo FCP</label><input type="text" name="fcp_group" value="<%= t.fcp_group %>"></div>
+        <div class="field"><label>Dirección web (slug)</label><input type="text" name="slug" value="<%= t.slug %>"></div>
+      </div>
+      <p><button class="btn small" type="submit">Guardar cambios</button></p>
+    </form>
+  </details>
+  <p>
+    <form method="post" action="/admin/equipos/equipos/<%= t.id %>/activar" style="display:inline">
+      <input type="hidden" name="active" value="<%= t.active ? '0' : '1' %>">
+      <button class="btn small ghost" type="submit"><%= t.active ? 'Desactivar' : 'Activar' %></button>
+    </form>
+    <form method="post" action="/admin/equipos/equipos/<%= t.id %>/eliminar" style="display:inline" onsubmit="return confirm('¿Borrar este equipo? Solo se puede si no tiene inscripciones asociadas.')">
+      <button class="btn small danger" type="submit">Borrar</button>
+    </form>
+  </p>
+</div>
+<% } %>

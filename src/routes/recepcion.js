@@ -4,6 +4,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { db, getSetting, getReceptionHash } = require('../db');
 const L = require('../lib/league');
+const T = require('../lib/teams');
 
 const router = express.Router();
 
@@ -121,6 +122,29 @@ router.post('/pago', (req, res) => {
   }
   const f = req.body.f === 'todos' ? 'todos' : 'pendientes';
   res.redirect('/recepcion/cobros?f=' + f + (req.body.q ? '&q=' + encodeURIComponent(req.body.q) : ''));
+});
+
+// ---- Equipos federados: marcar cuota pagada y licencia tramitada ----
+// Solo control de cobros: recepción no asigna equipos ni cambia estados.
+router.get('/equipos', (req, res) => {
+  const f = req.query.f === 'todos' ? 'todos' : 'pendientes';
+  const q = (req.query.q || '').trim();
+  let regs = T.listRegistrations({ f: 'todos', q });
+  if (f === 'pendientes') regs = regs.filter(r => !r.fee_paid || !r.licence_done);
+  res.renderPage('recepcion/equipos', {
+    regs, f, q, counts: T.counts(), settings: T.getSettings(),
+    statusName: T.statusName, eur: T.eur, licenceModes: T.LICENCE_MODES, feeModes: T.FEE_MODES,
+  });
+});
+router.post('/equipos/:id/pago', (req, res) => {
+  T.setFeePaid(req.params.id, req.body.paid === '1');
+  const f = req.body.f === 'todos' ? 'todos' : 'pendientes';
+  res.redirect('/recepcion/equipos?f=' + f + (req.body.q ? '&q=' + encodeURIComponent(req.body.q) : ''));
+});
+router.post('/equipos/:id/licencia', (req, res) => {
+  T.setLicence(req.params.id, req.body.done === '1');
+  const f = req.body.f === 'todos' ? 'todos' : 'pendientes';
+  res.redirect('/recepcion/equipos?f=' + f + (req.body.q ? '&q=' + encodeURIComponent(req.body.q) : ''));
 });
 
 module.exports = router;

@@ -1,0 +1,100 @@
+<h1>Equipos federados — Inscripciones</h1>
+<p class="small"><a href="/admin">← Panel</a> · <a href="/admin/equipos/equipos">Equipos y capitanes</a> · <a href="/admin/equipos/ajustes">Ajustes de temporada</a></p>
+
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+
+<div class="grid c3">
+  <div class="stat"><b><%= counts.total %></b><span>inscripciones · temporada <%= settings.season %></span></div>
+  <div class="stat"><b><%= counts.pendientes %></b><span>pendientes de asignar</span></div>
+  <div class="stat"><b><%= counts.asignados %></b><span>asignados</span></div>
+  <div class="stat"><b><%= counts.sinLicencia %></b><span>sin licencia tramitada</span></div>
+  <div class="stat"><b><%= counts.sinPagar %></b><span>sin cuota pagada</span></div>
+  <div class="stat"><b><%= counts.listaEspera %></b><span>en lista de espera</span></div>
+</div>
+
+<p><span class="badge <%= open ? 'ok' : 'warn' %>"><%= open ? 'Inscripción abierta' : 'Inscripción cerrada' %></span>
+  <span class="mut small">Cuota: <%= eur(settings.fee_one_cents) %> (1 equipo) · <%= eur(settings.fee_two_cents) %> (2 equipos) · Licencia: <%= eur(settings.licence_price_cents) %><% if (settings.pay_deadline) { %> · límite de pago: <%= fmtDate(settings.pay_deadline) %><% } %></span></p>
+
+<form method="get" action="/admin/equipos" class="card">
+  <div class="row2">
+    <div class="field"><label>Filtro</label>
+      <select name="f">
+        <option value="todos" <%= f === 'todos' ? 'selected' : '' %>>Todos</option>
+        <option value="pendientes" <%= f === 'pendientes' ? 'selected' : '' %>>Pendientes de asignar</option>
+        <option value="sin_equipo" <%= f === 'sin_equipo' ? 'selected' : '' %>>Pendientes sin equipo</option>
+        <option value="sin_licencia" <%= f === 'sin_licencia' ? 'selected' : '' %>>Sin licencia tramitada</option>
+        <option value="sin_pagar" <%= f === 'sin_pagar' ? 'selected' : '' %>>Sin cuota pagada</option>
+        <option value="asignados" <%= f === 'asignados' ? 'selected' : '' %>>Asignados</option>
+        <option value="lista_espera" <%= f === 'lista_espera' ? 'selected' : '' %>>Lista de espera</option>
+      </select>
+    </div>
+    <div class="field"><label>Modalidad</label>
+      <select name="modality">
+        <option value="">Todas</option>
+        <option value="absoluto" <%= modality === 'absoluto' ? 'selected' : '' %>>Absoluto</option>
+        <option value="veteranos" <%= modality === 'veteranos' ? 'selected' : '' %>>Veteranos</option>
+      </select>
+    </div>
+  </div>
+  <div class="row2">
+    <div class="field"><label>Equipo</label>
+      <select name="team">
+        <option value="">Todos</option>
+        <% for (const t of teams) { %><option value="<%= t.id %>" <%= String(team) === String(t.id) ? 'selected' : '' %>><%= t.name %></option><% } %>
+      </select>
+    </div>
+    <div class="field"><label>Buscar (nombre, nº socio o móvil)</label><input type="text" name="q" value="<%= q %>"></div>
+  </div>
+  <p><button class="btn small" type="submit">Filtrar</button>
+  <a class="btn small ghost" href="/admin/equipos/csv?f=<%= f %>&modality=<%= modality %>&team=<%= team %>&q=<%= encodeURIComponent(q) %>">Exportar CSV</a></p>
+</form>
+
+<% if (!regs.length) { %><div class="card"><p class="mut">No hay inscripciones con esos filtros.</p></div><% } else { %>
+<div class="card"><div class="tblwrap"><table class="tbl">
+<thead><tr><th>Jugador/a</th><th>Socio</th><th>Modalidad · Nivel</th><th>Equipo deseado</th><th>Licencia</th><th>Cuota</th><th>Estado</th><th>Reparto</th></tr></thead>
+<tbody>
+<% for (const r of regs) { %>
+<tr>
+  <td><strong><%= r.name %></strong><br><span class="small mut"><%= r.email || '' %><%= r.comments ? ` · «${r.comments}»` : '' %></span>
+    <% if (wa(r)) { %><br><a class="small" href="<%= wa(r) %>" target="_blank" rel="noopener">WhatsApp →</a><% } %></td>
+  <td><%= r.member_no %><br><span class="small mut"><%= r.phone %></span></td>
+  <td><%= modalityName(r.modality) %><br><span class="small mut">Nivel <%= r.level == null ? '—' : r.level %></span></td>
+  <td><%= r.teamName || 'Sin equipo' %><%= r.secondTeamName ? `<br><span class="small mut">2º: ${r.secondTeamName}</span>` : '' %>
+    <% if (r.assignedName) { %><br><strong>→ <%= r.assignedName %></strong><%= r.assignedSecondName ? `<br><span class="small">2º: ${r.assignedSecondName}</span>` : '' %><% } %></td>
+  <td><span class="small"><%= licenceModes[r.licence_mode] || r.licence_mode %></span><br>
+    <form method="post" action="/admin/equipos/inscripcion/<%= r.id %>/licencia" style="display:inline">
+      <input type="hidden" name="done" value="<%= r.licence_done ? '0' : '1' %>">
+      <button class="btn small <%= r.licence_done ? '' : 'ghost' %>" type="submit"><%= r.licence_done ? '✓ Tramitada' : 'Marcar tramitada' %></button>
+    </form></td>
+  <td><span class="small"><%= feeModes[r.fee_mode] || r.fee_mode %> · <%= eur(r.feeDue) %></span><br>
+    <form method="post" action="/admin/equipos/inscripcion/<%= r.id %>/cuota" style="display:inline">
+      <input type="hidden" name="paid" value="<%= r.fee_paid ? '0' : '1' %>">
+      <button class="btn small <%= r.fee_paid ? '' : 'ghost' %>" type="submit"><%= r.fee_paid ? '✓ Pagada' : 'Marcar pagada' %></button>
+    </form></td>
+  <td><span class="badge <%= r.status === 'asignado' ? 'ok' : r.status === 'rechazado' ? 'bad' : 'warn' %>"><%= statusName(r.status) %></span>
+    <form method="post" action="/admin/equipos/inscripcion/<%= r.id %>/estado">
+      <select name="status">
+        <% for (const s of ['pendiente', 'asignado', 'lista_espera', 'rechazado']) { %><option value="<%= s %>" <%= r.status === s ? 'selected' : '' %>><%= statusName(s) %></option><% } %>
+      </select>
+      <button class="btn small ghost" type="submit">Cambiar</button>
+    </form></td>
+  <td>
+    <form method="post" action="/admin/equipos/inscripcion/<%= r.id %>/asignar">
+      <select name="team_id">
+        <option value="">— Sin asignar —</option>
+        <% for (const t of teams) { if (!t.active) continue; %><option value="<%= t.id %>" <%= r.assigned_team_id === t.id ? 'selected' : '' %>><%= t.name %></option><% } %>
+      </select>
+      <select name="second_team_id">
+        <option value="">— Sin 2º equipo —</option>
+        <% for (const t of teams) { if (!t.active) continue; %><option value="<%= t.id %>" <%= r.assigned_second_team_id === t.id ? 'selected' : '' %>><%= t.name %></option><% } %>
+      </select>
+      <button class="btn small" type="submit">Asignar</button>
+    </form>
+    <form method="post" action="/admin/equipos/inscripcion/<%= r.id %>/eliminar" onsubmit="return confirm('¿Eliminar esta inscripción?')">
+      <button class="btn small danger" type="submit">Eliminar</button>
+    </form>
+  </td>
+</tr>
+<% } %>
+</tbody></table></div></div>
+<% } %>

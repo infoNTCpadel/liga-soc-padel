@@ -1,0 +1,33 @@
+<p class="small"><a href="/">← Inicio</a></p>
+<h1>Equipos Federados KNB</h1>
+<p class="mut">Los equipos del club en la Lliga Catalana de la Federació Catalana de Pàdel (FCP): absolutos y veteranos, masculinos y femeninos.</p>
+
+<div class="card">
+  <% if (open) { %>
+    <p><span class="badge ok">Inscripción abierta</span>
+      <% if (settings.close_date) { %> · cierra el <strong><%= fmtDate(settings.close_date) %></strong><% } %>
+      <% if (settings.pay_deadline) { %> · cuota antes del <strong><%= fmtDate(settings.pay_deadline) %></strong><% } %></p>
+    <p>Cuota de inscripción: <strong><%= eur(settings.fee_one_cents) %></strong> (1 equipo) · <strong><%= eur(settings.fee_two_cents) %></strong> (2 equipos). Licencia FCP: <strong><%= eur(settings.licence_price_cents) %></strong> aprox.</p>
+    <p><a class="btn" href="/equipos/inscripcion">Inscribirme en los equipos →</a></p>
+  <% } else { %>
+    <p><span class="badge warn">Inscripción cerrada</span> <span class="mut">Ahora mismo no se admiten inscripciones nuevas. Si quieres jugar, apúntate a la lista de espera desde el formulario.</span></p>
+    <p><a class="btn ghost" href="/equipos/inscripcion">Lista de espera →</a></p>
+  <% } %>
+  <p class="small"><a href="https://www.fcpadel.cat" target="_blank" rel="noopener">Ver calendarios y resultados en la FCP →</a></p>
+</div>
+
+<% for (const mod of Object.keys(byModality)) { %>
+  <h2><%= modalityName(mod) %></h2>
+  <div class="grid c3">
+    <% for (const t of byModality[mod]) { %>
+      <div class="card">
+        <h3 style="margin-top:0"><a href="/equipos/<%= t.slug %>"><%= t.name %></a></h3>
+        <p><span class="badge cat"><%= sexName(t.sex) %></span>
+          <% if (t.category) { %><span class="badge cat"><%= t.category %> categoría</span><% } %></p>
+        <p class="small mut"><%= t.assigned %> jugador(es) asignado(s)<%= t.fcp_group ? ` · Grupo FCP: ${t.fcp_group}` : '' %></p>
+        <p><a class="btn small ghost" href="/equipos/<%= t.slug %>">Ver equipo →</a></p>
+      </div>
+    <% } %>
+  </div>
+<% } %>
+<% if (!Object.keys(byModality).length) { %><div class="card"><p class="mut">Todavía no hay equipos activos.</p></div><% } %>

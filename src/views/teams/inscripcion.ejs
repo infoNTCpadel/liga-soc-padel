@@ -1,0 +1,106 @@
+<p class="small"><a href="/equipos">← Equipos federados</a></p>
+<h1>Inscripción — Equipos Federados KNB</h1>
+
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+
+<% if (ok) { %>
+<div class="card">
+  <h3>¡Inscripción recibida! 🎾</h3>
+  <% if (waitlist) { %>
+    <p>La inscripción estaba cerrada: quedas en la <strong>lista de espera</strong>. Te avisaremos si se abre una plaza.</p>
+  <% } else { %>
+    <p>Tu inscripción está registrada como <strong>pendiente de asignar</strong>. El club te confirmará tu equipo. La cuota y la licencia se gestionan en recepción.</p>
+  <% } %>
+  <p><a class="btn small" href="/equipos">Ver los equipos</a></p>
+</div>
+<% } else { %>
+<div class="card" style="max-width: 640px">
+  <% if (!open) { %><div class="alert info">La inscripción está cerrada: tu solicitud entrará en la <strong>lista de espera</strong>.</div><% } %>
+  <p class="small mut">Para inscribirte tienes que ser socio/a del club. Escribe tu móvil y tu nº de socio y pulsa «Reconocerme»: si coinciden con tu ficha, rellenamos tu nombre y tu nivel solos. Cuota: <strong><%= eur(settings.fee_one_cents) %></strong> (1 equipo) · <strong><%= eur(settings.fee_two_cents) %></strong> (2 equipos)<% if (settings.pay_deadline) { %> · antes del <%= fmtDate(settings.pay_deadline) %><% } %>.</p>
+  <% const fv = (n) => (form && form[n] != null ? form[n] : ''); %>
+  <% const fsel = (n, v) => (form && String(form[n]) === String(v) ? 'selected' : ''); %>
+  <form method="post" action="/equipos/inscripcion">
+    <div class="row2">
+      <div class="field"><label>Nombre y apellidos *</label><input type="text" name="name" value="<%= fv('name') %>" required></div>
+      <div class="field"><label>Nº de socio *</label><input type="text" name="member_no" value="<%= fv('member_no') %>" required></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Teléfono móvil *</label><input type="tel" name="phone" value="<%= fv('phone') %>" required></div>
+      <div class="field"><label>Email</label><input type="email" name="email" value="<%= fv('email') %>"></div>
+    </div>
+    <p class="small"><button type="button" class="btn small ghost" id="rec-btn">🔍 Reconocerme con mi móvil</button> <span id="rec-msg"></span></p>
+    <div class="row2">
+      <div class="field"><label>Modalidad *</label>
+        <select name="modality" id="f-modality" required>
+          <option value="absoluto" <%= fsel('modality', 'absoluto') || (!form ? 'selected' : '') %>>Absoluto (fin de semana)</option>
+          <option value="veteranos" <%= fsel('modality', 'veteranos') %>>Veteranos/as (lunes a viernes o domingo)</option>
+        </select>
+      </div>
+      <div class="field"><label>Nivel (1–7) *</label><input type="number" name="level" min="1" max="7" step="0.5" value="<%= fv('level') %>" required></div>
+    </div>
+    <div class="field"><label>Equipo que quieres jugar</label>
+      <select name="team_id" id="f-team">
+        <option value="">Sin equipo asignado (soy nuevo/a)</option>
+        <% for (const t of teams) { %><option value="<%= t.id %>" data-mod="<%= t.modality %>" <%= fsel('team_id', t.id) %>><%= t.name %><% if (t.category) { %> (<%= t.category %> categoría)<% } %> — <%= modalityName(t.modality) %></option><% } %>
+      </select>
+    </div>
+    <div class="field"><label>Segundo equipo (opcional)</label>
+      <select name="second_team_id" id="f-team2">
+        <option value="">Ninguno</option>
+        <% for (const t of teams) { %><option value="<%= t.id %>" data-mod="<%= t.modality %>" <%= fsel('second_team_id', t.id) %>><%= t.name %><% if (t.category) { %> (<%= t.category %> categoría)<% } %> — <%= modalityName(t.modality) %></option><% } %>
+      </select>
+      <span class="hint">Si juegas en 2 equipos, la cuota es de <%= eur(settings.fee_two_cents) %>.</span>
+    </div>
+    <div class="field"><label>¿Cómo tramitarás la licencia? *</label>
+      <select name="licence_mode" required>
+        <% for (const [k, v] of Object.entries(licenceModes)) { %><option value="<%= k %>" <%= fsel('licence_mode', k) %>><%= v %></option><% } %>
+      </select>
+      <span class="hint">Licencia FCP: <%= eur(settings.licence_price_cents) %> aprox.</span>
+    </div>
+    <div class="field"><label>¿Cómo pagarás la cuota? *</label>
+      <select name="fee_mode" required>
+        <% for (const [k, v] of Object.entries(feeModes)) { %><option value="<%= k %>" <%= fsel('fee_mode', k) %>><%= v %></option><% } %>
+      </select>
+    </div>
+    <div class="field"><label>¿Algo que comentar?</label><textarea name="comments" rows="3"><%= fv('comments') %></textarea></div>
+    <div class="field"><label class="small"><input type="checkbox" name="consent" value="1" <%= fv('consent') === '1' ? 'checked' : '' %> required> Acepto que el club use mis datos para gestionar mi inscripción en los equipos federados. *</label></div>
+    <p><button class="btn" type="submit"><%= open ? 'Enviar inscripción' : 'Apuntarme a la lista de espera' %></button></p>
+  </form>
+</div>
+<script>
+// Reconocimiento: móvil + nº de socio coincidentes con la ficha del club.
+document.getElementById('rec-btn').addEventListener('click', async () => {
+  const phone = document.querySelector('input[name=phone]').value;
+  const memberNo = document.querySelector('input[name=member_no]').value;
+  const msg = document.getElementById('rec-msg');
+  msg.textContent = 'Buscando…';
+  try {
+    const r = await fetch('/equipos/api/reconocer?phone=' + encodeURIComponent(phone) + '&member_no=' + encodeURIComponent(memberNo));
+    const j = await r.json();
+    if (j.found) {
+      if (j.name) document.querySelector('input[name=name]').value = j.name;
+      if (j.level != null) document.querySelector('input[name=level]').value = j.level;
+      msg.textContent = '✓ Socio/a reconocido/a.';
+    } else {
+      msg.textContent = 'No coincide ningún socio con ese móvil y nº de socio.';
+    }
+  } catch (e) { msg.textContent = 'No se pudo comprobar. Revisa los datos.'; }
+});
+// El desplegable de equipos solo muestra los de la modalidad elegida.
+(function () {
+  const mod = document.getElementById('f-modality');
+  const filter = () => {
+    for (const id of ['f-team', 'f-team2']) {
+      const sel = document.getElementById(id);
+      for (const o of sel.options) {
+        if (!o.value) continue;
+        o.hidden = o.dataset.mod !== mod.value;
+        if (o.hidden && o.selected) sel.value = '';
+      }
+    }
+  };
+  mod.addEventListener('change', filter);
+  filter();
+})();
+</script>
+<% } %>

@@ -34,6 +34,7 @@
       <a href="/ranking">Ranking</a>
       <a href="/playoffs">Playoffs</a>
       <a href="/eventos" class="<%= section==='public' && locals.sub==='eventos' ? 'on' : '' %>">Eventos</a>
+      <a href="/equipos" class="<%= section==='public' && locals.sub==='equipos' ? 'on' : '' %>">Equipos</a>
       <% } %>
     </nav>
     <div class="userbox">
@@ -97,6 +98,7 @@
         <a href="/admin/reservas/socios">Socios</a>
         <a href="/admin/reservas/bloqueos">Bloqueos</a>
         <a href="/admin/reservas/config">Configuración</a>
+        <a href="/admin/equipos">Equipos federados</a>
         <a href="/recepcion">Recepción</a>
       </div>
     </details>
@@ -131,6 +133,7 @@
   <nav class="anav">
     <a href="/recepcion">Verificación de socios</a>
     <a href="/recepcion/cobros">Cobros</a>
+    <a href="/recepcion/equipos">Equipos</a>
     <a href="/recepcion/reservas">Reservas</a>
   </nav>
   <form action="/recepcion/logout" method="post" style="display:inline;margin-left:auto"><button class="btn small ghost" type="submit">Salir</button></form>

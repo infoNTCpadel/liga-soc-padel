@@ -71,7 +71,7 @@ const srv = spawn('node', ['src/index.js'], { cwd: dir, env, stdio: 'ignore' });
   const portal = (await pub.req('GET', '/', null, { Host: '127.0.0.1' })).text;
   ok(portal.includes('KNB PADEL CLUB'), 'portal: marca KNB');
   ok(portal.includes('Torneos KNB') && portal.includes('/torneos'), 'portal: tarjeta Torneos con enlace al hub');
-  ok(portal.includes('Equipos Federados KNB') && portal.includes('Próximamente'), 'portal: tarjeta Equipos como Próximamente');
+  ok(portal.includes('Equipos Federados KNB') && portal.includes('href="/equipos"') && !portal.includes('Próximamente'), 'portal: tarjeta Equipos enlaza a /equipos (ya no Próximamente)');
   ok(portal.includes('fcpadel.cat'), 'portal: Equipos enlaza a la FCP');
   ok(portal.includes('Academia de Pádel') && portal.includes('https://academia.kanbesport.com'), 'portal: Academia enlaza a academia.kanbesport.com');
   ok(portal.includes('Av. de la Pau 52') && portal.includes('info@kanbesport.com') && portal.includes('@kanbesport'), 'portal: pie con los datos de kanbesport.com');

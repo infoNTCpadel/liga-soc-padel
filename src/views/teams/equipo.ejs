@@ -1,0 +1,29 @@
+<p class="small"><a href="/equipos">← Equipos federados</a></p>
+<h1><%= team.name %></h1>
+<p><span class="badge cat"><%= modalityName(team.modality) %></span>
+  <span class="badge cat"><%= sexName(team.sex) %></span>
+  <% if (team.category) { %><span class="badge cat"><%= team.category %> categoría</span><% } %>
+  <% if (team.fcp_group) { %><span class="badge cat">Grupo FCP: <%= team.fcp_group %></span><% } %></p>
+
+<div class="card">
+  <h3>Capitanía</h3>
+  <% if (captains.length) { %>
+    <ul>
+      <% for (const c of captains) { %>
+        <li><strong><%= c.member ? c.member.name : c.member_no %></strong> — <%= c.role === 'capitan' ? 'Capitán/a' : 'Subcapitán/a' %></li>
+      <% } %>
+    </ul>
+  <% } else { %><p class="mut">Sin capitanes asignados todavía.</p><% } %>
+</div>
+
+<div class="card">
+  <h3>Plantilla (<%= players.length %>)</h3>
+  <% if (players.length) { %>
+    <div class="tblwrap"><table class="tbl"><thead><tr><th>Jugador/a</th><th>Nivel</th></tr></thead><tbody>
+      <% for (const p of players) { %><tr><td><%= p.name %></td><td><%= p.level == null ? '—' : p.level %></td></tr><% } %>
+    </tbody></table></div>
+  <% } else { %><p class="mut">Todavía no hay jugadores asignados a este equipo.</p><% } %>
+</div>
+
+<p><a class="btn ghost" href="https://www.fcpadel.cat" target="_blank" rel="noopener">Ver calendarios y resultados en la FCP →</a>
+<% if (open) { %> <a class="btn" href="/equipos/inscripcion">Inscribirme →</a><% } %></p>

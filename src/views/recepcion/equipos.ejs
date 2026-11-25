@@ -1,0 +1,44 @@
+<h1>Equipos federados — Cobros y licencias</h1>
+<p class="small"><a href="/recepcion">← Recepción</a></p>
+
+<div class="grid c3">
+  <div class="stat"><b><%= counts.total %></b><span>inscripciones · temporada <%= settings.season %></span></div>
+  <div class="stat"><b><%= counts.sinPagar %></b><span>sin cuota pagada</span></div>
+  <div class="stat"><b><%= counts.sinLicencia %></b><span>sin licencia tramitada</span></div>
+</div>
+
+<p>
+  <a class="btn small <%= f === 'pendientes' ? '' : 'ghost' %>" href="/recepcion/equipos?f=pendientes">Pendientes</a>
+  <a class="btn small <%= f === 'todos' ? '' : 'ghost' %>" href="/recepcion/equipos?f=todos">Todos</a>
+</p>
+<form method="get" action="/recepcion/equipos" class="card">
+  <input type="hidden" name="f" value="<%= f %>">
+  <div class="field"><label>Buscar (nombre, nº socio o móvil)</label><input type="text" name="q" value="<%= q %>"></div>
+  <p><button class="btn small" type="submit">Buscar</button></p>
+</form>
+
+<% if (!regs.length) { %><div class="card"><p class="mut">Nada pendiente por aquí.</p></div><% } else { %>
+<div class="card"><div class="tblwrap"><table class="tbl">
+<thead><tr><th>Jugador/a</th><th>Socio</th><th>Equipo</th><th>Licencia</th><th>Cuota</th></tr></thead>
+<tbody>
+<% for (const r of regs) { %>
+<tr>
+  <td><strong><%= r.name %></strong><br><span class="small mut"><%= r.email || '' %></span></td>
+  <td><%= r.member_no %><br><span class="small mut"><%= r.phone %></span></td>
+  <td><%= r.assignedName || r.teamName || 'Sin equipo' %><br><span class="small mut"><%= statusName(r.status) %></span></td>
+  <td><span class="small"><%= licenceModes[r.licence_mode] || r.licence_mode %></span><br>
+    <form method="post" action="/recepcion/equipos/<%= r.id %>/licencia" style="display:inline">
+      <input type="hidden" name="done" value="<%= r.licence_done ? '0' : '1' %>">
+      <input type="hidden" name="f" value="<%= f %>"><input type="hidden" name="q" value="<%= q %>">
+      <button class="btn small <%= r.licence_done ? '' : 'ghost' %>" type="submit"><%= r.licence_done ? '✓ Tramitada' : 'Marcar tramitada' %></button>
+    </form></td>
+  <td><span class="small"><%= feeModes[r.fee_mode] || r.fee_mode %> · <%= eur(r.feeDue) %></span><br>
+    <form method="post" action="/recepcion/equipos/<%= r.id %>/pago" style="display:inline">
+      <input type="hidden" name="paid" value="<%= r.fee_paid ? '0' : '1' %>">
+      <input type="hidden" name="f" value="<%= f %>"><input type="hidden" name="q" value="<%= q %>">
+      <button class="btn small <%= r.fee_paid ? '' : 'ghost' %>" type="submit"><%= r.fee_paid ? '✓ Pagada' : 'Marcar pagada' %></button>
+    </form></td>
+</tr>
+<% } %>
+</tbody></table></div></div>
+<% } %>

@@ -1,0 +1,26 @@
+<h1>Equipos federados — Ajustes de temporada</h1>
+<p class="small"><a href="/admin">← Panel</a> · <a href="/admin/equipos">Inscripciones</a> · <a href="/admin/equipos/equipos">Equipos y capitanes</a></p>
+
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+
+<div class="card" style="max-width: 640px">
+  <form method="post" action="/admin/equipos/ajustes">
+    <div class="field"><label>Temporada</label><input type="text" name="season" value="<%= settings.season %>" required>
+      <span class="hint">Las inscripciones se guardan por temporada: al cambiarla, los socios tendrán que inscribirse de nuevo.</span></div>
+    <div class="field"><label><input type="checkbox" name="inscription_open" value="1" <%= settings.inscription_open === '1' ? 'checked' : '' %>> Inscripción abierta</label>
+      <span class="hint">Si está cerrada, las solicitudes nuevas entran en lista de espera.</span></div>
+    <div class="row2">
+      <div class="field"><label>Apertura de inscripción</label><input type="date" name="open_date" value="<%= settings.open_date %>"></div>
+      <div class="field"><label>Cierre de inscripción</label><input type="date" name="close_date" value="<%= settings.close_date %>"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Cuota — 1 equipo (€)</label><input type="text" name="fee_one" value="<%= (Number(settings.fee_one_cents) / 100).toFixed(2).replace('.', ',') %>" required></div>
+      <div class="field"><label>Cuota — 2 equipos (€)</label><input type="text" name="fee_two" value="<%= (Number(settings.fee_two_cents) / 100).toFixed(2).replace('.', ',') %>" required></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Licencia FCP (€ aprox.)</label><input type="text" name="licence_price" value="<%= (Number(settings.licence_price_cents) / 100).toFixed(2).replace('.', ',') %>" required></div>
+      <div class="field"><label>Fecha límite de pago de la cuota</label><input type="date" name="pay_deadline" value="<%= settings.pay_deadline %>"></div>
+    </div>
+    <p><button class="btn" type="submit">Guardar ajustes</button></p>
+  </form>
+</div>
