@@ -30,6 +30,7 @@
       <a href="/liga">Liga</a>
       <% if (locals.isBookingHost) { %>
       <a href="/reservar" class="<%= section==='public' && locals.sub==='reservar' ? 'on' : '' %>">Reservar pista</a>
+      <% if (locals.partidosPublic || locals.isAdmin) { %><a href="/partidos" class="<%= section==='public' && locals.sub==='partidos' ? 'on' : '' %>">Partidos abiertos</a><% } %>
       <% } %>
       <a href="/ranking">Ranking</a>
       <a href="/playoffs">Playoffs</a>

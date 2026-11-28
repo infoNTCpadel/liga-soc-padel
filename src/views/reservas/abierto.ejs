@@ -8,7 +8,7 @@
     <% if (range) { %><span class="mut"> · Nivel <%= range %></span><% } %>
   </p>
   <p class="mut">Titular: <strong><%= booker ? booker.name : b.titular_name %></strong></p>
-  <p style="margin-top:1em"><a class="btn ghost small" href="/reservar?date=<%= b.date %>">← Volver a la parrilla</a></p>
+  <p style="margin-top:1em"><% if (from === 'partidos') { %><a class="btn ghost small" href="/partidos">← Volver a partidos abiertos</a><% } else { %><a class="btn ghost small" href="/reservar?date=<%= b.date %>">← Volver a la parrilla</a><% } %></p>
 </div>
 <% } else { %>
 <div class="card">
@@ -35,11 +35,17 @@
     <a class="btn" href="/reservar/entrar?next=<%= encodeURIComponent('/reservar/abierto/' + b.id) %>&join=1">Entrar para apuntarme</a>
   <% } else if (already) { %>
     <p class="mut">Ya estás apuntado en este partido.</p>
+    <% if (partidosPublic) { %>
+    <form method="post" action="/reservar/abierto/<%= b.id %>/salir" onsubmit="return confirm('¿Salir de este partido? La plaza volverá a quedar libre.')" style="display:inline">
+      <input type="hidden" name="from" value="<%= from || '' %>">
+      <button class="btn small ghost" type="submit">Salir del partido</button>
+    </form>
+    <% } %>
   <% } else { %>
     <form method="post" action="/reservar/abierto/<%= b.id %>/unirse">
       <button class="btn" type="submit">Apuntarme (<%= b.open_spots %> <%= b.open_spots === 1 ? 'plaza' : 'plazas' %>)</button>
     </form>
   <% } %>
-  <p style="margin-top:1em"><a class="btn ghost small" href="/reservar?date=<%= b.date %>">← Volver a la parrilla</a></p>
+  <p style="margin-top:1em"><% if (from === 'partidos') { %><a class="btn ghost small" href="/partidos">← Volver a partidos abiertos</a><% } else { %><a class="btn ghost small" href="/reservar?date=<%= b.date %>">← Volver a la parrilla</a><% } %></p>
 </div>
 <% } %>

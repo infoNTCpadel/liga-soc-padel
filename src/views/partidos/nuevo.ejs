@@ -1,0 +1,90 @@
+<style>
+.prow{position:relative}
+.plist{position:absolute;z-index:30;left:0;right:0;background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:8px;max-height:11em;overflow:auto;box-shadow:0 8px 20px rgba(0,0,0,.35)}
+.plist>div{padding:.45em .6em;cursor:pointer}
+.plist>div:hover{background:#2b351f}
+.pill{display:inline-block;background:#2b351f;border:1px solid var(--lime);color:var(--lime);border-radius:999px;padding:0 .55em;font-size:.85em;margin-right:.3em}
+.pill.inv{background:#3a2f14;border-color:var(--amber);color:var(--amber)}
+</style>
+<h1>Crear partido abierto</h1>
+<p class="mut">Reserva la pista y publica el partido: otros socios de tu nivel (±1) podrán apuntarse a las plazas que dejes libres.</p>
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+<div class="card">
+  <form method="get" action="/partidos/nuevo" style="display:flex;gap:.6em;flex-wrap:wrap;align-items:flex-end">
+    <div class="field"><label>Día</label><input type="date" name="date" value="<%= date %>" required></div>
+    <div class="field"><label>Pista</label>
+      <select name="court_id"><% for (const c of courts) { %><option value="<%= c.id %>" <%= court && c.id === court.id ? 'selected' : '' %>><%= c.name %></option><% } %></select>
+    </div>
+    <button class="btn small ghost" type="submit">Ver horas libres</button>
+  </form>
+</div>
+<% if (court && starts.length) { %>
+<div class="card">
+  <form method="post" action="/partidos/nuevo">
+    <input type="hidden" name="court_id" value="<%= court.id %>">
+    <input type="hidden" name="date" value="<%= date %>">
+    <div class="field"><label>Hora de inicio — <%= court.name %> · <%= date.slice(8,10) %>/<%= date.slice(5,7) %></label>
+      <select name="start_min" required>
+        <% for (const v of starts) { %><option value="<%= v.start_min %>"><%= minToStr(v.start_min) %></option><% } %>
+      </select>
+    </div>
+    <div class="field"><label>Duración</label>
+      <select name="duration_min">
+        <% for (const d of config.durations) { %><option value="<%= d %>" <%= d === Math.max(...config.durations) ? 'selected' : '' %>><%= d %> minutos</option><% } %>
+      </select>
+    </div>
+    <h3>Jugadores (tú ya cuentas como 1)</h3>
+    <p class="mut">Busca por nombre, nº de socio o móvil. Si pones un nombre que no es socio, contará como invitado (pago en recepción). Puedes dejar huecos: el partido se publica como abierto.</p>
+    <% for (let i = 1; i <= 3; i++) { %>
+    <div class="field prow">
+      <label>Jugador <%= i + 1 %></label>
+      <input type="text" class="psearch" placeholder="Nombre, nº de socio o móvil…" autocomplete="off">
+      <input type="hidden" name="p<%= i %>_name" class="pname">
+      <input type="hidden" name="p<%= i %>_member" class="pmember">
+      <div class="plist" style="display:none"></div>
+      <div class="pinfo mut" style="font-size:.85em;margin-top:.2em"></div>
+    </div>
+    <% } %>
+    <button class="btn" type="submit">Publicar partido abierto</button>
+    <a class="btn ghost" href="/partidos" style="margin-left:.5em">Cancelar</a>
+  </form>
+</div>
+<% } else if (court) { %><p class="mut">No quedan horas libres en esa pista y día.</p><% } %>
+<script>
+(function(){
+  document.querySelectorAll('.prow').forEach(row => {
+    const input = row.querySelector('.psearch'), list = row.querySelector('.plist'),
+      hname = row.querySelector('.pname'), hmem = row.querySelector('.pmember'),
+      info = row.querySelector('.pinfo');
+    let timer = null;
+    const paint = () => {
+      const n = hname.value.trim(), m = hmem.value.trim();
+      info.innerHTML = !n ? '' : (m ? '<span class="pill">Socio ' + m + '</span>' : '<span class="pill inv">Invitado</span>');
+    };
+    input.addEventListener('input', () => {
+      hname.value = input.value.trim(); hmem.value = ''; paint();
+      clearTimeout(timer);
+      const v = input.value.trim();
+      if (v.length < 2) { list.style.display = 'none'; return; }
+      timer = setTimeout(() => {
+        fetch('/reservar/socios/buscar?q=' + encodeURIComponent(v)).then(r => r.json()).then(arr => {
+          if (!arr.length) { list.style.display = 'none'; return; }
+          list.innerHTML = '';
+          arr.forEach(s => {
+            const d = document.createElement('div');
+            d.textContent = s.name + ' · socio ' + s.member_no + (s.phone ? ' · ' + s.phone : '');
+            d.addEventListener('mousedown', () => {
+              hname.value = s.name; hmem.value = s.member_no;
+              input.value = s.name + ' (' + s.member_no + ')';
+              list.style.display = 'none'; paint();
+            });
+            list.appendChild(d);
+          });
+          list.style.display = '';
+        }).catch(() => { list.style.display = 'none'; });
+      }, 250);
+    });
+    input.addEventListener('blur', () => setTimeout(() => list.style.display = 'none', 200));
+  });
+})();
+</script>

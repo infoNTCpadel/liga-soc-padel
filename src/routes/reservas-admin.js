@@ -301,6 +301,7 @@ router.post('/config', (req, res) => {
   B.setCfg('guest_price', (req.body.guest_price || '').trim());
   B.setCfg('charge_presets', JSON.stringify(B.parseChargePresets(req.body.charge_presets || '')));
   B.setCfg('reminders_enabled', req.body.reminders_enabled === '1' ? '1' : '0');
+  B.setCfg('partidos_public', req.body.partidos_public === '1' ? '1' : '0');
   B.setCfg('reminder_hours', Math.min(24, Math.max(1, parseInt(req.body.reminder_hours, 10) || 3)));
   // Solo se tocan los horarios por día si el formulario los traía (no borrar overrides con un POST antiguo).
   if (hasWdFields || req.body.special_dates !== undefined) B.setCfg('hours_json', JSON.stringify(hv.value));

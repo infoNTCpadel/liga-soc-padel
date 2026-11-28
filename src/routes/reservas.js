@@ -5,7 +5,12 @@ const B = require('../lib/bookings');
 const Chat = require('../lib/chatAgent');
 
 const router = express.Router();
-router.use((req, res, next) => { res.locals.section = 'public'; res.locals.sub = 'reservar'; next(); });
+router.use((req, res, next) => {
+  res.locals.section = 'public'; res.locals.sub = 'reservar';
+  // Partidos abiertos: visibles para todos si está activado; en pruebas, solo admin.
+  res.locals.partidosPublic = B.getConfig().partidos_public === '1' || !!req.session.admin;
+  next();
+});
 
 function activeCourts() {
   try {
@@ -329,7 +334,7 @@ router.post('/abrir/confirmar', requireMember, (req, res) => {
   B.setPlayers(b.id, member.member_no, pend.players);
   if (wantOpen) {
     const total = B.getBooking(b.id).players.length;
-    B.bdb.prepare('UPDATE bookings SET open_spots = ? WHERE id = ?').run(Math.max(0, 4 - total), b.id);
+    B.bdb.prepare('UPDATE bookings SET open_spots = ?, open_published = 1 WHERE id = ?').run(Math.max(0, 4 - total), b.id);
   }
   res.redirect('/reservar/mis?ok=' + encodeURIComponent('Jugadores actualizados.'));
 });
@@ -352,6 +357,8 @@ router.get('/abierto/:id', (req, res) => {
     b, booker, mine, already, member, restricted: !!restricted,
     range: B.levelRangeText(booker && booker.level),
     minToStr: B.minToStr, error: req.query.err || null,
+    from: req.query.from === 'partidos' ? 'partidos' : null,
+    partidosPublic: res.locals.partidosPublic,
   });
 });
 router.post('/abierto/:id/unirse', requireMember, (req, res) => {
@@ -359,6 +366,16 @@ router.post('/abierto/:id/unirse', requireMember, (req, res) => {
   const r = B.joinOpenMatch(parseInt(req.params.id, 10), member);
   if (r.error) return res.redirect('/reservar/abierto/' + req.params.id + '?err=' + encodeURIComponent(r.error));
   res.redirect('/reservar/mis?ok=' + encodeURIComponent('Te has apuntado al partido.'));
+});
+// Salirse de un partido abierto al que te apuntaste (módulo en pruebas:
+// solo si está activado para socios o si eres admin).
+router.post('/abierto/:id/salir', requireMember, (req, res) => {
+  const member = me(req);
+  if (!res.locals.partidosPublic) return res.redirect('/reservar/mis?tab=partidos');
+  const r = B.leaveOpenMatch(parseInt(req.params.id, 10), member);
+  const back = req.body.from === 'partidos' ? '/partidos' : '/reservar/mis?tab=partidos';
+  if (r.error) return res.redirect('/reservar/abierto/' + req.params.id + '?err=' + encodeURIComponent(r.error));
+  res.redirect(back + (back.includes('?') ? '&' : '?') + 'ok=' + encodeURIComponent('Te has salido del partido.'));
 });
 router.post('/abierto/:id/cerrar', requireMember, (req, res) => {
   const member = me(req);

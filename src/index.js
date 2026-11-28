@@ -166,6 +166,7 @@ app.use('/pareja', require('./routes/pair'));
 app.use('/admin', require('./routes/admin'));
 app.use('/recepcion', require('./routes/recepcion'));
 app.use('/reservar', require('./routes/reservas'));
+app.use('/partidos', require('./routes/partidos')); // módulo de partidos abiertos (en pruebas)
 app.use('/admin/reservas', require('./routes/reservas-admin'));
 app.use('/recepcion/reservas', require('./routes/reservas-recepcion'));
 app.use('/mediodia', middayPublicRouter); // vista previa desde el dominio principal

@@ -113,6 +113,7 @@ for (const sql of [
   'ALTER TABLE booking_charges ADD COLUMN booking_player_id INTEGER',
   'ALTER TABLE club_members ADD COLUMN phone_norm TEXT NOT NULL DEFAULT \'\'',
   'ALTER TABLE club_members ADD COLUMN gender TEXT NOT NULL DEFAULT \'\'',
+  'ALTER TABLE bookings ADD COLUMN open_published INTEGER NOT NULL DEFAULT 0',
 ]) {
   try { bdb.exec(sql); } catch (e) { /* ya existe */ }
 }
@@ -138,6 +139,8 @@ try {
   // puede superar 4 - nº de jugadores; al completar jugadores ya se recalcula).
   bdb.exec(`UPDATE bookings SET open_spots = max(0, 4 - (SELECT COUNT(*) FROM booking_players bp WHERE bp.booking_id = bookings.id))
     WHERE status = 'active' AND open_spots > 4 - (SELECT COUNT(*) FROM booking_players bp WHERE bp.booking_id = bookings.id)`);
+  // open_published: 1 si el partido se publicó como abierto (hoy: los que tienen plazas).
+  bdb.exec(`UPDATE bookings SET open_published = 1 WHERE status = 'active' AND open_spots > 0 AND open_published = 0`);
   // La antigua franja única pasa a lista de duraciones (p. ej. 90 → "90").
   const hasDurs = bdb.prepare("SELECT 1 FROM booking_config WHERE key = 'slot_durations'").get();
   const oldSlot = bdb.prepare("SELECT value FROM booking_config WHERE key = 'slot_min'").get();
@@ -167,6 +170,7 @@ const DEFAULTS = {
   guest_price: '',        // precio de referencia del invitado (texto libre, p. ej. "6")
   reminders_enabled: '0', // recordatorios por email (requiere BREVO_API_KEY y MAIL_FROM)
   reminder_hours: '3',    // horas antes del inicio para enviar el recordatorio
+  partidos_public: '0',   // módulo de partidos abiertos visible para los socios (0 = solo admin, en pruebas)
   // Horarios por día (JSON): { weekday: {"0":[open,close]|null,...}, dates: {"AAAA-MM-DD":[open,close]|null} }
   // null = cerrado. Lo no indicado usa open_min/close_min.
   hours_json: '{}',
@@ -202,6 +206,7 @@ function getConfig() {
     reminder_hours: parseInt(cfg('reminder_hours'), 10),
     hours_json: cfg('hours_json'),
     charge_presets: cfg('charge_presets'),
+    partidos_public: cfg('partidos_public'),
   };
 }
 // Valida la configuración: horarios coherentes y al menos una duración válida.
@@ -707,9 +712,9 @@ function createBooking({ court_id, court_name, date, start_min, duration_min, ti
   const member = getMember(t);
   const spots = Math.max(0, Math.min(3, open_spots | 0));
   const r = bdb.prepare(
-    `INSERT INTO bookings(court_id, court_name, date, start_min, end_min, titular_member_no, titular_name, payment_status, open_spots)
-     VALUES(?, ?, ?, ?, ?, ?, ?, 'ok', ?)`).run(
-    court_id, court_name, date, start_min, end_min, t, member.name, spots);
+    `INSERT INTO bookings(court_id, court_name, date, start_min, end_min, titular_member_no, titular_name, payment_status, open_spots, open_published)
+     VALUES(?, ?, ?, ?, ?, ?, ?, 'ok', ?, ?)`).run(
+    court_id, court_name, date, start_min, end_min, t, member.name, spots, spots > 0 ? 1 : 0);
   const id = Number(r.lastInsertRowid);
   setPlayers(id, t, players);
   const st = bdb.prepare('SELECT payment_status FROM bookings WHERE id = ?').get(id).payment_status;
@@ -865,7 +870,7 @@ function syncOpenSpots(booking_id) {
   bdb.prepare('UPDATE bookings SET open_spots = ? WHERE id = ?').run(spots, booking_id);
 }
 function closeOpenMatch(booking_id) {
-  bdb.prepare('UPDATE bookings SET open_spots = 0 WHERE id = ?').run(booking_id);
+  bdb.prepare('UPDATE bookings SET open_spots = 0, open_published = 0 WHERE id = ?').run(booking_id);
   return { ok: true };
 }
 // Abrir un partido cerrado para buscar jugadores: plazas = 4 - jugadores.
@@ -875,8 +880,46 @@ function openMatchForPlayers(booking_id) {
   if (b.open_spots > 0) return { error: 'Ese partido ya está abierto.' };
   const total = bdb.prepare('SELECT COUNT(*) c FROM booking_players WHERE booking_id = ?').get(booking_id).c;
   const spots = Math.max(0, 4 - total);
-  bdb.prepare('UPDATE bookings SET open_spots = ? WHERE id = ?').run(spots, booking_id);
+  bdb.prepare('UPDATE bookings SET open_spots = ?, open_published = 1 WHERE id = ?').run(spots, booking_id);
   return { ok: true, spots };
+}
+// Salirse de un partido abierto al que te apuntaste (no el titular).
+// Si el partido sigue publicado, la plaza vuelve a abrirse.
+function leaveOpenMatch(booking_id, member) {
+  const b = bdb.prepare('SELECT * FROM bookings WHERE id = ?').get(booking_id);
+  if (!b || b.status !== 'active') return { error: 'Ese partido ya no está disponible.' };
+  if (b.titular_member_no === member.member_no)
+    return { error: 'Eres el titular: anula la reserva desde «Mis reservas».' };
+  const p = bdb.prepare('SELECT * FROM booking_players WHERE booking_id = ? AND member_no = ?').get(booking_id, member.member_no);
+  if (!p) return { error: 'No estás apuntado en este partido.' };
+  const c = getConfig();
+  const start = new Date(b.date + 'T00:00:00');
+  start.setMinutes(b.start_min);
+  if ((start - new Date()) / 3600000 < c.cancel_limit_h)
+    return { error: `Ya no se puede salir online (límite: ${c.cancel_limit_h} h antes). Contacta con recepción.` };
+  const r = removePlayer(booking_id, p.id);
+  if (r.error) return r;
+  if (b.open_published) {
+    const total = bdb.prepare('SELECT COUNT(*) c FROM booking_players WHERE booking_id = ?').get(booking_id).c;
+    bdb.prepare('UPDATE bookings SET open_spots = ? WHERE id = ?').run(Math.max(0, 4 - total), booking_id);
+  }
+  return { ok: true };
+}
+// Partidos abiertos próximos, visibles para viewer (null = público).
+function listOpenMatches(viewer) {
+  const rows = bdb.prepare(
+    `SELECT * FROM bookings WHERE status = 'active' AND open_spots > 0 AND date >= ?
+     ORDER BY date, start_min`).all(todayStr());
+  const out = [];
+  for (const row of rows) {
+    const booker = getMember(row.titular_member_no);
+    if (viewer && !openVisibleTo(row.titular_member_no, booker && booker.level, viewer)) continue;
+    const b = getBooking(row.id);
+    b.booker_level = booker && booker.level;
+    b.range = levelRangeText(booker && booker.level);
+    out.push(b);
+  }
+  return out;
 }
 // Franja de la parrilla = la duración más larga del ajuste (ej. 75 con 60,75).
 function slotInterval() { return Math.max(...getConfig().durations); }
@@ -1331,7 +1374,7 @@ module.exports = {
   createBooking, getBooking, cancelBooking, quickBook, recentTitulars,
   searchMembers, validLevel, setLevel, fmtLevel, levelRangeText,
   addBlock, removeBlock, getBlocks, isBlockedBy, openVisibleTo,
-  joinOpenMatch, syncOpenSpots, closeOpenMatch, openMatchForPlayers,
+  joinOpenMatch, leaveOpenMatch, listOpenMatches, syncOpenSpots, closeOpenMatch, openMatchForPlayers,
   memberDayBooking, playerBookingIds,
   slotInterval, slotStarts, slotCell, slotDay, fitDuration,
   dayHours, validateHoursJson, bookableStarts,

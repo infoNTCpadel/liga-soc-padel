@@ -1,0 +1,42 @@
+<h1>Partidos abiertos</h1>
+<p class="mut">Partidos con plazas libres para apuntarte. Solo ves los de tu nivel (±1).</p>
+<% if (error) { %><div class="alert error"><%= error %></div><% } %>
+<% if (info) { %><div class="alert ok"><%= info %></div><% } %>
+<div class="card">
+  <a class="btn" href="/partidos/nuevo">+ Crear partido abierto</a>
+  <span class="mut" style="margin-left:.8em">
+    <a href="/partidos?dia=hoy" class="<%= dia === 'hoy' ? 'on' : '' %>">Hoy</a> ·
+    <a href="/partidos?dia=manana" class="<%= dia === 'manana' ? 'on' : '' %>">Mañana</a> ·
+    <a href="/partidos?dia=semana" class="<%= dia === 'semana' ? 'on' : '' %>">Esta semana</a> ·
+    <a href="/partidos?dia=todos" class="<%= dia === 'todos' ? 'on' : '' %>">Todos</a>
+  </span>
+</div>
+
+<% if (member && mine.length) { %>
+<div class="card">
+  <h3>Mis partidos abiertos (<%= mine.length %>)</h3>
+  <% for (const b of mine) { %>
+  <div class="mrow">
+    <span class="mline"><strong><%= b.court_name %></strong> · <%= b.date.slice(8,10) %>/<%= b.date.slice(5,7) %> · <%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %> · <%= b.players.length %>/4
+      <span class="pill" style="background:#e9f7ef;color:#146c39;padding:.2em .8em;border-radius:999px;font-weight:700"><%= b.open_spots %> <%= b.open_spots === 1 ? 'plaza libre' : 'plazas libres' %></span>
+      <% if (b.titular_member_no === member.member_no) { %><span class="badge" style="background:#c6f135;color:#111">Mío</span><% } %></span>
+    <span class="macts"><a class="btn small ghost" href="/reservar/abierto/<%= b.id %>?from=partidos">Ver</a></span>
+  </div>
+  <% } %>
+</div>
+<% } %>
+
+<div class="card">
+  <h3>Partidos con plazas (<%= list.length %>)</h3>
+  <% if (!list.length) { %><p class="mut">No hay partidos abiertos en este periodo.</p><% } %>
+  <% for (const b of list) { %>
+  <div class="mrow">
+    <span class="mline"><strong><%= b.court_name %></strong> · <%= b.date.slice(8,10) %>/<%= b.date.slice(5,7) %> · <%= minToStr(b.start_min) %>–<%= minToStr(b.end_min) %> · <%= b.players.length %>/4
+      <span class="pill" style="background:#e9f7ef;color:#146c39;padding:.2em .8em;border-radius:999px;font-weight:700"><%= b.open_spots %> <%= b.open_spots === 1 ? 'plaza libre' : 'plazas libres' %></span>
+      <% if (b.range) { %><span class="mut"> · Nivel <%= b.range %></span><% } %><br>
+      <span class="mut" style="font-size:.9em">Organiza: <%= b.titular_name %><% if (member) { %> · Juegan: <%= b.players.map(p => p.name).join(', ') %><% } %></span></span>
+    <span class="macts"><a class="btn small" href="/reservar/abierto/<%= b.id %>?from=partidos">Ver / Apuntarme</a></span>
+  </div>
+  <% } %>
+  <% if (!member) { %><p class="mut" style="margin-top:.8em">Entra con tu nº de socio para ver quién juega y apuntarte.</p><% } %>
+</div>

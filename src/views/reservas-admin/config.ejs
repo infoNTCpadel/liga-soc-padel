@@ -45,6 +45,8 @@
   <div class="row2">
     <div class="field"><label><input type="checkbox" name="reminders_enabled" value="1" <%= config.reminders_enabled === '1' ? 'checked' : '' %>> Enviar recordatorios por email</label>
       <p class="hint">Requiere <code>BREVO_API_KEY</code> y <code>MAIL_FROM</code> en el servidor. Sin clave no se envía nada.</p></div>
+    <div class="field"><label><input type="checkbox" name="partidos_public" value="1" <%= config.partidos_public === '1' ? 'checked' : '' %>> Partidos abiertos visibles para los socios</label>
+      <p class="hint">Módulo en pruebas: apagado solo lo ve el admin. Actívalo cuando esté probado.</p></div>
     <div class="field"><label>&nbsp;</label><button class="btn" type="submit">Guardar</button></div>
   </div>
 </form>
